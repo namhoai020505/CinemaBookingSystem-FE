@@ -1,16 +1,24 @@
+import Sidebar from '../components/Sidebar';
+import Topbar from '../components/Topbar';
 import { Outlet } from 'react-router-dom';
 
-export default function AdminLayout() {
+const AdminLayout = () => {
   return (
-    <div className="flex h-screen bg-gray-100">
-      <aside className="w-64 bg-slate-800 text-white p-4">
-        <h2 className="text-xl font-bold">Admin Panel</h2>
-        {/* Menu Sidebar có thể thêm sau */}
-      </aside>
-      <main className="flex-1 p-8 overflow-y-auto">
-        {/* Nơi hiển thị các trang con như Dashboard */}
-        <Outlet />
-      </main>
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Cột trái: Sidebar */}
+      <Sidebar />
+
+      {/* Cột phải: Topbar + Nội dung trang */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <Topbar />
+        
+        {/* Khu vực thay đổi nội dung (Dashboard, Movies, v.v. sẽ render ở đây) */}
+        <div style={{ padding: '20px', background: '#fff', flex: 1 }}>
+          <Outlet /> 
+        </div>
+      </div>
     </div>
   );
-}
+};
+
+export default AdminLayout;
