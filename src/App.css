@@ -182,3 +182,33 @@
     border-right-color: var(--border);
   }
 }
+
+/* Custom icon và nút đóng của React-Toastify cho hợp chuẩn Dark Mode */
+.Toastify__toast {
+  font-family: 'Urbanist', sans-serif !important;
+}
+
+/* Đổi màu chữ và nút close (X) sang màu xám mờ, hover sáng trắng */
+.Toastify__close-button {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+  align-self: center !important;
+}
+.Toastify__close-button:hover {
+  color: #ffffff !important;
+}
+
+/* Đổi màu thanh Progress Bar chạy bên dưới đáy Toast */
+.Toastify__toast--success .Toastify__progress-bar {
+  background: linear-gradient(to right, #4318FF, #3b82f6) !important; /* Thành công: Chạy màu xanh neon thương hiệu */
+}
+
+.Toastify__toast--error .Toastify__progress-bar {
+  background: #ef4444 !important; /* Thất bại: Chạy màu đỏ rực rỡ hẳn */
+}
+
+/* Căn chỉnh lại khoảng cách icon cho đẹp */
+.Toastify__toast-icon {
+  margin-inline-end: 12px !important;
+  width: 22px !important;
+}
