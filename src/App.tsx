@@ -6,6 +6,7 @@ import Home from './pages/user/Home';
 import Login from './pages/auth/Login';
 import RequireAuth from './components/RequireAuth'; 
 import ManageMovie from './pages/admin/ManageMovie';
+import ManageShowtime from './pages/admin/ManageShowtime';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route path="movies" element={<ManageMovie />} />
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="showtime" element={<ManageShowtime />} />
             {/* Nếu sau này có thêm trang quản lý phim, user... bạn cứ ném vào trong cụm này */}
           </Route>
         </Route>

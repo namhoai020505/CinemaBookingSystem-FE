@@ -157,9 +157,7 @@ export default function ManageMovie() {
           <h1 className="text-2xl font-bold uppercase tracking-wider">
             Quản Lý Phim
           </h1>
-          <p className="text-xs text-gray-400 mt-1">
-            SCRUM-65 - Cấu trúc Layout Form chuẩn UI/UX
-          </p>
+          
         </div>
         <button
           onClick={handleOpenAddModal}
