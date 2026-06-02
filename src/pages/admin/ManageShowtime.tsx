@@ -213,30 +213,30 @@ export default function ManageShowtime() {
         <div id="timeline-scroll-wrapper" className="col-span-3 bg-[#111C44] border border-gray-800 rounded-2xl shadow-2xl overflow-x-auto class-scroll-custom max-w-full">
           <div style={{ width: `${192 + TOTAL_HOURS * HOUR_WIDTH}px` }} className="flex flex-col">
             
-            {/* 1️⃣ TRỤC THỜI GIAN (HEADER) - ĐÃ FIX SẠCH PADDING LỆCH CHUỘT */}
-            <div className="flex border-b border-gray-800 bg-blue-950/20 text-xs text-gray-400 font-bold uppercase h-12 items-center">
-              <div className="w-48 h-full flex items-center justify-center border-r border-gray-800 bg-[#111C44] sticky left-0 z-40 shrink-0 text-white">
-                Phòng / Giờ
-              </div>
-              
-              {/* Căn lề trái tuyệt đối, chữ số giờ đứng ngay trên vạch đứng dọc */}
-              <div className="flex-1 flex h-full items-center relative">
-                {TIME_SLOTS.map((time, idx) => (
-                  <div 
-                    key={time} 
-                    className="absolute text-gray-400 text-[11px] font-bold" 
-                    style={{ 
-                      left: `${idx * HOUR_WIDTH}px`, 
-                      width: `${HOUR_WIDTH}px`,
-                      transform: "translateX(-50%)", // Căn chữ nằm chính giữa vạch dọc dứt điểm lỗi lệch
-                      textAlign: "center"
-                    }}
-                  >
-                    {time}
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* 1️⃣ TRỤC THỜI GIAN (HEADER) - FIX TRIỆT ĐỂ LỖI CHE KHUẤT MỐC 08:00 */}
+<div className="flex border-b border-gray-800 bg-blue-950/20 text-xs text-gray-400 font-bold uppercase h-12 items-center">
+  <div className="w-48 h-full flex items-center justify-center border-r border-gray-800 bg-[#111C44] sticky left-0 z-40 shrink-0 text-white">
+    Phòng / Giờ
+  </div>
+  
+  <div className="flex-1 flex h-full items-center relative">
+    {TIME_SLOTS.map((time, idx) => (
+      <div 
+        key={time} 
+        className="absolute text-gray-400 text-[11px] font-bold" 
+        style={{ 
+          left: `${idx * HOUR_WIDTH}px`, 
+          width: `${HOUR_WIDTH}px`,
+          // 💡 Nếu là mốc đầu tiên (8:00) thì dịch phải 8px để lộ chữ, các mốc sau bổ đôi vạch dọc chuẩn chỉ
+          transform: idx === 0 ? "translateX(8px)" : "translateX(-50%)", 
+          textAlign: idx === 0 ? "left" : "center"
+        }}
+      >
+        {time}
+      </div>
+    ))}
+  </div>
+</div>
 
             {/* 2️⃣ THÂN LƯỚI CÁC PHÒNG CHIẾU */}
             <div className="divide-y divide-gray-800/60">
