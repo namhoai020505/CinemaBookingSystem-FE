@@ -11,6 +11,7 @@ export interface MovieData {
   fromDate: string;
   toDate: string;
   content: string;
+  trailerUrl?: string;
   imagePoster?: string;
 }
 

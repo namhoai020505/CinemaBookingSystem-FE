@@ -4,7 +4,7 @@ import { movieService } from "../../services/movieService";
 import type { MovieData } from "../../services/movieService";
 
 export default function ManageMovie() {
-  const [movies, setMovies] = useState<any[]>([]);
+  const [movies, setMovies] = useState<MovieData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMovieId, setEditingMovieId] = useState<number | null>(null);
@@ -27,7 +27,7 @@ export default function ManageMovie() {
   const fetchMovies = async () => {
     try {
       setLoading(true);
-      const response: any = await movieService.getMoviesWithPagination(1, 10);
+      const response = await movieService.getMoviesWithPagination(1, 10) as { data?: MovieData[] };
       if (response && response.data) {
         setMovies(response.data);
       }
@@ -40,7 +40,11 @@ export default function ManageMovie() {
 
   // Khối useEffect lấy data ban đầu - Cố định mảng rỗng [] không thay đổi size (Sửa lỗi 4)
   useEffect(() => {
-    fetchMovies();
+    const loadTimer = window.setTimeout(() => {
+      void fetchMovies();
+    }, 0);
+
+    return () => window.clearTimeout(loadTimer);
   }, []);
 
   // Khối useEffect lắng nghe phím Esc - Cố định mảng phụ thuộc (Sửa lỗi 3, 4)
@@ -74,7 +78,11 @@ export default function ManageMovie() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (movie: any) => {
+  const handleOpenEditModal = (movie: MovieData) => {
+    if (!movie.id) {
+      return;
+    }
+
     setEditingMovieId(movie.id);
     setFormData({
       movieNameVn: movie.movieNameVn || "",
@@ -91,7 +99,11 @@ export default function ManageMovie() {
     setIsModalOpen(true);
   };
 
-  const handleDeleteMovie = async (movie: any) => {
+  const handleDeleteMovie = async (movie: MovieData) => {
+    if (!movie.id) {
+      return;
+    }
+
     const confirmDelete = window.confirm(
       `⚠️ Bạn có chắc chắn muốn xóa bộ phim "${movie.movieNameVn}" khỏi hệ thống không?`,
     );

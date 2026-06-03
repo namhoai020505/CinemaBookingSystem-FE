@@ -10,14 +10,46 @@ const TOTAL_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR; // 16 tiếng
 const HOUR_WIDTH = 120; // 1 tiếng cố định đúng 120px
 const MINUTE_WIDTH = HOUR_WIDTH / 60; // ~2px cho mỗi phút
 
-const MOCK_ROOMS = [
+type Room = {
+  id: string;
+  name: string;
+};
+
+type UnscheduledMovie = {
+  movieId: string;
+  movieNameVn: string;
+  movieNameEng: string;
+  duration: number;
+  ageRating: string;
+  color: string;
+};
+
+type ShowtimeSlot = {
+  id: string;
+  movieId: string;
+  roomId?: string;
+  movieNameVn: string;
+  startMinutesFrom8AM: number;
+  duration: number;
+  color: string;
+  startTime: string;
+  endTime: string;
+};
+
+type DraggingMovie =
+  | (UnscheduledMovie & { isNew: true })
+  | (ShowtimeSlot & { isNew: false; originalRoomId: string });
+
+type Schedule = Record<string, ShowtimeSlot[]>;
+
+const MOCK_ROOMS: Room[] = [
   { id: "room-1", name: "Phòng 1 (IMAX)" },
   { id: "room-2", name: "Phòng 2 (2D)" },
   { id: "room-3", name: "Phòng 3 (3D)" },
   { id: "room-4", name: "Phòng 4 (Sweetbox)" },
 ];
 
-const MOCK_UNSCHEDULED_MOVIES = [
+const MOCK_UNSCHEDULED_MOVIES: UnscheduledMovie[] = [
   { movieId: 'movie-1', movieNameVn: 'Lật Mặt 7: Một Điều Ước', movieNameEng: 'Face Off 7', duration: 138, ageRating: 'P', color: '#4318FF' },
   { movieId: 'movie-2', movieNameVn: 'Doraemon: Bản Tình Ca', movieNameEng: 'Doraemon Nobita', duration: 115, ageRating: 'P', color: '#00C2FF' },
   { movieId: 'movie-3', movieNameVn: 'Mai', movieNameEng: 'Mai A Film by Tran Thanh', duration: 131, ageRating: 'T18', color: '#FF007A' },
@@ -34,9 +66,9 @@ export default function ManageShowtime() {
   const [selectedMonth, setSelectedMonth] = useState("06");
   const [selectedDay, setSelectedDay] = useState("01");
 
-  const [unscheduledMovies, setUnscheduledMovies] = useState(MOCK_UNSCHEDULED_MOVIES);
+  const [unscheduledMovies] = useState(MOCK_UNSCHEDULED_MOVIES);
 
-  const [schedule, setSchedule] = useState<any>({
+  const [schedule, setSchedule] = useState<Schedule>({
     "room-1": [
       {
         id: "fixed-1",
@@ -52,8 +84,9 @@ export default function ManageShowtime() {
     "room-2": [], "room-3": [], "room-4": [],
   });
 
-  const [draggingMovie, setDraggingMovie] = useState<any>(null);
+  const [draggingMovie, setDraggingMovie] = useState<DraggingMovie | null>(null);
   const isToastActive = useRef(false);
+  const nextSlotIdRef = useRef(0);
 
   const formatMinutesToISODateTime = (minutesFrom8AM: number) => {
     const totalMinutes = TIMELINE_START_HOUR * 60 + minutesFrom8AM;
@@ -67,18 +100,18 @@ export default function ManageShowtime() {
     return isoString.split("T")[1].substring(0, 5);
   };
 
-  const handleDragStartFromSidebar = (e: React.DragEvent, movie: any) => {
+  const handleDragStartFromSidebar = (movie: UnscheduledMovie) => {
     isToastActive.current = false;
     setDraggingMovie({ ...movie, isNew: true });
   };
 
-  const handleDragStartFromTimeline = (e: React.DragEvent, roomShowtime: any, roomId: string) => {
+  const handleDragStartFromTimeline = (roomShowtime: ShowtimeSlot, roomId: string) => {
     isToastActive.current = false;
     setDraggingMovie({ ...roomShowtime, isNew: false, originalRoomId: roomId });
   };
 
   // --- HÀM THẢ CHUỘT CHUẨN HÓA KHÔNG LỆCH, KHÔNG ĐƠ ---
-  const handleDropOnRow = (e: React.MouseEvent, roomId: string) => {
+  const handleDropOnRow = (e: React.DragEvent<HTMLDivElement>, roomId: string) => {
     e.preventDefault();
     if (!draggingMovie) return;
 
@@ -91,7 +124,7 @@ export default function ManageShowtime() {
 
     // Tính tọa độ vị trí thả chuột chuẩn xác 100%
     const relativeX = (e.clientX - rect.left) + currentScrollLeft;
-    let rawStartMinutes = Math.round(relativeX / MINUTE_WIDTH);
+    const rawStartMinutes = Math.round(relativeX / MINUTE_WIDTH);
     
     const SNAP_INTERVAL = 15; 
     let startMinutes = Math.round(rawStartMinutes / SNAP_INTERVAL) * SNAP_INTERVAL;
@@ -108,8 +141,9 @@ export default function ManageShowtime() {
 
     // THUẬT TOÁN CHECK ĐÈ LỊCH + BUFFER 15 PHÚT
     const CLEAN_UP_BUFFER = 15; 
+    const draggedSlotId = draggingMovie.isNew ? null : draggingMovie.id;
     const existingSlotsInRoom = (schedule[roomId] || []).filter(
-      (slot: any) => slot.id !== draggingMovie.id
+      (slot) => slot.id !== draggedSlotId
     );
 
     for (const slot of existingSlotsInRoom) {
@@ -138,8 +172,10 @@ export default function ManageShowtime() {
     const endTimeISO = formatMinutesToISODateTime(endMinutes);
 
     if (draggingMovie.isNew) {
+      nextSlotIdRef.current += 1;
+
       const newShowtimeSlot = {
-        id: `slot-${Date.now()}`,
+        id: `slot-${nextSlotIdRef.current}`,
         movieId: draggingMovie.movieId, 
         roomId: roomId,            
         movieNameVn: draggingMovie.movieNameVn, 
@@ -152,11 +188,11 @@ export default function ManageShowtime() {
       setSchedule({ ...schedule, [roomId]: [...schedule[roomId], newShowtimeSlot] });
     } else {
       const cleanSchedule = { ...schedule };
-      cleanSchedule[draggingMovie.originalRoomId] = cleanSchedule[draggingMovie.originalRoomId].filter(
-        (item: any) => item.id !== draggingMovie.id
-      );
-      cleanSchedule[roomId] = cleanSchedule[roomId].filter(
-        (item: any) => item.id !== draggingMovie.id
+      cleanSchedule[draggingMovie.originalRoomId] = (
+        cleanSchedule[draggingMovie.originalRoomId] || []
+      ).filter((item) => item.id !== draggingMovie.id);
+      cleanSchedule[roomId] = (cleanSchedule[roomId] || []).filter(
+        (item) => item.id !== draggingMovie.id
       );
 
       const movedSlot = {
@@ -177,7 +213,7 @@ export default function ManageShowtime() {
     if (isConfirm) {
       setSchedule({
         ...schedule,
-        [roomId]: schedule[roomId].filter((item: any) => item.id !== slotId),
+        [roomId]: schedule[roomId].filter((item) => item.id !== slotId),
       });
     }
   };
@@ -266,19 +302,19 @@ export default function ManageShowtime() {
 
                     {/* VÙNG KHÔNG GIAN TUYỆT ĐỐI CHỨA CÁC THẺ PHIM ĐÈ LÊN LỚP NỀN */}
                     <div className="absolute inset-0 pointer-events-none">
-                      {schedule[room.id]?.map((slot: any) => {
+                      {schedule[room.id]?.map((slot) => {
                         const widthPx = slot.duration * MINUTE_WIDTH;
                         const leftPx = slot.startMinutesFrom8AM * MINUTE_WIDTH;
                         
                         const startShort = getShortTimeFromISO(slot.startTime);
                         const endShort = getShortTimeFromISO(slot.endTime);
-                        const isCurrentDragging = draggingMovie?.id === slot.id;
+                        const isCurrentDragging = !draggingMovie?.isNew && draggingMovie?.id === slot.id;
 
                         return (
                           <div
                             key={slot.id}
                             draggable
-                            onDragStart={(e) => handleDragStartFromTimeline(e, slot, room.id)}
+                            onDragStart={() => handleDragStartFromTimeline(slot, room.id)}
                             className={`absolute top-3 bottom-3 rounded-xl shadow-xl border border-white/10 px-3 py-2 cursor-grab active:cursor-grabbing flex flex-col justify-between overflow-hidden transition-all hover:brightness-110 hover:scale-[1.01] hover:shadow-2xl hover:z-50 pointer-events-auto ${isCurrentDragging ? 'opacity-40 z-50' : 'z-20'}`}
                             style={{ left: `${leftPx}px`, width: `${widthPx}px`, backgroundColor: slot.color }}
                           >
@@ -316,7 +352,7 @@ export default function ManageShowtime() {
           </h3>
           <div className="space-y-3 overflow-y-auto pr-1">
             {unscheduledMovies.map((movie) => (
-              <div key={movie.movieId} draggable onDragStart={(e) => handleDragStartFromSidebar(e, movie)} className="p-3.5 rounded-xl border border-gray-800 bg-[#0F172A] hover:border-gray-600 transition-all cursor-grab active:cursor-grabbing flex flex-col justify-between hover:translate-x-1">
+              <div key={movie.movieId} draggable onDragStart={() => handleDragStartFromSidebar(movie)} className="p-3.5 rounded-xl border border-gray-800 bg-[#0F172A] hover:border-gray-600 transition-all cursor-grab active:cursor-grabbing flex flex-col justify-between hover:translate-x-1">
                 <div className="text-sm font-bold text-white">{movie.movieNameVn}</div>
                 <div className="text-[10px] text-gray-400 mt-1 flex justify-between items-center">
                   <span>⏱️ {movie.duration} phút ({movie.ageRating})</span>
