@@ -5,6 +5,8 @@ import Dashboard from './pages/admin/Dashboard';
 import Home from './pages/user/Home';
 import Login from './pages/auth/Login';
 import RequireAuth from './components/RequireAuth'; 
+import ManageMovie from './pages/admin/ManageMovie';
+import ManageShowtime from './pages/admin/ManageShowtime';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 
 const GlobalTimer = () => {
@@ -15,6 +17,7 @@ const GlobalTimer = () => {
 function App() {
   return (
     <BrowserRouter>
+    
       {/* 2. Đặt nó ở ĐÂY - bên trong BrowserRouter */}
       <GlobalTimer /> 
 
@@ -27,6 +30,10 @@ function App() {
 
         <Route element={<RequireAuth />}>
           <Route path="/admin" element={<AdminLayout />}>
+            <Route path="movies" element={<ManageMovie />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="showtime" element={<ManageShowtime />} />
+            {/* Nếu sau này có thêm trang quản lý phim, user... bạn cứ ném vào trong cụm này */}
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
           </Route>
