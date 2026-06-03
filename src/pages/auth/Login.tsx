@@ -1,271 +1,838 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { FiMail, FiLock, FiUser, FiRefreshCw } from 'react-icons/fi';
+import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FiLock, FiMail, FiPhone, FiRefreshCw, FiUser } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
 import api from '../../lib/api';
 import Header from '../../layouts/user/Header';
 import Footer from '../../layouts/user/Footer';
 
+type AuthMode = 'login' | 'register' | 'forgot';
+type RegisterStep = 'form' | 'verify';
+type PasswordResetStep = 'request' | 'reset';
+
+type ApiResponse<T = unknown> = {
+  success: boolean;
+  message: string;
+  data?: T | null;
+  errorCode?: string | null;
+  errors?: Record<string, string[]> | null;
+};
+
+type AuthResponseData = {
+  accessToken?: string;
+  token?: string;
+  refreshToken?: string;
+  fullName?: string;
+  role?: string;
+};
+
+type RegisterResponseData = {
+  email?: string;
+  expiresAt?: string;
+};
+
+type ParsedApiError = {
+  message: string;
+  errorCode?: string;
+};
+
+const apiErrorMessages: Record<string, string> = {
+  DUPLICATE_EMAIL: 'Email này đã được sử dụng.',
+  WEAK_PASSWORD: 'Mật khẩu cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường và chữ số.',
+  EMAIL_SEND_FAILED: 'Không gửi được email OTP. Vui lòng kiểm tra cấu hình SMTP backend.',
+  USER_NOT_FOUND: 'Không tìm thấy tài khoản với email này.',
+  EMAIL_ALREADY_VERIFIED: 'Email này đã được xác thực.',
+  OTP_NOT_FOUND: 'Không tìm thấy mã OTP.',
+  OTP_EXPIRED: 'Mã OTP đã hết hạn. Vui lòng gửi lại mã mới.',
+  INVALID_OTP: 'Mã OTP không đúng.',
+  EMAIL_NOT_VERIFIED: 'Email chưa được xác thực. Vui lòng nhập mã OTP đã nhận.',
+  INVALID_CREDENTIALS: 'Email hoặc mật khẩu không đúng.',
+  ACCOUNT_NOT_ACTIVE: 'Tài khoản chưa ở trạng thái hoạt động.',
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+const createCaptcha = () => Math.floor(10000 + Math.random() * 90000).toString();
+
+const unwrapApiResponse = <T,>(response: unknown): ApiResponse<T> => {
+  if (isRecord(response)) {
+    if (typeof response.success === 'boolean') {
+      return response as ApiResponse<T>;
+    }
+
+    if (isRecord(response.data) && typeof response.data.success === 'boolean') {
+      return response.data as ApiResponse<T>;
+    }
+  }
+
+  return {
+    success: true,
+    message: 'Success',
+    data: response as T,
+  };
+};
+
+const parseApiError = (error: unknown): ParsedApiError => {
+  if (!isRecord(error)) {
+    return { message: 'Đã xảy ra lỗi không xác định.' };
+  }
+
+  if (isRecord(error.response)) {
+    const status = typeof error.response.status === 'number' ? error.response.status : undefined;
+    const data = error.response.data;
+
+    if (isRecord(data)) {
+      const errorCode = typeof data.errorCode === 'string' ? data.errorCode : undefined;
+      const mappedMessage = errorCode ? apiErrorMessages[errorCode] : undefined;
+
+      if (mappedMessage) {
+        return { message: mappedMessage, errorCode };
+      }
+
+      if (typeof data.message === 'string' && data.message.trim()) {
+        return { message: data.message, errorCode };
+      }
+
+      if (isRecord(data.errors)) {
+        const firstField = Object.keys(data.errors)[0];
+        const firstErrors = firstField ? data.errors[firstField] : undefined;
+
+        if (Array.isArray(firstErrors) && typeof firstErrors[0] === 'string') {
+          return { message: firstErrors[0], errorCode };
+        }
+      }
+    }
+
+    return { message: status ? `Lỗi từ server (${status}).` : 'Lỗi từ server.' };
+  }
+
+  if ('request' in error) {
+    return {
+      message: 'Không thể kết nối đến backend. Hãy kiểm tra backend đã chạy chưa hoặc lỗi CORS.',
+    };
+  }
+
+  return { message: 'Đã xảy ra lỗi không xác định.' };
+};
+
 export default function Login() {
   const navigate = useNavigate();
 
-  // State chuyển tab
-  const [isLoginTab, setIsLoginTab] = useState(true);
-
-  // State form dữ liệu
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [registerStep, setRegisterStep] = useState<RegisterStep>('form');
+  const [passwordResetStep, setPasswordResetStep] = useState<PasswordResetStep>('request');
+  const [fullName, setFullName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [pendingPasswordResetEmail, setPendingPasswordResetEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  // State cho Captcha
-  const [captchaText, setCaptchaText] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [captchaText, setCaptchaText] = useState(createCaptcha);
   const [captchaInput, setCaptchaInput] = useState('');
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
-  // Hàm tạo mã captcha 5 số ngẫu nhiên
+  const isLoginMode = authMode === 'login';
+  const isRegisterMode = authMode === 'register';
+  const isForgotMode = authMode === 'forgot';
+  const isVerifyStep = authMode === 'register' && registerStep === 'verify';
+  const isResetPasswordStep = authMode === 'forgot' && passwordResetStep === 'reset';
+  const verificationEmail = pendingEmail || normalizeEmail(email);
+  const passwordResetEmail = pendingPasswordResetEmail || normalizeEmail(email);
+
   const generateCaptcha = () => {
-    const randomNum = Math.floor(10000 + Math.random() * 90000);
-    setCaptchaText(randomNum.toString());
-    setCaptchaInput(''); // Xóa ô nhập khi đổi mã mới
+    setCaptchaText(createCaptcha());
+    setCaptchaInput('');
   };
 
-  // Tự động tạo Captcha khi load trang lần đầu
-  useEffect(() => {
-    generateCaptcha();
-  }, []);
-
-  // Xử lý Submit Form (Đăng nhập / Đăng ký)
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const resetFeedback = () => {
     setError('');
+    setSuccessMessage('');
+  };
 
-    // 1. Kiểm tra Captcha trước
-    if (captchaInput !== captchaText) {
-      setError('Mã xác thực không đúng. Vui lòng thử lại!');
-      generateCaptcha(); // Bắt người dùng nhập mã mới nếu sai
-      return;
+  const switchMode = (nextMode: AuthMode) => {
+    setAuthMode(nextMode);
+    setRegisterStep('form');
+    setPasswordResetStep('request');
+    setPendingEmail('');
+    setPendingPasswordResetEmail('');
+    setOtp('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+    resetFeedback();
+    generateCaptcha();
+  };
+
+  const validateCaptcha = () => {
+    if (captchaInput === captchaText) {
+      return true;
     }
 
-    // 2. Xử lý logic Đăng Ký (Nếu đang ở tab Đăng Ký)
-    if (!isLoginTab) {
-      alert('Tính năng đăng ký đang được tích hợp. Vui lòng thử lại sau!');
-      return;
-    }
+    setError('Mã xác thực không đúng. Vui lòng thử lại.');
+    generateCaptcha();
+    return false;
+  };
 
-    // 3. Logic Đăng Nhập (Từ file cũ của bạn)
+  const handleLogin = async () => {
     setIsLoading(true);
-    console.log(">>> [FE] Dữ liệu gửi đi:", { email, password });
 
     try {
-      const response = await api.post('/api/auth/login', {
-        Email: email,
-        Password: password,
-      });
+      const response = unwrapApiResponse<AuthResponseData>(
+        await api.post('/api/auth/login', {
+          email: normalizeEmail(email),
+          password,
+        }),
+      );
+      const authData = response.data;
+      const token = authData?.accessToken || authData?.token;
 
-      console.log(">>> [FE] Kết quả thô nhận từ Backend (response):", response);
-      console.log(">>> [FE] Cục dữ liệu chính (response.data):", response.data);
-
-      const backendData = response.data?.data ? response.data.data : response.data;
-      console.log(">>> [FE] Dữ liệu sau khi bóc tách lớp bọc:", backendData);
-
-      const token = backendData?.accessToken || backendData?.token;
-      const role = backendData?.role;
-      const fullName = backendData?.fullName;
-
-      console.log(">>> [FE] Token tìm thấy:", token);
-      console.log(">>> [FE] Role tìm thấy:", role);
-
-      if (token) {
-        localStorage.setItem('accessToken', token);
-        localStorage.setItem('role', role || '');
-        localStorage.setItem('fullName', fullName || 'Người dùng');
-
-        console.log(">>> [FE] Đăng nhập thành công! Đang phân luồng...");
-
-        if (role === 'Admin') {
-          navigate('/admin/dashboard');
-        } else if (role === 'Customer' || role === 'ROLE_CUSTOMER') {
-          navigate('/');
-        } else {
-          navigate('/');
-        }
-      } else {
-        setError('Đăng nhập thành công nhưng không có token. Hãy kiểm tra Console!');
+      if (!token) {
+        setError('Đăng nhập thành công nhưng backend không trả về access token.');
+        return;
       }
 
-    } catch (err: any) {
-      console.error(">>> [FE] Lỗi xảy ra khi gọi API:", err);
-      console.log(">>> [FE] Chi tiết phản hồi lỗi từ Server:", err.response);
+      localStorage.setItem('accessToken', token);
+      localStorage.setItem('role', authData?.role || '');
+      localStorage.setItem('fullName', authData?.fullName || 'Người dùng');
 
-      if (err.response) {
-        setError(err.response.data?.message || `Lỗi từ Server (${err.response.status})`);
-      } else if (err.request) {
-        setError('Không thể kết nối đến Backend. Hãy kiểm tra xem Backend đã bật chưa hoặc lỗi CORS.');
-      } else {
-        setError('Đã xảy ra lỗi không xác định.');
+      if (authData?.refreshToken) {
+        localStorage.setItem('refreshToken', authData.refreshToken);
       }
+
+      navigate(authData?.role === 'Admin' ? '/admin/dashboard' : '/');
+    } catch (err: unknown) {
+      const apiError = parseApiError(err);
+
+      if (apiError.errorCode === 'EMAIL_NOT_VERIFIED') {
+        setAuthMode('register');
+        setRegisterStep('verify');
+        setPendingEmail(normalizeEmail(email));
+        setOtp('');
+        setSuccessMessage('Email chưa xác thực. Nhập OTP đã nhận hoặc gửi lại mã mới.');
+        return;
+      }
+
+      setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleRegister = async () => {
+    const trimmedName = fullName.trim();
+    const trimmedPhoneNumber = phoneNumber.trim();
+
+    if (!trimmedName) {
+      setError('Vui lòng nhập họ và tên.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = unwrapApiResponse<RegisterResponseData>(
+        await api.post('/api/auth/register', {
+          email: normalizeEmail(email),
+          password,
+          fullName: trimmedName,
+          phoneNumber: trimmedPhoneNumber || undefined,
+        }),
+      );
+      const registeredEmail = response.data?.email || normalizeEmail(email);
+
+      setPendingEmail(registeredEmail);
+      setRegisterStep('verify');
+      setOtp('');
+      setPassword('');
+      setConfirmPassword('');
+      setSuccessMessage(response.message || 'Đăng ký thành công. Vui lòng nhập OTP đã gửi tới email.');
+      generateCaptcha();
+    } catch (err: unknown) {
+      setError(parseApiError(err).message);
+      generateCaptcha();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyEmail = async () => {
+    if (!/^\d{6}$/.test(otp)) {
+      setError('OTP phải gồm đúng 6 chữ số.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = unwrapApiResponse(
+        await api.post('/api/auth/verify-email', {
+          email: verificationEmail,
+          otp,
+        }),
+      );
+
+      setAuthMode('login');
+      setRegisterStep('form');
+      setEmail(verificationEmail);
+      setPendingEmail('');
+      setOtp('');
+      setSuccessMessage(response.message || 'Xác thực email thành công. Bạn có thể đăng nhập.');
+      generateCaptcha();
+    } catch (err: unknown) {
+      setError(parseApiError(err).message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    resetFeedback();
+    setIsResending(true);
+
+    try {
+      const response = unwrapApiResponse(
+        await api.post('/api/auth/resend-verification-otp', {
+          email: verificationEmail,
+        }),
+      );
+
+      setSuccessMessage(response.message || 'Đã gửi lại OTP xác thực email.');
+    } catch (err: unknown) {
+      setError(parseApiError(err).message);
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setIsLoading(true);
+
+    try {
+      const response = unwrapApiResponse<RegisterResponseData>(
+        await api.post('/api/auth/forgot-password', {
+          email: normalizeEmail(email),
+        }),
+      );
+      const resetEmail = response.data?.email || normalizeEmail(email);
+
+      setPendingPasswordResetEmail(resetEmail);
+      setPasswordResetStep('reset');
+      setOtp('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setSuccessMessage(response.message || 'OTP đặt lại mật khẩu đã được gửi tới email của bạn.');
+      generateCaptcha();
+    } catch (err: unknown) {
+      setError(parseApiError(err).message);
+      generateCaptcha();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!/^\d{6}$/.test(otp)) {
+      setError('OTP phải gồm đúng 6 chữ số.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = unwrapApiResponse(
+        await api.post('/api/auth/reset-password', {
+          email: passwordResetEmail,
+          otp,
+          newPassword,
+        }),
+      );
+
+      setAuthMode('login');
+      setPasswordResetStep('request');
+      setEmail(passwordResetEmail);
+      setPendingPasswordResetEmail('');
+      setOtp('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setPassword('');
+      setSuccessMessage(response.message || 'Đặt lại mật khẩu thành công. Bạn có thể đăng nhập.');
+      generateCaptcha();
+    } catch (err: unknown) {
+      setError(parseApiError(err).message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendPasswordResetOtp = async () => {
+    resetFeedback();
+    setIsResending(true);
+
+    try {
+      const response = unwrapApiResponse(
+        await api.post('/api/auth/forgot-password', {
+          email: passwordResetEmail,
+        }),
+      );
+
+      setSuccessMessage(response.message || 'Đã gửi lại OTP đặt lại mật khẩu.');
+    } catch (err: unknown) {
+      setError(parseApiError(err).message);
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    resetFeedback();
+
+    if (isVerifyStep) {
+      await handleVerifyEmail();
+      return;
+    }
+
+    if (isResetPasswordStep) {
+      await handleResetPassword();
+      return;
+    }
+
+    if (!validateCaptcha()) {
+      return;
+    }
+
+    if (isLoginMode) {
+      await handleLogin();
+      return;
+    }
+
+    if (isForgotMode) {
+      await handleForgotPassword();
+      return;
+    }
+
+    await handleRegister();
+  };
+
   return (
-    <div className="flex flex-col min-h-screen bg-[#1E293B]">
-      {/* 1. HEADER Ở TRÊN CÙNG */}
+    <div className="flex min-h-screen flex-col bg-[#1E293B]">
       <Header />
 
-      <div className="min-h-[80vh] flex items-center justify-center bg-[#1E293B] px-4 py-12">
+      <main className="flex min-h-[80vh] items-center justify-center bg-[#1E293B] px-4 py-12">
         <div className="w-full max-w-md">
-
-          {/* TABS */}
-          <div className="flex bg-[#0F172A] rounded-t-lg overflow-hidden border border-gray-700">
+          <div className="flex overflow-hidden rounded-t-lg border border-gray-700 bg-[#0F172A]">
             <button
-              onClick={() => { setIsLoginTab(true); setError(''); }}
-              className={`flex-1 py-3 text-center font-bold text-sm transition ${isLoginTab
-                ? 'bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] text-black'
-                : 'text-gray-400 hover:text-white'
-                }`}
+              type="button"
+              onClick={() => switchMode('login')}
+              className={`flex-1 py-3 text-center text-sm font-bold transition ${
+                isLoginMode
+                  ? 'bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] text-black'
+                  : 'text-gray-400 hover:text-white'
+              }`}
             >
               Đăng Nhập
             </button>
             <button
-              onClick={() => { setIsLoginTab(false); setError(''); }}
-              className={`flex-1 py-3 text-center font-bold text-sm transition ${!isLoginTab
-                ? 'bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] text-black'
-                : 'text-gray-400 hover:text-white'
-                }`}
+              type="button"
+              onClick={() => switchMode('register')}
+              className={`flex-1 py-3 text-center text-sm font-bold transition ${
+                isRegisterMode
+                  ? 'bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] text-black'
+                  : 'text-gray-400 hover:text-white'
+              }`}
             >
               Đăng Ký
             </button>
           </div>
 
-          {/* KHU VỰC FORM */}
-          <div className="bg-transparent border-x border-b border-gray-700 rounded-b-lg p-6">
+          <div className="rounded-b-lg border-x border-b border-gray-700 bg-transparent p-6">
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {successMessage ? (
+                <div className="rounded border border-emerald-400 bg-emerald-400/10 p-3 text-center text-sm text-emerald-300">
+                  {successMessage}
+                </div>
+              ) : null}
 
-              {/* Hiển thị thông báo lỗi */}
-              {error && (
-                <div className="bg-red-500/10 border border-red-500 text-red-500 text-sm p-3 rounded text-center">
+              {error ? (
+                <div className="rounded border border-red-500 bg-red-500/10 p-3 text-center text-sm text-red-400">
                   {error}
                 </div>
-              )}
+              ) : null}
 
-              {/* Input: Họ tên (Chỉ hiện khi Đăng ký) */}
-              {!isLoginTab && (
-                <div>
-                  <label className="text-gray-300 text-sm mb-1 block">Họ và Tên</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                      <FiUser />
-                    </span>
+              {isVerifyStep ? (
+                <>
+                  <div className="rounded-md border border-[#FFD166]/40 bg-[#FFD166]/10 px-4 py-3 text-sm text-[#FFEBA4]">
+                    OTP đã được gửi tới <span className="font-bold">{verificationEmail}</span>.
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm text-gray-300">Mã OTP</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <FiLock />
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        required
+                        value={otp}
+                        onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
+                        placeholder="Nhập mã OTP 6 số"
+                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRegisterStep('form');
+                        resetFeedback();
+                        generateCaptcha();
+                      }}
+                      className="text-gray-400 transition hover:text-white"
+                    >
+                      Đổi thông tin
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={isResending}
+                      className="font-semibold text-[#FFD166] transition hover:text-[#FFEBA4] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isResending ? 'Đang gửi...' : 'Gửi lại OTP'}
+                    </button>
+                  </div>
+                </>
+              ) : isResetPasswordStep ? (
+                <>
+                  <div className="rounded-md border border-[#FFD166]/40 bg-[#FFD166]/10 px-4 py-3 text-sm text-[#FFEBA4]">
+                    OTP đặt lại mật khẩu đã được gửi tới{' '}
+                    <span className="font-bold">{passwordResetEmail}</span>.
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm text-gray-300">Mã OTP</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <FiLock />
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        required
+                        value={otp}
+                        onChange={(event) => setOtp(event.target.value.replace(/\D/g, ''))}
+                        placeholder="Nhập mã OTP 6 số"
+                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm text-gray-300">Mật khẩu mới</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <FiLock />
+                      </span>
+                      <input
+                        type="password"
+                        required
+                        value={newPassword}
+                        onChange={(event) => setNewPassword(event.target.value)}
+                        placeholder="Nhập mật khẩu mới"
+                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm text-gray-300">Xác nhận mật khẩu mới</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <FiLock />
+                      </span>
+                      <input
+                        type="password"
+                        required
+                        value={confirmNewPassword}
+                        onChange={(event) => setConfirmNewPassword(event.target.value)}
+                        placeholder="Nhập lại mật khẩu mới"
+                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPasswordResetStep('request');
+                        setOtp('');
+                        setNewPassword('');
+                        setConfirmNewPassword('');
+                        resetFeedback();
+                        generateCaptcha();
+                      }}
+                      className="text-gray-400 transition hover:text-white"
+                    >
+                      Đổi email
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResendPasswordResetOtp}
+                      disabled={isResending}
+                      className="font-semibold text-[#FFD166] transition hover:text-[#FFEBA4] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isResending ? 'Đang gửi...' : 'Gửi lại OTP'}
+                    </button>
+                  </div>
+                </>
+              ) : isForgotMode ? (
+                <>
+                  <div className="rounded-md border border-[#FFD166]/40 bg-[#FFD166]/10 px-4 py-3 text-sm text-[#FFEBA4]">
+                    Nhập email tài khoản để nhận OTP đặt lại mật khẩu.
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm text-gray-300">Email</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <FiMail />
+                      </span>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="Vui lòng nhập email của bạn"
+                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="my-2 flex items-center gap-3">
+                    <div
+                      className="cursor-not-allowed select-none rounded bg-white px-4 py-1 text-lg font-bold tracking-[0.2em] text-green-700 line-through decoration-gray-400"
+                      title="Mã xác thực"
+                    >
+                      {captchaText}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={generateCaptcha}
+                      className="text-gray-400 transition hover:text-white"
+                      title="Đổi mã khác"
+                    >
+                      <FiRefreshCw size={20} />
+                    </button>
+
                     <input
                       type="text"
-                      placeholder="Vui lòng nhập họ tên"
-                      className="w-full bg-transparent border border-gray-600 text-white rounded-md pl-10 pr-4 py-2 focus:outline-none focus:border-[#FFD166] placeholder-gray-500 text-sm transition"
+                      required
+                      value={captchaInput}
+                      onChange={(event) => setCaptchaInput(event.target.value)}
+                      placeholder="Mã xác thực"
+                      className="min-w-0 flex-1 rounded-md border border-gray-600 bg-transparent px-3 py-1.5 text-sm text-white focus:border-[#FFD166] focus:outline-none"
                     />
                   </div>
-                </div>
+
+                  <button
+                    type="button"
+                    onClick={() => switchMode('login')}
+                    className="text-left text-sm text-gray-400 transition hover:text-white"
+                  >
+                    Quay lại đăng nhập
+                  </button>
+                </>
+              ) : (
+                <>
+                  {isRegisterMode ? (
+                    <>
+                      <div>
+                        <label className="mb-1 block text-sm text-gray-300">Họ và Tên</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                            <FiUser />
+                          </span>
+                          <input
+                            type="text"
+                            required
+                            value={fullName}
+                            onChange={(event) => setFullName(event.target.value)}
+                            placeholder="Vui lòng nhập họ tên"
+                            className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-sm text-gray-300">Số điện thoại</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                            <FiPhone />
+                          </span>
+                          <input
+                            type="tel"
+                            value={phoneNumber}
+                            onChange={(event) => setPhoneNumber(event.target.value)}
+                            placeholder="Không bắt buộc"
+                            className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+
+                  <div>
+                    <label className="mb-1 block text-sm text-gray-300">Email</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <FiMail />
+                      </span>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="Vui lòng nhập email của bạn"
+                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm text-gray-300">Mật khẩu</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <FiLock />
+                      </span>
+                      <input
+                        type="password"
+                        required
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="Vui lòng nhập mật khẩu"
+                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {isRegisterMode ? (
+                    <div>
+                      <label className="mb-1 block text-sm text-gray-300">Xác nhận mật khẩu</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                          <FiLock />
+                        </span>
+                        <input
+                          type="password"
+                          required
+                          value={confirmPassword}
+                          onChange={(event) => setConfirmPassword(event.target.value)}
+                          placeholder="Nhập lại mật khẩu"
+                          className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-right">
+                      <button
+                        type="button"
+                        onClick={() => switchMode('forgot')}
+                        className="text-sm italic text-gray-400 transition hover:text-white"
+                      >
+                        Quên Mật Khẩu?
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="my-2 flex items-center gap-3">
+                    <div
+                      className="cursor-not-allowed select-none rounded bg-white px-4 py-1 text-lg font-bold tracking-[0.2em] text-green-700 line-through decoration-gray-400"
+                      title="Mã xác thực"
+                    >
+                      {captchaText}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={generateCaptcha}
+                      className="text-gray-400 transition hover:text-white"
+                      title="Đổi mã khác"
+                    >
+                      <FiRefreshCw size={20} />
+                    </button>
+
+                    <input
+                      type="text"
+                      required
+                      value={captchaInput}
+                      onChange={(event) => setCaptchaInput(event.target.value)}
+                      placeholder="Mã xác thực"
+                      className="min-w-0 flex-1 rounded-md border border-gray-600 bg-transparent px-3 py-1.5 text-sm text-white focus:border-[#FFD166] focus:outline-none"
+                    />
+                  </div>
+                </>
               )}
 
-              {/* Input: Email */}
-              <div>
-                <label className="text-gray-300 text-sm mb-1 block">Email</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <FiMail />
-                  </span>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Vui lòng nhập email của bạn"
-                    className="w-full bg-transparent border border-gray-600 text-white rounded-md pl-10 pr-4 py-2 focus:outline-none focus:border-[#FFD166] placeholder-gray-500 text-sm transition"
-                  />
-                </div>
-              </div>
-
-              {/* Input: Mật khẩu */}
-              <div>
-                <label className="text-gray-300 text-sm mb-1 block">Mật khẩu</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <FiLock />
-                  </span>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Vui lòng nhập mật khẩu"
-                    className="w-full bg-transparent border border-gray-600 text-white rounded-md pl-10 pr-4 py-2 focus:outline-none focus:border-[#FFD166] placeholder-gray-500 text-sm transition"
-                  />
-                </div>
-              </div>
-
-              {/* Quên mật khẩu */}
-              {isLoginTab && (
-                <div className="text-right">
-                  <Link to="#" className="text-sm text-gray-400 hover:text-white italic">
-                    Quên Mật Khẩu?
-                  </Link>
-                </div>
-              )}
-
-              {/* MÃ XÁC THỰC (CAPTCHA) */}
-              <div className="flex items-center gap-3 my-2">
-                {/* Box hiển thị số */}
-                <div
-                  className="bg-white px-4 py-1 text-green-700 font-bold tracking-[0.2em] text-lg rounded line-through decoration-gray-400 select-none cursor-not-allowed"
-                  title="Mã xác thực"
-                >
-                  {captchaText}
-                </div>
-
-                {/* Nút làm mới */}
-                <button
-                  type="button"
-                  onClick={generateCaptcha}
-                  className="text-gray-400 hover:text-white transition"
-                  title="Đổi mã khác"
-                >
-                  <FiRefreshCw size={20} />
-                </button>
-
-                {/* Ô nhập mã */}
-                <input
-                  type="text"
-                  required
-                  value={captchaInput}
-                  onChange={(e) => setCaptchaInput(e.target.value)}
-                  placeholder="Mã xác thực"
-                  className="flex-1 bg-transparent border border-gray-600 text-white rounded-md px-3 py-1.5 focus:outline-none focus:border-[#FFD166] text-sm"
-                />
-              </div>
-
-              {/* Nút Submit */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] text-black font-bold py-2.5 rounded-md mt-2 transition shadow-lg uppercase text-sm ${isLoading ? 'opacity-70 cursor-not-allowed' : 'hover:opacity-90'}`}
+                className={`mt-2 w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] py-2.5 text-sm font-bold uppercase text-black shadow-lg transition ${
+                  isLoading ? 'cursor-not-allowed opacity-70' : 'hover:opacity-90'
+                }`}
               >
-                {isLoading ? 'Đang xử lý...' : (isLoginTab ? 'Đăng Nhập Bằng Tài Khoản' : 'Đăng Ký Tài Khoản')}
+                {isLoading
+                  ? 'Đang xử lý...'
+                  : isVerifyStep
+                    ? 'Xác Thực Email'
+                    : isResetPasswordStep
+                      ? 'Đặt Lại Mật Khẩu'
+                      : isForgotMode
+                        ? 'Gửi OTP Đặt Lại Mật Khẩu'
+                        : isLoginMode
+                          ? 'Đăng Nhập Bằng Tài Khoản'
+                          : 'Đăng Ký Tài Khoản'}
               </button>
 
-              {/* Nút Đăng nhập Google */}
-              <button
-                type="button"
-                className="w-full flex items-center justify-center gap-2 bg-white hover:bg-gray-100 text-black font-bold py-2.5 rounded-md transition shadow text-sm mt-2 uppercase"
-              >
-                <FcGoogle size={20} />
-                Đăng Nhập Bằng Google
-              </button>
-
+              {!isVerifyStep && !isResetPasswordStep && !isForgotMode ? (
+                <button
+                  type="button"
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-white py-2.5 text-sm font-bold uppercase text-black shadow transition hover:bg-gray-100"
+                >
+                  <FcGoogle size={20} />
+                  Đăng Nhập Bằng Google
+                </button>
+              ) : null}
             </form>
           </div>
         </div>
-      </div>
-      {/* 3. FOOTER Ở DƯỚI CÙNG */}
+      </main>
+
       <Footer />
     </div>
   );
