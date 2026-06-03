@@ -11,7 +11,7 @@ const Topbar = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('role');
     localStorage.removeItem('fullName');
-    navigate('/login');
+    navigate('/');
   };
 
   return (
