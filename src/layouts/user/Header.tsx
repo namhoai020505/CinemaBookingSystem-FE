@@ -53,7 +53,7 @@ export default function Header() {
 
             {/* DROPDOWN CHỌN RẠP (Bo tròn giống ảnh) */}
             <button className="hidden sm:flex items-center gap-2 border border-white text-white rounded-full px-4 py-1.5 hover:bg-white/10 transition text-sm">
-              <span>Beta Thái Nguyên</span>
+              <span>G2Cinema Thái Nguyên</span>
               <FiChevronDown size={18} />
             </button>
           </div>
