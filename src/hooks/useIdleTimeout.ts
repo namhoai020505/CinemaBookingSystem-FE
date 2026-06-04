@@ -18,6 +18,7 @@ export const useIdleTimeout = (timeoutMinutes: number = 10) => {
     const handleLogout = () => {
       // Xóa sạch dữ liệu trong localStorage của Customer
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('role');
       localStorage.removeItem('fullName');
 

@@ -9,6 +9,7 @@ const Topbar = () => {
   const handleLogout = () => {
     // Xóa sạch dấu vết khi logout
     localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('role');
     localStorage.removeItem('fullName');
     navigate('/');
