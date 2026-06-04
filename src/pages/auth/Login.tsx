@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FiLock, FiMail, FiPhone, FiRefreshCw, FiUser } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
@@ -29,15 +29,20 @@ type AuthResponseData = {
 type RegisterResponseData = {
   email?: string;
   expiresAt?: string;
+  attemptsRemaining?: number;
 };
 
 type ParsedApiError = {
   message: string;
   errorCode?: string;
+  retryAfterSeconds?: number;
 };
 
 const apiErrorMessages: Record<string, string> = {
   DUPLICATE_EMAIL: 'Email này đã được sử dụng.',
+  PENDING_REGISTRATION_EXISTS:
+    'Email này đang chờ xác thực. Vui lòng dùng mật khẩu đã đăng ký trước đó để đổi thông tin.',
+  EMAIL_NOT_REGISTERED: 'Email này chưa được đăng ký.',
   WEAK_PASSWORD: 'Mật khẩu cần ít nhất 8 ký tự, gồm chữ hoa, chữ thường và chữ số.',
   EMAIL_SEND_FAILED: 'Không gửi được email OTP. Vui lòng kiểm tra cấu hình SMTP backend.',
   USER_NOT_FOUND: 'Không tìm thấy tài khoản với email này.',
@@ -48,6 +53,8 @@ const apiErrorMessages: Record<string, string> = {
   EMAIL_NOT_VERIFIED: 'Email chưa được xác thực. Vui lòng nhập mã OTP đã nhận.',
   INVALID_CREDENTIALS: 'Email hoặc mật khẩu không đúng.',
   ACCOUNT_NOT_ACTIVE: 'Tài khoản chưa ở trạng thái hoạt động.',
+  OTP_RESEND_COOLDOWN: 'Vui lòng chờ trước khi gửi lại OTP.',
+  OTP_SEND_LIMIT_REACHED: 'Bạn đã gửi OTP đủ 5 lần. Vui lòng thử lại sau 2 giờ.',
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -56,6 +63,45 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 const createCaptcha = () => Math.floor(10000 + Math.random() * 90000).toString();
+
+const getRetryAfterSeconds = (errors: unknown) => {
+  if (!isRecord(errors)) {
+    return undefined;
+  }
+
+  const retryAfterValues = errors.retryAfterSeconds;
+  if (!Array.isArray(retryAfterValues) || typeof retryAfterValues[0] !== 'string') {
+    return undefined;
+  }
+
+  const retryAfterSeconds = Number.parseInt(retryAfterValues[0], 10);
+  return Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined;
+};
+
+const getOtpValidSeconds = (expiresAt?: string) => {
+  if (!expiresAt) {
+    return 60;
+  }
+
+  const expiryTime = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiryTime)) {
+    return 60;
+  }
+
+  return Math.max(0, Math.ceil((expiryTime - Date.now()) / 1000));
+};
+
+const formatCountdown = (totalSeconds: number) => {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours} giờ ${minutes.toString().padStart(2, '0')} phút`;
+  }
+
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+};
 
 const unwrapApiResponse = <T,>(response: unknown): ApiResponse<T> => {
   if (isRecord(response)) {
@@ -86,14 +132,15 @@ const parseApiError = (error: unknown): ParsedApiError => {
 
     if (isRecord(data)) {
       const errorCode = typeof data.errorCode === 'string' ? data.errorCode : undefined;
+      const retryAfterSeconds = getRetryAfterSeconds(data.errors);
       const mappedMessage = errorCode ? apiErrorMessages[errorCode] : undefined;
 
       if (mappedMessage) {
-        return { message: mappedMessage, errorCode };
+        return { message: mappedMessage, errorCode, retryAfterSeconds };
       }
 
       if (typeof data.message === 'string' && data.message.trim()) {
-        return { message: data.message, errorCode };
+        return { message: data.message, errorCode, retryAfterSeconds };
       }
 
       if (isRecord(data.errors)) {
@@ -101,7 +148,7 @@ const parseApiError = (error: unknown): ParsedApiError => {
         const firstErrors = firstField ? data.errors[firstField] : undefined;
 
         if (Array.isArray(firstErrors) && typeof firstErrors[0] === 'string') {
-          return { message: firstErrors[0], errorCode };
+          return { message: firstErrors[0], errorCode, retryAfterSeconds };
         }
       }
     }
@@ -140,6 +187,9 @@ export default function Login() {
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
+  const [otpValidSeconds, setOtpValidSeconds] = useState<number | null>(null);
+  const [otpAttemptsRemaining, setOtpAttemptsRemaining] = useState<number | null>(null);
 
   const isLoginMode = authMode === 'login';
   const isRegisterMode = authMode === 'register';
@@ -148,6 +198,23 @@ export default function Login() {
   const isResetPasswordStep = authMode === 'forgot' && passwordResetStep === 'reset';
   const verificationEmail = pendingEmail || normalizeEmail(email);
   const passwordResetEmail = pendingPasswordResetEmail || normalizeEmail(email);
+  const hasActiveOtpTimer =
+    resendCooldownSeconds > 0 || (otpValidSeconds !== null && otpValidSeconds > 0);
+
+  useEffect(() => {
+    if (!hasActiveOtpTimer) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setResendCooldownSeconds((current) => Math.max(0, current - 1));
+      setOtpValidSeconds((current) =>
+        current === null ? null : Math.max(0, current - 1),
+      );
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [hasActiveOtpTimer]);
 
   const generateCaptcha = () => {
     setCaptchaText(createCaptcha());
@@ -159,13 +226,35 @@ export default function Login() {
     setSuccessMessage('');
   };
 
+  const resetOtpState = () => {
+    setOtp('');
+    setResendCooldownSeconds(0);
+    setOtpValidSeconds(null);
+    setOtpAttemptsRemaining(null);
+  };
+
+  const startOtpWindow = (data?: RegisterResponseData | null) => {
+    const validSeconds = getOtpValidSeconds(data?.expiresAt);
+    setOtpValidSeconds(validSeconds);
+    setResendCooldownSeconds(data?.attemptsRemaining === 0 ? 2 * 60 * 60 : validSeconds);
+    setOtpAttemptsRemaining(data?.attemptsRemaining ?? null);
+  };
+
+  const applyOtpApiError = (apiError: ParsedApiError) => {
+    setError(apiError.message);
+
+    if (apiError.retryAfterSeconds) {
+      setResendCooldownSeconds(apiError.retryAfterSeconds);
+    }
+  };
+
   const switchMode = (nextMode: AuthMode) => {
     setAuthMode(nextMode);
     setRegisterStep('form');
     setPasswordResetStep('request');
     setPendingEmail('');
     setPendingPasswordResetEmail('');
-    setOtp('');
+    resetOtpState();
     setNewPassword('');
     setConfirmNewPassword('');
     resetFeedback();
@@ -216,7 +305,7 @@ export default function Login() {
         setAuthMode('register');
         setRegisterStep('verify');
         setPendingEmail(normalizeEmail(email));
-        setOtp('');
+        resetOtpState();
         setSuccessMessage('Email chưa xác thực. Nhập OTP đã nhận hoặc gửi lại mã mới.');
         return;
       }
@@ -257,12 +346,11 @@ export default function Login() {
       setPendingEmail(registeredEmail);
       setRegisterStep('verify');
       setOtp('');
-      setPassword('');
-      setConfirmPassword('');
+      startOtpWindow(response.data);
       setSuccessMessage(response.message || 'Đăng ký thành công. Vui lòng nhập OTP đã gửi tới email.');
       generateCaptcha();
     } catch (err: unknown) {
-      setError(parseApiError(err).message);
+      applyOtpApiError(parseApiError(err));
       generateCaptcha();
     } finally {
       setIsLoading(false);
@@ -272,6 +360,11 @@ export default function Login() {
   const handleVerifyEmail = async () => {
     if (!/^\d{6}$/.test(otp)) {
       setError('OTP phải gồm đúng 6 chữ số.');
+      return;
+    }
+
+    if (otpValidSeconds === 0) {
+      setError('Mã OTP đã hết hạn. Vui lòng gửi lại mã mới.');
       return;
     }
 
@@ -289,30 +382,40 @@ export default function Login() {
       setRegisterStep('form');
       setEmail(verificationEmail);
       setPendingEmail('');
-      setOtp('');
+      resetOtpState();
       setSuccessMessage(response.message || 'Xác thực email thành công. Bạn có thể đăng nhập.');
       generateCaptcha();
     } catch (err: unknown) {
-      setError(parseApiError(err).message);
+      const apiError = parseApiError(err);
+      if (apiError.errorCode === 'OTP_EXPIRED') {
+        setOtpValidSeconds(0);
+      }
+      setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleResendOtp = async () => {
+    if (resendCooldownSeconds > 0) {
+      return;
+    }
+
     resetFeedback();
     setIsResending(true);
 
     try {
-      const response = unwrapApiResponse(
+      const response = unwrapApiResponse<RegisterResponseData>(
         await api.post('/api/auth/resend-verification-otp', {
           email: verificationEmail,
         }),
       );
 
+      setOtp('');
+      startOtpWindow(response.data);
       setSuccessMessage(response.message || 'Đã gửi lại OTP xác thực email.');
     } catch (err: unknown) {
-      setError(parseApiError(err).message);
+      applyOtpApiError(parseApiError(err));
     } finally {
       setIsResending(false);
     }
@@ -334,10 +437,11 @@ export default function Login() {
       setOtp('');
       setNewPassword('');
       setConfirmNewPassword('');
+      startOtpWindow(response.data);
       setSuccessMessage(response.message || 'OTP đặt lại mật khẩu đã được gửi tới email của bạn.');
       generateCaptcha();
     } catch (err: unknown) {
-      setError(parseApiError(err).message);
+      applyOtpApiError(parseApiError(err));
       generateCaptcha();
     } finally {
       setIsLoading(false);
@@ -352,6 +456,11 @@ export default function Login() {
 
     if (newPassword !== confirmNewPassword) {
       setError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+
+    if (otpValidSeconds === 0) {
+      setError('Mã OTP đã hết hạn. Vui lòng gửi lại mã mới.');
       return;
     }
 
@@ -370,33 +479,43 @@ export default function Login() {
       setPasswordResetStep('request');
       setEmail(passwordResetEmail);
       setPendingPasswordResetEmail('');
-      setOtp('');
+      resetOtpState();
       setNewPassword('');
       setConfirmNewPassword('');
       setPassword('');
       setSuccessMessage(response.message || 'Đặt lại mật khẩu thành công. Bạn có thể đăng nhập.');
       generateCaptcha();
     } catch (err: unknown) {
-      setError(parseApiError(err).message);
+      const apiError = parseApiError(err);
+      if (apiError.errorCode === 'OTP_EXPIRED') {
+        setOtpValidSeconds(0);
+      }
+      setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleResendPasswordResetOtp = async () => {
+    if (resendCooldownSeconds > 0) {
+      return;
+    }
+
     resetFeedback();
     setIsResending(true);
 
     try {
-      const response = unwrapApiResponse(
+      const response = unwrapApiResponse<RegisterResponseData>(
         await api.post('/api/auth/forgot-password', {
           email: passwordResetEmail,
         }),
       );
 
+      setOtp('');
+      startOtpWindow(response.data);
       setSuccessMessage(response.message || 'Đã gửi lại OTP đặt lại mật khẩu.');
     } catch (err: unknown) {
-      setError(parseApiError(err).message);
+      applyOtpApiError(parseApiError(err));
     } finally {
       setIsResending(false);
     }
@@ -501,6 +620,17 @@ export default function Login() {
                         className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
                       />
                     </div>
+                    {otpValidSeconds !== null ? (
+                      <p
+                        className={`mt-2 text-xs ${
+                          otpValidSeconds > 0 ? 'text-gray-400' : 'text-red-400'
+                        }`}
+                      >
+                        {otpValidSeconds > 0
+                          ? `OTP còn hiệu lực trong ${formatCountdown(otpValidSeconds)}`
+                          : 'OTP đã hết hạn. Vui lòng gửi lại mã mới.'}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex items-center justify-between gap-3 text-sm">
@@ -508,6 +638,7 @@ export default function Login() {
                       type="button"
                       onClick={() => {
                         setRegisterStep('form');
+                        resetOtpState();
                         resetFeedback();
                         generateCaptcha();
                       }}
@@ -518,12 +649,21 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={handleResendOtp}
-                      disabled={isResending}
+                      disabled={isResending || resendCooldownSeconds > 0}
                       className="font-semibold text-[#FFD166] transition hover:text-[#FFEBA4] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isResending ? 'Đang gửi...' : 'Gửi lại OTP'}
+                      {isResending
+                        ? 'Đang gửi...'
+                        : resendCooldownSeconds > 0
+                          ? `Gửi lại sau ${formatCountdown(resendCooldownSeconds)}`
+                          : 'Gửi lại OTP'}
                     </button>
                   </div>
+                  {otpAttemptsRemaining !== null ? (
+                    <p className="text-right text-xs text-gray-400">
+                      Còn {otpAttemptsRemaining} lần gửi OTP
+                    </p>
+                  ) : null}
                 </>
               ) : isResetPasswordStep ? (
                 <>
@@ -549,6 +689,17 @@ export default function Login() {
                         className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
                       />
                     </div>
+                    {otpValidSeconds !== null ? (
+                      <p
+                        className={`mt-2 text-xs ${
+                          otpValidSeconds > 0 ? 'text-gray-400' : 'text-red-400'
+                        }`}
+                      >
+                        {otpValidSeconds > 0
+                          ? `OTP còn hiệu lực trong ${formatCountdown(otpValidSeconds)}`
+                          : 'OTP đã hết hạn. Vui lòng gửi lại mã mới.'}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div>
@@ -590,7 +741,7 @@ export default function Login() {
                       type="button"
                       onClick={() => {
                         setPasswordResetStep('request');
-                        setOtp('');
+                        resetOtpState();
                         setNewPassword('');
                         setConfirmNewPassword('');
                         resetFeedback();
@@ -603,12 +754,21 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={handleResendPasswordResetOtp}
-                      disabled={isResending}
+                      disabled={isResending || resendCooldownSeconds > 0}
                       className="font-semibold text-[#FFD166] transition hover:text-[#FFEBA4] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isResending ? 'Đang gửi...' : 'Gửi lại OTP'}
+                      {isResending
+                        ? 'Đang gửi...'
+                        : resendCooldownSeconds > 0
+                          ? `Gửi lại sau ${formatCountdown(resendCooldownSeconds)}`
+                          : 'Gửi lại OTP'}
                     </button>
                   </div>
+                  {otpAttemptsRemaining !== null ? (
+                    <p className="text-right text-xs text-gray-400">
+                      Còn {otpAttemptsRemaining} lần gửi OTP
+                    </p>
+                  ) : null}
                 </>
               ) : isForgotMode ? (
                 <>
