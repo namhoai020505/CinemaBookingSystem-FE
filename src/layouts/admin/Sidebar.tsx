@@ -14,6 +14,9 @@ const Sidebar = () => {
         <li style={{ marginBottom: '15px' }}>
           <Link to="/admin/users" style={{ color: 'white', textDecoration: 'none' }}>Quản lý User</Link>
         </li>
+        <li style={{ marginBottom: '15px' }}>
+          <Link to="/admin/staff" style={{ color: 'white', textDecoration: 'none' }}>Quản lý Staff</Link>
+        </li>
       </ul>
     </div>
   );

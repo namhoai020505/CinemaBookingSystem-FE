@@ -34,6 +34,7 @@ api.interceptors.response.use(
       // Các API khác bị 401 (thực sự hết hạn token) thì mới đá về login
       console.error('Token hết hạn hoặc không hợp lệ. Về trang Login...');
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('role');
       localStorage.removeItem('fullName');
       window.location.href = '/login'; 
