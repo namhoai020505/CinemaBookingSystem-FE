@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiLock, FiMail, FiPhone, FiRefreshCw, FiUser } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiLock, FiMail, FiPhone, FiRefreshCw, FiUser } from 'react-icons/fi';
 import { FcGoogle } from 'react-icons/fc';
 import api from '../../lib/api';
 import Header from '../../layouts/user/Header';
@@ -177,8 +177,10 @@ export default function Login() {
   const [pendingEmail, setPendingEmail] = useState('');
   const [pendingPasswordResetEmail, setPendingPasswordResetEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [captchaText, setCaptchaText] = useState(createCaptcha);
@@ -256,6 +258,8 @@ export default function Login() {
     setPendingPasswordResetEmail('');
     resetOtpState();
     setNewPassword('');
+    setShowPassword(false);
+    setShowNewPassword(false);
     setConfirmNewPassword('');
     resetFeedback();
     generateCaptcha();
@@ -709,13 +713,22 @@ export default function Login() {
                         <FiLock />
                       </span>
                       <input
-                        type="password"
+                        type={showNewPassword ? 'text' : 'password'}
                         required
                         value={newPassword}
                         onChange={(event) => setNewPassword(event.target.value)}
                         placeholder="Nhập mật khẩu mới"
-                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-11 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((current) => !current)}
+                        aria-label={showNewPassword ? 'Ẩn mật khẩu mới' : 'Hiện mật khẩu mới'}
+                        title={showNewPassword ? 'Ẩn mật khẩu mới' : 'Hiện mật khẩu mới'}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-white focus:outline-none focus-visible:text-[#FFD166]"
+                      >
+                        {showNewPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                      </button>
                     </div>
                   </div>
 
@@ -743,6 +756,7 @@ export default function Login() {
                         setPasswordResetStep('request');
                         resetOtpState();
                         setNewPassword('');
+                        setShowNewPassword(false);
                         setConfirmNewPassword('');
                         resetFeedback();
                         generateCaptcha();
@@ -891,13 +905,22 @@ export default function Login() {
                         <FiLock />
                       </span>
                       <input
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         required
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
                         placeholder="Vui lòng nhập mật khẩu"
-                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                        className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-11 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((current) => !current)}
+                        aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                        title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-white focus:outline-none focus-visible:text-[#FFD166]"
+                      >
+                        {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                      </button>
                     </div>
                   </div>
 

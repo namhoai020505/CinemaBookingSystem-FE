@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FiLock, FiMail } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiLock, FiMail } from 'react-icons/fi';
 import api from '../../lib/api';
 import Header from '../../layouts/user/Header';
 import Footer from '../../layouts/user/Footer';
@@ -56,6 +56,7 @@ export default function StaffSetPassword() {
   const [email, setEmail] = useState(() => searchParams.get('email') || '');
   const [otp, setOtp] = useState(() => searchParams.get('otp') || searchParams.get('code') || '');
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -88,6 +89,7 @@ export default function StaffSetPassword() {
       setSuccessMessage('Tạo mật khẩu staff thành công. Bạn có thể đăng nhập bằng tài khoản staff.');
       setOtp('');
       setNewPassword('');
+      setShowNewPassword(false);
       setConfirmPassword('');
     } catch (err: unknown) {
       setError(parseApiError(err).message);
@@ -163,13 +165,22 @@ export default function StaffSetPassword() {
                   <FiLock />
                 </span>
                 <input
-                  type="password"
+                  type={showNewPassword ? 'text' : 'password'}
                   required
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                   placeholder="Nhập mật khẩu mới"
-                  className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-4 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
+                  className="w-full rounded-md border border-gray-600 bg-transparent py-2 pl-10 pr-11 text-sm text-white transition placeholder-gray-500 focus:border-[#FFD166] focus:outline-none"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((current) => !current)}
+                  aria-label={showNewPassword ? 'Ẩn mật khẩu mới' : 'Hiện mật khẩu mới'}
+                  title={showNewPassword ? 'Ẩn mật khẩu mới' : 'Hiện mật khẩu mới'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-white focus:outline-none focus-visible:text-[#FFD166]"
+                >
+                  {showNewPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                </button>
               </div>
             </div>
 
