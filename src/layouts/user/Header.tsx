@@ -22,7 +22,9 @@ export default function Header() {
         <div className="container mx-auto px-4 flex justify-end text-[13px]">
           {token ? (
             <div className="flex items-center gap-3">
-              <span>Chào, {fullName || 'Thành viên'}</span>
+              <Link to="/profile" className="transition hover:text-white">
+                Chào, {fullName || 'Thành viên'}
+              </Link>
               <span className="text-gray-600">|</span>
               <button onClick={handleLogout} className="hover:text-white transition font-medium">
                 Đăng xuất
@@ -64,7 +66,7 @@ export default function Header() {
             <Link to="/" className="hover:text-[#FFD166] transition">PHIM</Link>
             <Link to="/" className="hover:text-[#FFD166] transition">RẠP</Link>
             <Link to="/" className="hover:text-[#FFD166] transition">LỊCH CHIẾU THEO RẠP</Link>
-            <Link to="/" className="hover:text-[#FFD166] transition">THÀNH VIÊN</Link>
+            <Link to="/profile" className="hover:text-[#FFD166] transition">THÀNH VIÊN</Link>
           </nav>
 
         </div>

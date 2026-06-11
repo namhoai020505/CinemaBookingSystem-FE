@@ -3,6 +3,17 @@ const roleClaimKeys = [
   'http://schemas.microsoft.com/ws/2008/06/identity/claims/role',
 ];
 
+const emailClaimKeys = [
+  'email',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
+];
+
+const userIdClaimKeys = [
+  'userId',
+  'sub',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier',
+];
+
 type JwtPayload = {
   exp?: number;
   role?: string | string[];
@@ -86,3 +97,34 @@ export const getRoleFromAccessToken = (token: string | null = getAccessToken()) 
 export const isAdminRole = (role: string | null | undefined) => normalizeRole(role) === 'admin';
 
 export const isCustomerRole = (role: string | null | undefined) => normalizeRole(role) === 'customer';
+
+const getStringClaim = (payload: JwtPayload | null, keys: string[]) => {
+  if (!payload) {
+    return '';
+  }
+
+  for (const key of keys) {
+    const claimValue = payload[key];
+    if (typeof claimValue === 'string' && claimValue.trim()) {
+      return claimValue;
+    }
+  }
+
+  return '';
+};
+
+export const getCurrentUserProfile = (token: string | null = getAccessToken()) => {
+  const payload = getJwtPayload(token);
+
+  if (!token || !payload || isAccessTokenExpired(token)) {
+    return null;
+  }
+
+  return {
+    userId: getStringClaim(payload, userIdClaimKeys),
+    email: getStringClaim(payload, emailClaimKeys),
+    fullName: localStorage.getItem('fullName') || 'Thành viên',
+    role: getRoleFromAccessToken(token) || '',
+    expiresAt: payload.exp ? new Date(payload.exp * 1000) : null,
+  };
+};

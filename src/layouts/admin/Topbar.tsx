@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { logout } from '../../services/authService';
 
 const Topbar = () => {
@@ -19,7 +19,12 @@ const Topbar = () => {
       padding: '0 20px', borderBottom: '1px solid #ccc'
     }}>
       {/* Hiển thị tên thật ở đây */}
-      <span style={{ marginRight: '20px', fontWeight: 'bold' }}>Xin chào, {fullName}</span>
+      <Link
+        to="/profile"
+        style={{ marginRight: '20px', fontWeight: 'bold', color: '#1f2937', textDecoration: 'none' }}
+      >
+        Xin chào, {fullName}
+      </Link>
       
       <button 
         onClick={handleLogout}

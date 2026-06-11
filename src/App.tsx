@@ -3,6 +3,7 @@ import AdminLayout from './layouts/admin/AdminLayout';
 import UserLayout from './layouts/user/UserLayout';
 import Dashboard from './pages/admin/Dashboard';
 import Home from './pages/user/Home';
+import Profile from './pages/user/Profile';
 import Login from './pages/auth/Login';
 import StaffSetPassword from './pages/auth/StaffSetPassword';
 import RequireAuth from './components/RequireAuth'; 
@@ -29,6 +30,7 @@ function App() {
 
         <Route element={<UserLayout />}>
           <Route path="/" element={<Home />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
 
         <Route element={<RequireAuth />}>
