@@ -1,27 +1,76 @@
+import { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
+import { clearAuthSession, getAccessToken, isAccessTokenExpired } from '../lib/auth';
+import { verifyAdminSession } from '../services/authService';
+
+type AuthCheckState = 'checking' | 'allowed' | 'login' | 'forbidden';
 
 const RequireAuth = () => {
-  const token = localStorage.getItem('accessToken');
-  const role = localStorage.getItem('role'); 
+  const [authState, setAuthState] = useState<AuthCheckState>('checking');
 
-  // 1. Nếu không có token -> chưa đăng nhập -> đá về trang login
-  if (!token) {
+  useEffect(() => {
+    let isMounted = true;
+    const token = getAccessToken();
+
+    const setSafeAuthState = (nextState: AuthCheckState) => {
+      if (isMounted) {
+        setAuthState(nextState);
+      }
+    };
+
+    if (!token || isAccessTokenExpired(token)) {
+      clearAuthSession();
+      setSafeAuthState('login');
+
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    verifyAdminSession()
+      .then(() => setSafeAuthState('allowed'))
+      .catch((error: unknown) => {
+        const status =
+          typeof error === 'object' &&
+          error !== null &&
+          'response' in error &&
+          typeof error.response === 'object' &&
+          error.response !== null &&
+          'status' in error.response &&
+          typeof error.response.status === 'number'
+            ? error.response.status
+            : undefined;
+
+        if (status === 401) {
+          clearAuthSession();
+          setSafeAuthState('login');
+          return;
+        }
+
+        setSafeAuthState('forbidden');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (authState === 'checking') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0F172A] text-sm font-semibold text-white">
+        Đang kiểm tra quyền truy cập...
+      </div>
+    );
+  }
+
+  if (authState === 'login') {
     return <Navigate to="/login" replace />;
   }
 
-  // 2. Nếu là Customer cố tình vào Admin -> đá về trang chủ (http://localhost:5173/)
-  // Lưu ý: Kiểm tra cả 2 trường hợp tên role tùy thuộc vào Backend bạn trả về cái nào
-  if (role === 'Customer' || role === 'ROLE_CUSTOMER') {
+  if (authState === 'forbidden') {
     return <Navigate to="/" replace />;
   }
 
-  // 3. Nếu không phải Admin (mà cũng không phải Customer) -> Cho về Login cho an toàn
-  if (role !== 'Admin') {
-    alert('Bạn không có quyền truy cập vào trang quản trị!');
-    return <Navigate to="/login" replace />;
-  }
-
-  // Nếu vượt qua hết các bài test trên (tức là đích thị Admin) -> cho phép vào trang Admin
   return <Outlet />;
 };
 

@@ -1,17 +1,16 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { FiChevronDown } from 'react-icons/fi'; // Icon mũi tên chỉ xuống
 import logo from '../../assets/logo.png'; 
+import { getAccessToken } from '../../lib/auth';
+import { logout } from '../../services/authService';
 
 export default function Header() {
   const navigate = useNavigate();
-  const token = localStorage.getItem('accessToken');
+  const token = getAccessToken();
   const fullName = localStorage.getItem('fullName');
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('role');
-    localStorage.removeItem('fullName');
+  const handleLogout = async () => {
+    await logout();
     navigate('/'); 
   };
 
