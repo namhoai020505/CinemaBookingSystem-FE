@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clearAuthSession, getAccessToken } from './auth';
 
 const api = axios.create({
   baseURL: 'http://localhost:5070', 
@@ -10,7 +11,7 @@ const api = axios.create({
 // 1. Interceptor REQUEST: Gắn Token tự động vào mỗi API gửi đi
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -37,10 +38,9 @@ api.interceptors.response.use(
         return Promise.reject(error); // Trả lỗi về cho Component tự xử lý UI, không logout
       }
 
-      // Các API bắt buộc khác thì mới kích hoạt cơ chế dọn dẹp và đẩy về Login
-      console.error('Hết hạn quyền truy cập hệ thống. Điều hướng về Login...');
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('role');
+      // Các API khác bị 401 (thực sự hết hạn token) thì mới đá về login
+      console.error('Token hết hạn hoặc không hợp lệ. Về trang Login...');
+      clearAuthSession();
       window.location.href = '/login'; 
     }
     return Promise.reject(error);

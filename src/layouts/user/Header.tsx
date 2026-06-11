@@ -1,17 +1,16 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { FiChevronDown } from 'react-icons/fi'; // Icon mũi tên chỉ xuống
 import logo from '../../assets/logo.png'; 
+import { getAccessToken } from '../../lib/auth';
+import { logout } from '../../services/authService';
 
 export default function Header() {
   const navigate = useNavigate();
-  const token = localStorage.getItem('accessToken');
+  const token = getAccessToken();
   const fullName = localStorage.getItem('fullName');
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('role');
-    localStorage.removeItem('fullName');
+  const handleLogout = async () => {
+    await logout();
     navigate('/'); 
   };
 
@@ -23,7 +22,9 @@ export default function Header() {
         <div className="container mx-auto px-4 flex justify-end text-[13px]">
           {token ? (
             <div className="flex items-center gap-3">
-              <span>Chào, {fullName || 'Thành viên'}</span>
+              <Link to="/profile" className="transition hover:text-white">
+                Chào, {fullName || 'Thành viên'}
+              </Link>
               <span className="text-gray-600">|</span>
               <Link to="/my-bookings" className="hover:text-white transition font-medium">
                 Vé của tôi
@@ -69,7 +70,7 @@ export default function Header() {
             <Link to="/" className="hover:text-[#FFD166] transition">PHIM</Link>
             <Link to="/" className="hover:text-[#FFD166] transition">RẠP</Link>
             <Link to="/" className="hover:text-[#FFD166] transition">LỊCH CHIẾU THEO RẠP</Link>
-            <Link to="/" className="hover:text-[#FFD166] transition">THÀNH VIÊN</Link>
+            <Link to="/profile" className="hover:text-[#FFD166] transition">THÀNH VIÊN</Link>
           </nav>
 
         </div>

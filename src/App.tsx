@@ -3,6 +3,7 @@ import AdminLayout from './layouts/admin/AdminLayout';
 import UserLayout from './layouts/user/UserLayout';
 import Dashboard from './pages/admin/Dashboard';
 import Home from './pages/user/Home';
+import Profile from './pages/user/Profile';
 import Login from './pages/auth/Login';
 import StaffSetPassword from './pages/auth/StaffSetPassword';
 import RequireAuth from './components/RequireAuth'; 
@@ -34,11 +35,7 @@ function App() {
 
         <Route element={<UserLayout />}>
           <Route path="/" element={<Home />} />
-          <Route path="/movie/:movieId/showtimes" element={<MovieShowtimes />} />
-          <Route path="/booking/seats/:showtimeId" element={<SeatSelection />} />
-          <Route path="/booking/checkout/:showtimeId" element={<Checkout />} />
-          <Route path="/booking/success/:bookingId" element={<BookingSuccess />} />
-          <Route path="/my-bookings" element={<MyBookings />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
 
         <Route element={<RequireAuth />}>

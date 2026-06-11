@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { logout } from '../../services/authService';
 
 const Topbar = () => {
   const navigate = useNavigate();
@@ -6,12 +7,8 @@ const Topbar = () => {
   // Lấy tên thật từ localStorage, nếu không có thì để mặc định là 'Chưa đăng nhập'
   const fullName = localStorage.getItem('fullName') || 'Quản trị viên';
 
-  const handleLogout = () => {
-    // Xóa sạch dấu vết khi logout
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('role');
-    localStorage.removeItem('fullName');
+  const handleLogout = async () => {
+    await logout();
     navigate('/');
   };
 
@@ -22,7 +19,12 @@ const Topbar = () => {
       padding: '0 20px', borderBottom: '1px solid #ccc'
     }}>
       {/* Hiển thị tên thật ở đây */}
-      <span style={{ marginRight: '20px', fontWeight: 'bold' }}>Xin chào, {fullName}</span>
+      <Link
+        to="/profile"
+        style={{ marginRight: '20px', fontWeight: 'bold', color: '#1f2937', textDecoration: 'none' }}
+      >
+        Xin chào, {fullName}
+      </Link>
       
       <button 
         onClick={handleLogout}
