@@ -35,6 +35,10 @@ function App() {
 
         <Route element={<UserLayout />}>
           <Route path="/" element={<Home />} />
+          <Route path="/movie/:movieId/showtimes" element={<MovieShowtimes />} />
+          <Route path="/booking/seats/:showtimeId" element={<SeatSelection />} />
+          <Route path="/booking/checkout/:showtimeId" element={<Checkout />} />
+          <Route path="/booking/success/:bookingId" element={<BookingSuccess />} />
           <Route path="profile" element={<Profile />} />
         </Route>
 
