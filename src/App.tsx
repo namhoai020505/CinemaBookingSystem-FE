@@ -10,6 +10,11 @@ import ManageMovie from './pages/admin/ManageMovie';
 import ManageShowtime from './pages/admin/ManageShowtime';
 import ManageStaff from './pages/admin/ManageStaff';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
+import MovieShowtimes from './pages/user/MovieShowtimes';
+import SeatSelection from './pages/user/SeatSelection';
+import Checkout from './pages/user/Checkout';
+import BookingSuccess from './pages/user/BookingSuccess';
+import MyBookings from './pages/user/MyBookings';
 
 const GlobalTimer = () => {
   useIdleTimeout(10); 
@@ -29,6 +34,11 @@ function App() {
 
         <Route element={<UserLayout />}>
           <Route path="/" element={<Home />} />
+          <Route path="/movie/:movieId/showtimes" element={<MovieShowtimes />} />
+          <Route path="/booking/seats/:showtimeId" element={<SeatSelection />} />
+          <Route path="/booking/checkout/:showtimeId" element={<Checkout />} />
+          <Route path="/booking/success/:bookingId" element={<BookingSuccess />} />
+          <Route path="/my-bookings" element={<MyBookings />} />
         </Route>
 
         <Route element={<RequireAuth />}>
