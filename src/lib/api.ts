@@ -20,16 +20,22 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// 2. Interceptor RESPONSE: Xử lý dữ liệu trả về và lỗi (CHỈ DÙNG 1 BLOCK NÀY DUY NHẤT)
+// 2. Interceptor RESPONSE: Tinh chỉnh bẫy lỗi 403/401 linh hoạt
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
     const originalRequestUrl = error.config?.url;
+    const errorStatus = error.response?.status;
 
-    if (error.response?.status === 401) {
-      // Nếu là API login thì bỏ qua, để component Login tự hiển thị lỗi sai mật khẩu
-      if (originalRequestUrl && originalRequestUrl.includes('/api/auth/login')) {
-        return Promise.reject(error);
+    // 💡 BẪY ĐIỀU KIỆN: Nếu dính 403 hoặc 401
+    if (errorStatus === 401 || errorStatus === 403) {
+      
+      // Nếu là API sơ đồ ghế hoặc API login thì CHẶN KHÔNG CHO ĐÁ VỀ LOGIN
+      if (
+        (originalRequestUrl && originalRequestUrl.includes('/api/seats/showtimes')) ||
+        (originalRequestUrl && originalRequestUrl.includes('/api/auth/login'))
+      ) {
+        return Promise.reject(error); // Trả lỗi về cho Component tự xử lý UI, không logout
       }
 
       // Các API khác bị 401 (thực sự hết hạn token) thì mới đá về login

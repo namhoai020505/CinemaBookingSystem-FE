@@ -16,6 +16,13 @@ export interface MovieData {
 }
 
 export const movieService = {
+  // Lấy danh sách phim cho người dùng (Movies đang hoạt động)
+  getActiveMovies: async () => {
+    const response = await axiosInstance.get('/api/movies');
+    // axiosInstance đã có interceptor tự động trả về response.data
+    return response; 
+  },
+
   // 1. GET: Lấy danh sách phim có phân trang (Ứng với SCRUM-60/SCRUM-65)
   getMoviesWithPagination: async (page: number = 1, limit: number = 10) => {
     // Truyền query parameters dạng ?page=...&limit=...
@@ -34,7 +41,7 @@ export const movieService = {
       }
     });
 
-    const response = await axiosInstance.post('/api/Movies', formData, {
+    const response = await axiosInstance.post('/api/movies', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -51,7 +58,7 @@ export const movieService = {
       }
     });
 
-    const response = await axiosInstance.put(`/api/Movies/${id}`, formData, {
+    const response = await axiosInstance.put(`/api/movies/${id}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }

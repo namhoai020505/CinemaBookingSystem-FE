@@ -26,6 +26,10 @@ export default function Header() {
                 Chào, {fullName || 'Thành viên'}
               </Link>
               <span className="text-gray-600">|</span>
+              <Link to="/my-bookings" className="hover:text-white transition font-medium">
+                Vé của tôi
+              </Link>
+              <span className="text-gray-600">|</span>
               <button onClick={handleLogout} className="hover:text-white transition font-medium">
                 Đăng xuất
               </button>

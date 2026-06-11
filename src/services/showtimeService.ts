@@ -12,7 +12,7 @@ export interface ShowtimeData {
 export const showtimeService = {
   // Lấy danh sách suất chiếu của một rạp theo ngày (Ứng với SCRUM-113)
   getShowtimesByDate: async (cinemaId: string, date: string) => {
-    const response = await axiosInstance.get('/api/Showtimes', {
+    const response = await axiosInstance.get('/api/showtimes', {
       params: { cinemaId, date }
     });
     return response.data;
@@ -20,7 +20,7 @@ export const showtimeService = {
 
   // Tạo suất chiếu mới khi Admin thả phim vào lịch (Ứng với SCRUM-66)
   createShowtime: async (data: ShowtimeData) => {
-    const response = await axiosInstance.post('/api/Showtimes', data);
+    const response = await axiosInstance.post('/api/showtimes', data);
     return response.data;
   }
 };
