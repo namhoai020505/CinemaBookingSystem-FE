@@ -18,7 +18,9 @@ export interface MovieData {
 export const movieService = {
   // Lấy danh sách phim cho người dùng (Movies đang hoạt động)
   getActiveMovies: async () => {
-    const response = await axiosInstance.get('/api/movies');
+    const response = await axiosInstance.get('/api/movies', {
+      params: { status: 'NOW_SHOWING' }
+    });
     // axiosInstance đã có interceptor tự động trả về response.data
     return response; 
   },

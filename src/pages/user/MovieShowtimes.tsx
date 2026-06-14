@@ -1,354 +1,526 @@
-import React, { useState, useEffect } from "react";
-import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import api from "../../lib/api"; // Axios instance bóc vỏ tự động của team
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import api from "../../lib/api";
 
-// Hàm sinh nhanh 5 ngày tiếp theo tính từ ngày hiện tại để làm bộ lọc lịch ngày
-const generateDaysFilter = () => {
-  const days = [];
-  const weekdays = [
-    "Chủ Nhật",
-    "Thứ Hai",
-    "Thứ Ba",
-    "Thứ Tư",
-    "Thứ Năm",
-    "Thứ Sáu",
-    "Thứ Bảy",
-  ];
+type ApiResponse<T> = {
+  success: boolean;
+  message?: string;
+  data?: T | null;
+};
 
-  // 💡 Đồng bộ mốc ngày xuất phát từ đúng ngày có dữ liệu trong SQL Server (05/06/2026)
-  const baseDate = new Date("2026-06-05T00:00:00");
+type ShowtimeResponse = {
+  showtimeId: string;
+  movieId: string;
+  movieTitle: string;
+  roomId: string;
+  roomName: string;
+  cinemaId: string;
+  cinemaName: string;
+  startTime: string;
+  endTime: string;
+  basePrice: number;
+  status: string;
+  showtimeSeatCount: number;
+};
 
-  for (let i = 0; i < 5; i++) {
-    const d = new Date(baseDate);
-    d.setDate(baseDate.getDate() + i);
+type MovieDetailResponse = {
+  movieId: string;
+  title: string;
+  durationMinutes: number;
+  genre?: string | null;
+  language?: string | null;
+  releaseDate?: string | null;
+  ageRating?: string | null;
+  description?: string | null;
+  posterUrl?: string | null;
+  trailerUrl?: string | null;
+  movieStatus: string;
+};
 
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const date = String(d.getDate()).padStart(2, "0");
-    const dateStr = `${year}-${month}-${date}`;
+type SeatMapResponse = {
+  showtimeId: string;
+  availableSeats?: unknown[];
+  lockedSeats?: unknown[];
+  soldSeats?: unknown[];
+};
 
-    days.push({
-      label: i === 0 ? "Hôm nay" : weekdays[d.getDay()],
-      dateDisplay: `${date}/${month}`,
-      dateValue: dateStr,
-    });
+type MovieInfo = {
+  movieId: string;
+  title: string;
+  durationMinutes?: number;
+  ageRating?: string;
+  genre?: string;
+  posterUrl?: string;
+};
+
+type SeatAvailability = {
+  available: number;
+  locked: number;
+  sold: number;
+  total: number;
+};
+
+type ShowtimeSlot = ShowtimeResponse & {
+  seatAvailability?: SeatAvailability;
+};
+
+type RoomGroup = {
+  roomId: string;
+  roomName: string;
+  slots: ShowtimeSlot[];
+};
+
+type CinemaGroup = {
+  cinemaId: string;
+  cinemaName: string;
+  city: string;
+  roomGroups: RoomGroup[];
+};
+
+type DayTab = {
+  label: string;
+  dateDisplay: string;
+  dateValue: string;
+};
+
+const FALLBACK_POSTER =
+  "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop";
+
+const weekdays = [
+  "Chủ Nhật",
+  "Thứ Hai",
+  "Thứ Ba",
+  "Thứ Tư",
+  "Thứ Năm",
+  "Thứ Sáu",
+  "Thứ Bảy",
+];
+
+const getDateKey = (value: string) => value.split("T")[0] || "";
+
+const getTodayKey = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const date = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${date}`;
+};
+
+const buildDayTab = (dateValue: string): DayTab => {
+  const [, month, date] = dateValue.split("-");
+  const dateObject = new Date(`${dateValue}T00:00:00`);
+  const label =
+    dateValue === getTodayKey()
+      ? "Hôm nay"
+      : weekdays[Number.isNaN(dateObject.getTime()) ? 0 : dateObject.getDay()];
+
+  return {
+    label,
+    dateDisplay: `${date}/${month}`,
+    dateValue,
+  };
+};
+
+const formatISOToShortTime = (value: string) => {
+  if (!value) {
+    return "";
   }
-  return days;
+
+  const timePart = value.includes("T")
+    ? value.split("T")[1]
+    : value.split(" ")[1];
+
+  return timePart?.substring(0, 5) || "";
+};
+
+const formatMoney = (value: number) =>
+  new Intl.NumberFormat("vi-VN").format(value);
+
+const normalizeMovieId = (value: string | undefined) => String(value || "");
+
+const getAvailability = (seatMap: SeatMapResponse): SeatAvailability => {
+  const available = seatMap.availableSeats?.length ?? 0;
+  const locked = seatMap.lockedSeats?.length ?? 0;
+  const sold = seatMap.soldSeats?.length ?? 0;
+
+  return {
+    available,
+    locked,
+    sold,
+    total: available + locked + sold,
+  };
+};
+
+const mapMovieDetailToInfo = (
+  movieId: string,
+  movie?: MovieDetailResponse | null,
+  showtime?: ShowtimeResponse,
+): MovieInfo => ({
+  movieId,
+  title: movie?.title || showtime?.movieTitle || "Phim hệ thống",
+  durationMinutes: movie?.durationMinutes,
+  ageRating: movie?.ageRating || "P",
+  genre: movie?.genre || "Đang cập nhật",
+  posterUrl: movie?.posterUrl || FALLBACK_POSTER,
+});
+
+const groupShowtimesByCinema = (
+  showtimes: ShowtimeSlot[],
+  selectedDate: string,
+): CinemaGroup[] => {
+  const cinemaMap = new Map<string, CinemaGroup & { roomMap: Map<string, RoomGroup> }>();
+
+  showtimes
+    .filter((showtime) => getDateKey(showtime.startTime) === selectedDate)
+    .filter((showtime) => showtime.status?.toUpperCase() === "OPEN")
+    .forEach((showtime) => {
+      const cinemaId = showtime.cinemaId || "CINEMA_DEFAULT";
+      const roomId = showtime.roomId || showtime.roomName || "ROOM_DEFAULT";
+
+      if (!cinemaMap.has(cinemaId)) {
+        cinemaMap.set(cinemaId, {
+          cinemaId,
+          cinemaName: showtime.cinemaName || "G2Cinema",
+          city: "Thái Nguyên",
+          roomGroups: [],
+          roomMap: new Map<string, RoomGroup>(),
+        });
+      }
+
+      const cinema = cinemaMap.get(cinemaId);
+      if (!cinema) {
+        return;
+      }
+
+      if (!cinema.roomMap.has(roomId)) {
+        const roomGroup = {
+          roomId,
+          roomName: showtime.roomName || `Phòng ${roomId}`,
+          slots: [],
+        };
+        cinema.roomMap.set(roomId, roomGroup);
+        cinema.roomGroups.push(roomGroup);
+      }
+
+      cinema.roomMap.get(roomId)?.slots.push(showtime);
+    });
+
+  return Array.from(cinemaMap.values()).map((cinema) => ({
+    cinemaId: cinema.cinemaId,
+    cinemaName: cinema.cinemaName,
+    city: cinema.city,
+    roomGroups: cinema.roomGroups.map((room) => ({
+      ...room,
+      slots: [...room.slots].sort((left, right) =>
+        left.startTime.localeCompare(right.startTime),
+      ),
+    })),
+  }));
 };
 
 export default function MovieShowtimes() {
   const { movieId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [movieInfo, setMovieInfo] = useState<MovieInfo | null>(null);
+  const [showtimes, setShowtimes] = useState<ShowtimeSlot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const daysFilter = generateDaysFilter();
-
-  // Đọc ngày đang chọn từ thanh URL, nếu trống mặc định lấy ngày hôm nay (2026-06-05)
-  const currentSelectedDate =
-    searchParams.get("date") || daysFilter[0].dateValue;
-
-  // States quản lý dữ liệu đồng bộ từ Database
-  const [movieInfo, setMovieInfo] = useState<any>(null);
-  const [groupedCinemas, setGroupedCinemas] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  // =================================================================
-  // 🔄 GỌI API DATABASE: LOAD TOÀN BỘ SUẤT CHIẾU VÀ PHÂN NHÓM ĐỘNG
-  // =================================================================
   useEffect(() => {
-    const fetchAndGroupShowtimes = async () => {
-      try {
-        setLoading(true);
+    let isMounted = true;
 
-        // Gọi API lấy danh sách toàn bộ suất chiếu của Backend .NET
-        const res: any = await api.get("/api/showtimes");
-
-        if (res && res.success && res.data) {
-          const allShowtimes = res.data;
-
-          // 🌟 1. SỬA LỖI ÉP KIỂU: Chuyển st.movieId về chuỗi để so sánh chuẩn với movieId trên URL
-          const movieShowtimeSample = allShowtimes.find(
-            (st: any) =>
-              String(st.movieId || st.id || st.MovieId) === String(movieId),
-          );
-
-          if (movieShowtimeSample) {
-            setMovieInfo({
-              movieId: movieId,
-              // Map động linh hoạt theo tên trường của Backend (.NET hay trả về viết hoa hoặc Object lồng)
-              title:
-                movieShowtimeSample.movieTitle ||
-                movieShowtimeSample.movieName ||
-                movieShowtimeSample.title ||
-                "Phim Hệ Thống",
-              durationMinutes:
-                movieShowtimeSample.durationMinutes ||
-                movieShowtimeSample.duration ||
-                120,
-              ageRating: movieShowtimeSample.ageRating || "P",
-              genre: movieShowtimeSample.genre || "Hành động, Viễn tưởng",
-              posterUrl:
-                movieShowtimeSample.posterUrl ||
-                "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500",
-            });
-          } else {
-            // 🌟 2. CƠ CHẾ DỰ PHÒNG CHUYÊN NGHIỆP:
-            // Nếu phim chưa có lịch chiếu nào, gọi API lấy chi tiết phim của Nam để hiển thị giao diện trống lịch
-            try {
-              const movieDetailRes: any = await api.get(
-                `/api/movies/${movieId}`,
-              );
-              if (
-                movieDetailRes &&
-                movieDetailRes.success &&
-                movieDetailRes.data
-              ) {
-                const m = movieDetailRes.data;
-                setMovieInfo({
-                  movieId: m.movieId || m.id,
-                  title: m.title || m.movieName,
-                  durationMinutes: m.durationMinutes || m.duration,
-                  ageRating: m.ageRating,
-                  genre: m.genre,
-                  posterUrl: m.posterUrl,
-                });
-              } else {
-                setMovieInfo({ title: "Không tìm thấy thông tin phim này" });
-              }
-            } catch (movieErr) {
-              setMovieInfo({ title: "Lỗi kết nối API thông tin phim" });
-            }
-          }
-
-          // Bước 2: Lọc suất chiếu khớp đúng ngày người dùng đang chọn (Bổ sung ép kiểu String)
-          const filteredShowtimes = allShowtimes.filter((st: any) => {
-            const showtimeDate = st.startTime ? st.startTime.split("T")[0] : "";
-            return (
-              String(st.movieId || st.MovieId) === String(movieId) &&
-              showtimeDate === currentSelectedDate
-            );
-          });
-
-          // =================================================================
-          // 🔄 KHỐI GOM CỤM RẠP (Giữ nguyên logic bên dưới của bạn nhưng thêm ép kiểu)
-          // =================================================================
-          const cinemaMap: Record<string, any> = {};
-
-          filteredShowtimes.forEach((st: any) => {
-            const cId = st.cinemaId || "CIN_001";
-            const cName = st.cinemaName || "G2Cinema Thái Nguyên";
-            const cCity = st.city || "Thái Nguyên";
-            const rName =
-              st.roomName ||
-              (st.roomId === "RM01"
-                ? "Phòng 1 (IMAX)"
-                : `Phòng ${st.roomId || ""}`);
-
-            if (!cinemaMap[cId]) {
-              cinemaMap[cId] = {
-                cinemaId: cId,
-                cinemaName: cName,
-                city: cCity,
-                rooms: {},
-              };
-            }
-
-            if (!cinemaMap[cId].rooms[rName]) {
-              cinemaMap[cId].rooms[rName] = {
-                roomName: rName,
-                slots: [],
-              };
-            }
-
-            cinemaMap[cId].rooms[rName].slots.push({
-              showtimeId: st.showtimeId,
-              roomId: st.roomId,
-              startTime: st.startTime,
-              endTime: st.endTime,
-              basePrice: st.basePrice || 80000,
-              availableSeatCount: st.showtimeSeatCount ?? 120,
-            });
-          });
-
-          const finalCinemaList = Object.values(cinemaMap).map(
-            (cinema: any) => ({
-              cinemaId: cinema.cinemaId,
-              cinemaName: cinema.cinemaName,
-              city: cinema.city,
-              roomGroups: Object.values(cinema.rooms),
-            }),
-          );
-
-          setGroupedCinemas(finalCinemaList);
-        }
-      } catch (err) {
-        console.error("Lỗi tải thông tin lịch chiếu từ Database:", err);
-      } finally {
+    const fetchShowtimeData = async () => {
+      const currentMovieId = normalizeMovieId(movieId);
+      if (!currentMovieId) {
+        setErrorMessage("Không tìm thấy mã phim.");
         setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setErrorMessage("");
+
+      try {
+        const [movieResult, showtimeResult] = await Promise.allSettled([
+          api.get(`/api/movies/${currentMovieId}`) as Promise<unknown>,
+          api.get("/api/showtimes") as Promise<unknown>,
+        ]);
+
+        if (!isMounted) {
+          return;
+        }
+
+        const movieResponse =
+          movieResult.status === "fulfilled"
+            ? (movieResult.value as ApiResponse<MovieDetailResponse>)
+            : null;
+        const showtimeResponse =
+          showtimeResult.status === "fulfilled"
+            ? (showtimeResult.value as ApiResponse<ShowtimeResponse[]>)
+            : null;
+
+        if (!showtimeResponse?.success || !Array.isArray(showtimeResponse.data)) {
+          throw new Error(showtimeResponse?.message || "Không tải được lịch chiếu.");
+        }
+
+        const movieShowtimes = showtimeResponse.data.filter(
+          (showtime) => String(showtime.movieId) === currentMovieId,
+        );
+        const sampleShowtime = movieShowtimes[0];
+
+        setMovieInfo(
+          mapMovieDetailToInfo(
+            currentMovieId,
+            movieResponse?.success ? movieResponse.data : null,
+            sampleShowtime,
+          ),
+        );
+
+        const availabilityEntries = await Promise.all(
+          movieShowtimes.map(async (showtime) => {
+            try {
+              const response = (await api.get(
+                `/api/seats/showtimes/${showtime.showtimeId}/map`,
+              )) as unknown as ApiResponse<SeatMapResponse>;
+
+              return [
+                showtime.showtimeId,
+                response.success && response.data ? getAvailability(response.data) : null,
+              ] as const;
+            } catch (error) {
+              console.warn("Không tải được sơ đồ ghế cho suất chiếu", showtime.showtimeId, error);
+              return [showtime.showtimeId, null] as const;
+            }
+          }),
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        const availabilityMap = new Map(
+          availabilityEntries.filter(
+            (entry): entry is readonly [string, SeatAvailability] => entry[1] !== null,
+          ),
+        );
+
+        setShowtimes(
+          movieShowtimes.map((showtime) => ({
+            ...showtime,
+            seatAvailability: availabilityMap.get(showtime.showtimeId),
+          })),
+        );
+      } catch (error) {
+        console.error("Lỗi tải lịch chiếu:", error);
+        if (isMounted) {
+          setErrorMessage("Không tải được lịch chiếu từ hệ thống.");
+          setMovieInfo(null);
+          setShowtimes([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    if (movieId) {
-      fetchAndGroupShowtimes();
-    }
-  }, [movieId, currentSelectedDate]);
+    void fetchShowtimeData();
 
-  // Trích xuất lấy giờ HH:mm ngắn gọn từ chuỗi ISO 8601 múi giờ hệ thống
-  const formatISOToShortTime = (isoString: string) => {
-    if (!isoString || !isoString.includes("T")) return "";
-    const timePart = isoString.split("T")[1];
-    return timePart.substring(0, 5);
-  };
+    return () => {
+      isMounted = false;
+    };
+  }, [movieId]);
+
+  const daysFilter = useMemo(() => {
+    const dateValues = Array.from(
+      new Set(showtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean)),
+    ).sort();
+
+    return dateValues.map(buildDayTab);
+  }, [showtimes]);
+
+  const selectedDateFromUrl = searchParams.get("date") || "";
+  const currentSelectedDate = daysFilter.some(
+    (day) => day.dateValue === selectedDateFromUrl,
+  )
+    ? selectedDateFromUrl
+    : daysFilter[0]?.dateValue || "";
+
+  useEffect(() => {
+    if (!loading && currentSelectedDate && selectedDateFromUrl !== currentSelectedDate) {
+      setSearchParams({ date: currentSelectedDate }, { replace: true });
+    }
+  }, [currentSelectedDate, loading, selectedDateFromUrl, setSearchParams]);
+
+  const groupedCinemas = useMemo(
+    () => groupShowtimesByCinema(showtimes, currentSelectedDate),
+    [currentSelectedDate, showtimes],
+  );
 
   const handleDateChange = (dateValue: string) => {
     setSearchParams({ date: dateValue });
   };
 
-  const handleSelectShowtime = (showtimeId: string) => {
-    // Kích hoạt tuyến đường chuyển trang mượt mà sang trang ma trận lưới ghế thực tế
-    navigate(`/booking/seats/${showtimeId}`);
+  const handleSelectShowtime = (slot: ShowtimeSlot) => {
+    navigate(`/booking/seats/${slot.showtimeId}`, {
+      state: {
+        movie: movieInfo,
+        showtime: slot,
+      },
+    });
   };
 
   if (loading) {
     return (
-      <div className="bg-[#0A0A0C] min-h-screen text-white flex items-center justify-center font-bold">
-        <p className="animate-pulse text-sm text-blue-400 font-mono">
-          Đang truy vấn lịch chiếu thời gian thực từ Database...
+      <div className="flex min-h-screen items-center justify-center bg-[#0A0A0C] text-white">
+        <p className="animate-pulse text-sm font-bold text-blue-400">
+          Đang đồng bộ lịch chiếu từ hệ thống...
         </p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 bg-[#0A0A0C] min-h-screen text-white font-['Urbanist'] select-none">
-      <div className="max-w-5xl mx-auto">
-        {/* KHỐI THÔNG TIN PHIM CHUẨN ĐỒNG BỘ */}
-        {movieInfo && (
-          <div className="bg-[#111C44] border border-gray-800 rounded-3xl p-6 shadow-2xl flex gap-6 items-center mb-8">
-            <div className="w-24 h-36 bg-slate-900 rounded-xl overflow-hidden shrink-0 shadow-md">
+    <div className="min-h-screen bg-[#0A0A0C] p-6 text-white">
+      <div className="mx-auto max-w-5xl">
+        {movieInfo ? (
+          <div className="mb-8 flex items-center gap-6 rounded-3xl border border-gray-800 bg-[#111C44] p-6 shadow-2xl">
+            <div className="h-36 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-900 shadow-md">
               <img
-                src={movieInfo.posterUrl}
+                src={movieInfo.posterUrl || FALLBACK_POSTER}
                 alt={movieInfo.title}
-                className="w-full h-full object-cover"
+                className="h-full w-full object-cover"
+                onError={(event) => {
+                  if (event.currentTarget.src !== FALLBACK_POSTER) {
+                    event.currentTarget.src = FALLBACK_POSTER;
+                  }
+                }}
               />
             </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <span className="px-2.5 py-0.5 text-[10px] font-black rounded bg-amber-500 text-black uppercase">
-                  {movieInfo.ageRating}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase text-black">
+                  {movieInfo.ageRating || "P"}
                 </span>
                 <h1 className="text-2xl font-black tracking-wide">
                   {movieInfo.title}
                 </h1>
               </div>
-              <p className="text-xs text-gray-400 mt-1.5">
-                🎬 Thể loại: {movieInfo.genre} | ⏱️ Thời lượng:{" "}
-                {movieInfo.durationMinutes} phút
+              <p className="mt-2 text-xs text-gray-300">
+                Thể loại: {movieInfo.genre || "Đang cập nhật"}
+                {movieInfo.durationMinutes ? (
+                  <> | Thời lượng: {movieInfo.durationMinutes} phút</>
+                ) : null}
               </p>
-              <p className="text-xs text-gray-500 mt-4 italic">
-                * Lưu ý: Vui lòng mua vé đúng độ tuổi quy định của bộ phim.
+              <p className="mt-4 text-xs italic text-gray-500">
+                Lưu ý: Vui lòng mua vé đúng độ tuổi quy định của bộ phim.
               </p>
             </div>
           </div>
-        )}
+        ) : null}
 
-        {/* BỘ LỌC CHỌN NGÀY XEM CHIẾU PHIM ĐỘNG (5 NGÀY THỰC TẾ) */}
+        {errorMessage ? (
+          <div className="mb-8 rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-center text-sm font-semibold text-red-100">
+            {errorMessage}
+          </div>
+        ) : null}
+
         <div className="mb-8">
-          <h3 className="text-xs font-bold uppercase text-gray-400 tracking-wider mb-3">
+          <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-400">
             Chọn ngày xem
           </h3>
-          <div className="flex gap-3 overflow-x-auto pb-1 class-scroll-custom">
-            {daysFilter.map((day) => {
-              const isSelected = day.dateValue === currentSelectedDate;
-              return (
-                <button
-                  key={day.dateValue}
-                  onClick={() => handleDateChange(day.dateValue)}
-                  className={`flex flex-col items-center p-3 rounded-xl border min-w-[90px] transition-all cursor-pointer ${
-                    isSelected
-                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 border-indigo-500 text-white shadow-lg"
-                      : "bg-[#111C44] border-gray-800 text-gray-400 hover:text-white hover:border-gray-700"
-                  }`}
-                >
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
-                    {day.label}
-                  </span>
-                  <span className="text-lg font-black mt-0.5">
-                    {day.dateDisplay}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {daysFilter.length === 0 ? (
+            <div className="rounded-2xl border border-gray-800 bg-[#111C44] p-5 text-sm text-gray-400">
+              Hiện phim này chưa có ngày chiếu khả dụng.
+            </div>
+          ) : (
+            <div className="flex gap-3 overflow-x-auto pb-1">
+              {daysFilter.map((day) => {
+                const isSelected = day.dateValue === currentSelectedDate;
+                return (
+                  <button
+                    type="button"
+                    key={day.dateValue}
+                    onClick={() => handleDateChange(day.dateValue)}
+                    className={`flex min-w-[90px] flex-col items-center rounded-xl border p-3 transition ${
+                      isSelected
+                        ? "border-indigo-500 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg"
+                        : "border-gray-800 bg-[#111C44] text-gray-400 hover:border-gray-700 hover:text-white"
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+                      {day.label}
+                    </span>
+                    <span className="mt-0.5 text-lg font-black">
+                      {day.dateDisplay}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* DANH SÁCH CỤM RẠP VÀ SUẤT CHIẾU SAU KHI PHÂN NHÓM */}
         <div className="space-y-6">
-          <h3 className="text-xs font-bold uppercase text-gray-400 tracking-wider">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
             Danh sách suất chiếu tại rạp
           </h3>
 
           {groupedCinemas.length === 0 ? (
-            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-10 text-center text-gray-500 text-sm italic">
-              🍿 Hiện tại không tìm thấy suất chiếu nào khả dụng cho phim trong
-              ngày hôm nay. Vui lòng chọn ngày tiếp theo!
+            <div className="rounded-2xl border border-gray-800 bg-[#111C44] p-10 text-center text-sm italic text-gray-500">
+              Hiện tại không tìm thấy suất chiếu khả dụng cho phim trong ngày đã chọn.
             </div>
           ) : (
             groupedCinemas.map((cinema) => (
               <div
                 key={cinema.cinemaId}
-                className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4"
+                className="flex flex-col gap-4 rounded-2xl border border-gray-800 bg-[#111C44] p-5 shadow-xl"
               >
-                {/* Tên cụm rạp */}
-                <div className="border-b border-gray-800/80 pb-3 flex justify-between items-center">
-                  <h4 className="text-base font-extrabold text-blue-400 tracking-wide">
-                    📍 {cinema.cinemaName}
+                <div className="flex items-center justify-between border-b border-gray-800/80 pb-3">
+                  <h4 className="text-base font-extrabold tracking-wide text-blue-400">
+                    {cinema.cinemaName}
                   </h4>
-                  <span className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
                     {cinema.city}
                   </span>
                 </div>
 
-                {/* Danh sách phòng đã gom cụm */}
                 <div className="space-y-4">
-                  {cinema.roomGroups.map((group: any) => (
+                  {cinema.roomGroups.map((group) => (
                     <div
-                      key={group.roomName}
-                      className="flex flex-col sm:flex-row gap-2 sm:gap-6 items-start bg-[#0D1637]/40 p-4 rounded-xl border border-gray-800/40"
+                      key={group.roomId}
+                      className="flex flex-col items-start gap-3 rounded-xl border border-gray-800/40 bg-[#0D1637]/40 p-4 sm:flex-row sm:gap-6"
                     >
-                      {/* Tên phòng chiếu gốc từ DB */}
-                      <div className="text-xs font-black text-gray-400 uppercase tracking-wider w-32 pt-2 shrink-0">
-                        🖥️ {group.roomName}
+                      <div className="w-36 shrink-0 pt-2 text-xs font-black uppercase tracking-wider text-gray-400">
+                        {group.roomName}
                       </div>
 
-                      {/* Các nút khung giờ suất chiếu */}
                       <div className="flex flex-wrap gap-3">
-                        {group.slots
-                          .sort((a: any, b: any) =>
-                            a.startTime.localeCompare(b.startTime),
-                          )
-                          .map((slot: any) => {
-                            const shortTime = formatISOToShortTime(
-                              slot.startTime,
-                            );
-                            return (
-                              <button
-                                key={slot.showtimeId}
-                                onClick={() =>
-                                  handleSelectShowtime(slot.showtimeId)
-                                }
-                                className="group px-4 py-2.5 bg-[#0F172A] border border-gray-800 hover:border-blue-500 rounded-xl text-center transition-all hover:scale-[1.03] cursor-pointer"
-                                title={`Giá vé cơ bản: ${slot.basePrice.toLocaleString()}đ`}
-                              >
-                                <div className="text-sm font-black text-white group-hover:text-blue-400 transition-colors">
-                                  {shortTime}
-                                </div>
-                                <div className="text-[9px] text-gray-500 mt-0.5 font-medium">
-                                  {slot.availableSeatCount} ghế trống
-                                </div>
-                              </button>
-                            );
-                          })}
+                        {group.slots.map((slot) => {
+                          const shortTime = formatISOToShortTime(slot.startTime);
+                          const availableSeats =
+                            slot.seatAvailability?.available ?? slot.showtimeSeatCount;
+                          const isSoldOut = availableSeats <= 0;
+
+                          return (
+                            <button
+                              type="button"
+                              key={slot.showtimeId}
+                              onClick={() => handleSelectShowtime(slot)}
+                              disabled={isSoldOut}
+                              className="group rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-center transition hover:scale-[1.03] hover:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+                              title={`Giá vé cơ bản: ${formatMoney(slot.basePrice)}đ`}
+                            >
+                              <div className="text-sm font-black text-white transition-colors group-hover:text-blue-400">
+                                {shortTime}
+                              </div>
+                              <div className="mt-0.5 text-[9px] font-medium text-gray-500">
+                                {availableSeats} ghế trống
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

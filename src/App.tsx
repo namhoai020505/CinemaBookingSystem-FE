@@ -39,6 +39,7 @@ function App() {
           <Route path="/booking/seats/:showtimeId" element={<SeatSelection />} />
           <Route path="/booking/checkout/:showtimeId" element={<Checkout />} />
           <Route path="/booking/success/:bookingId" element={<BookingSuccess />} />
+          <Route path="/my-bookings" element={<MyBookings />} />
           <Route path="profile" element={<Profile />} />
         </Route>
 
