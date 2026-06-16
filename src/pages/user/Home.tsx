@@ -49,7 +49,7 @@ const getRealSlideIndex = (index: number) =>
     LAST_REAL_SLIDE_INDEX) +
   FIRST_REAL_SLIDE_INDEX;
 
-const API_ORIGIN = "http://localhost:5070";
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || "http://localhost:5070";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
