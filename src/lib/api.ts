@@ -1,8 +1,27 @@
-import axios from 'axios';
-import { clearAuthSession, getAccessToken } from './auth';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
+import { getAccessToken, getRefreshToken } from './auth';
+
+type RefreshTokenResponse = {
+  success?: boolean;
+  data?: {
+    accessToken?: string;
+    token?: string;
+    refreshToken?: string;
+    fullName?: string;
+  } | null;
+};
+
+type RetryableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5070',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://localhost:7122',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+const refreshClient = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://localhost:7122',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -25,14 +44,49 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response.data,
-  (error) => {
-    const originalRequestUrl = error.config?.url as string | undefined;
+  async (error) => {
+    const originalRequest = error.config as RetryableRequestConfig | undefined;
+    const originalRequestUrl = originalRequest?.url as string | undefined;
     const errorStatus = error.response?.status;
     const isLoginRequest = originalRequestUrl?.includes('/api/auth/login');
+    const isRefreshRequest = originalRequestUrl?.includes('/api/auth/refresh-token');
 
-    if (errorStatus === 401 && !isLoginRequest) {
-      clearAuthSession();
-      window.location.href = '/login';
+    if (errorStatus === 401 && originalRequest && !originalRequest._retry && !isLoginRequest && !isRefreshRequest) {
+      const refreshToken = getRefreshToken();
+
+      if (refreshToken) {
+        try {
+          originalRequest._retry = true;
+
+          const refreshResponse = await refreshClient.post<RefreshTokenResponse>(
+            '/api/auth/refresh-token',
+            { refreshToken },
+          );
+          const authData = refreshResponse.data.data;
+          const nextAccessToken = authData?.accessToken || authData?.token;
+
+          if (nextAccessToken) {
+            localStorage.setItem('accessToken', nextAccessToken);
+
+            if (authData?.refreshToken) {
+              localStorage.setItem('refreshToken', authData.refreshToken);
+            }
+
+            if (authData?.fullName) {
+              localStorage.setItem('fullName', authData.fullName);
+            }
+
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`;
+
+            return api(originalRequest);
+          }
+        } catch {
+          // Fall through to clear the session below.
+        }
+      }
+
+      return Promise.reject(error);
     }
 
     return Promise.reject(error);

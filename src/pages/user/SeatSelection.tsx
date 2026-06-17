@@ -4,7 +4,6 @@ import { FiCalendar, FiClock, FiFilm, FiMapPin, FiTag } from "react-icons/fi";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../../lib/api";
 import {
-  clearAuthSession,
   getAccessToken,
   getCurrentUserProfile,
 } from "../../lib/auth";
@@ -446,6 +445,7 @@ export default function SeatSelection() {
   const [selectedSeats, setSelectedSeats] = useState<SeatItem[]>([]);
   const [timeLeft, setTimeLeft] = useState(DEFAULT_LOCK_SECONDS);
   const [loading, setLoading] = useState(true);
+  const [seatMapError, setSeatMapError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [unlockingSeatId, setUnlockingSeatId] = useState<string | null>(null);
   const [displayDetails, setDisplayDetails] =
@@ -549,13 +549,15 @@ export default function SeatSelection() {
 
     const token = getAccessToken();
     if (!token) {
-      clearAuthSession();
-      navigate("/login", { replace: true, state: { from: location.pathname } });
+      setSeatMapError("Vui long dang nhap lai de tai so do ghe.");
+      setSeatMap(null);
+      setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
+      setSeatMapError("");
       const lockSession = readLockSession(showtimeId, userKey);
       const ownedLocks = lockSession?.lockedSeats || {};
       const response = (await api.get(
@@ -637,8 +639,8 @@ export default function SeatSelection() {
       });
     } catch (error) {
       if (getHttpStatus(error) === 401) {
-        clearAuthSession();
-        navigate("/login", { replace: true, state: { from: location.pathname } });
+        setSeatMapError("Phien dang nhap khong con hop le. Vui long dang nhap lai roi thu lai.");
+        setSeatMap(null);
         return;
       }
 
@@ -1033,6 +1035,7 @@ export default function SeatSelection() {
   if (!seatMap) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#182437] font-bold text-white">
+        {seatMapError && <p className="text-sm text-rose-300">{seatMapError}</p>}
         <p className="text-sm text-rose-400">
           Không thể khởi tạo sơ đồ phòng chiếu từ hệ thống.
         </p>
