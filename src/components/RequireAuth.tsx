@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { clearAuthSession, getAccessToken, isAccessTokenExpired } from '../lib/auth';
+import {
+  clearAuthSession,
+  getAccessToken,
+  getRoleFromAccessToken,
+  normalizeRole,
+} from '../lib/auth';
 import { verifyAdminSession } from '../services/authService';
 
 type AuthCheckState = 'checking' | 'allowed' | 'login' | 'forbidden';
 
-const RequireAuth = () => {
+type RequireAuthProps = {
+  allowedRoles?: string[];
+  verifyAdmin?: boolean;
+};
+
+const RequireAuth = ({ allowedRoles = [], verifyAdmin = false }: RequireAuthProps) => {
   const [authState, setAuthState] = useState<AuthCheckState>('checking');
 
   useEffect(() => {
@@ -18,9 +28,31 @@ const RequireAuth = () => {
       }
     };
 
-    if (!token || isAccessTokenExpired(token)) {
+    if (!token) {
       clearAuthSession();
       setSafeAuthState('login');
+
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const normalizedRole = normalizeRole(getRoleFromAccessToken(token));
+    const normalizedAllowedRoles = allowedRoles.map((role) => normalizeRole(role));
+    const hasAllowedRole =
+      normalizedAllowedRoles.length === 0 ||
+      normalizedAllowedRoles.includes(normalizedRole);
+
+    if (!hasAllowedRole) {
+      setSafeAuthState('forbidden');
+
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    if (!verifyAdmin) {
+      setSafeAuthState('allowed');
 
       return () => {
         isMounted = false;
@@ -53,12 +85,12 @@ const RequireAuth = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [allowedRoles, verifyAdmin]);
 
   if (authState === 'checking') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0F172A] text-sm font-semibold text-white">
-        Đang kiểm tra quyền truy cập...
+        Dang kiem tra quyen truy cap...
       </div>
     );
   }

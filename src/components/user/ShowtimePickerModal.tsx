@@ -33,21 +33,7 @@ type ShowtimeResponse = {
   showtimeSeatCount: number;
 };
 
-type SeatMapResponse = {
-  showtimeId: string;
-  availableSeats?: unknown[];
-  lockedSeats?: unknown[];
-  soldSeats?: unknown[];
-};
-
-type SeatAvailability = {
-  available: number;
-  total: number;
-};
-
-type ShowtimeSlot = ShowtimeResponse & {
-  seatAvailability?: SeatAvailability;
-};
+type ShowtimeSlot = ShowtimeResponse;
 
 type RoomGroup = {
   roomId: string;
@@ -131,17 +117,6 @@ const formatISOToShortTime = (value: string) => {
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("vi-VN").format(value);
-
-const getAvailability = (seatMap: SeatMapResponse): SeatAvailability => {
-  const available = seatMap.availableSeats?.length ?? 0;
-  const locked = seatMap.lockedSeats?.length ?? 0;
-  const sold = seatMap.soldSeats?.length ?? 0;
-
-  return {
-    available,
-    total: available + locked + sold,
-  };
-};
 
 const groupShowtimesByCinema = (
   showtimes: ShowtimeSlot[],
@@ -254,6 +229,8 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
           (showtime) => String(showtime.movieId) === String(movie.movieId),
         );
 
+        const nextShowtimes = movieShowtimes;
+        /*
         const availabilityEntries = await Promise.all(
           movieShowtimes.map(async (showtime) => {
             try {
@@ -272,10 +249,12 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
           }),
         );
 
+        */
         if (!isMounted) {
           return;
         }
 
+        /*
         const availabilityMap = new Map(
           availabilityEntries.filter(
             (entry): entry is readonly [string, SeatAvailability] => entry[1] !== null,
@@ -285,6 +264,7 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
           ...showtime,
           seatAvailability: availabilityMap.get(showtime.showtimeId),
         }));
+        */
 
         setShowtimes(nextShowtimes);
         setSelectedDate(
@@ -433,8 +413,7 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
 
                         <div className="flex flex-wrap gap-5">
                           {room.slots.map((slot) => {
-                            const availableSeats =
-                              slot.seatAvailability?.available ?? slot.showtimeSeatCount;
+                            const availableSeats = slot.showtimeSeatCount;
                             const isSoldOut = availableSeats <= 0;
 
                             return (

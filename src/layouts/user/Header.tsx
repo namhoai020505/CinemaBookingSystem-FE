@@ -7,6 +7,7 @@ import { logout } from '../../services/authService';
 export default function Header() {
   const navigate = useNavigate();
   const token = getAccessToken();
+  const hasValidToken = Boolean(token);
   const fullName = localStorage.getItem('fullName');
 
   const handleLogout = async () => {
@@ -20,7 +21,7 @@ export default function Header() {
       {/* TẦNG 1: TOPBAR (Màu nền #0F172A) */}
       <div className="bg-[#0F172A] text-gray-300 py-1.5">
         <div className="container mx-auto px-4 flex justify-end text-[13px]">
-          {token ? (
+          {hasValidToken ? (
             <div className="flex items-center gap-3">
               <Link to="/profile" className="transition hover:text-white">
                 Chào, {fullName || 'Thành viên'}

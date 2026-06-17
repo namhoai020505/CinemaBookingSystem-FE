@@ -73,7 +73,7 @@ export const normalizeRole = (role: string | null | undefined) =>
 export const getRoleFromAccessToken = (token: string | null = getAccessToken()) => {
   const payload = getJwtPayload(token);
 
-  if (!payload || isAccessTokenExpired(token)) {
+  if (!payload) {
     return null;
   }
 
@@ -116,7 +116,7 @@ const getStringClaim = (payload: JwtPayload | null, keys: string[]) => {
 export const getCurrentUserProfile = (token: string | null = getAccessToken()) => {
   const payload = getJwtPayload(token);
 
-  if (!token || !payload || isAccessTokenExpired(token)) {
+  if (!token || !payload) {
     return null;
   }
 

@@ -8,43 +8,35 @@ const api = axios.create({
   },
 });
 
-// 1. Interceptor REQUEST: Gắn Token tự động vào mỗi API gửi đi
 api.interceptors.request.use(
   (config) => {
     const token = getAccessToken();
-    if (token && config.headers) {
+    const requestUrl = config.url || '';
+    const isAuthEndpoint = requestUrl.includes('/api/auth/');
+
+    if (token && !isAuthEndpoint && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
-// 2. Interceptor RESPONSE: Tinh chỉnh bẫy lỗi 403/401 linh hoạt
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    const originalRequestUrl = error.config?.url;
+    const originalRequestUrl = error.config?.url as string | undefined;
     const errorStatus = error.response?.status;
+    const isLoginRequest = originalRequestUrl?.includes('/api/auth/login');
 
-    // 💡 BẪY ĐIỀU KIỆN: Nếu dính 403 hoặc 401
-    if (errorStatus === 401 || errorStatus === 403) {
-      
-      // Nếu là API sơ đồ ghế hoặc API login thì CHẶN KHÔNG CHO ĐÁ VỀ LOGIN
-      if (
-        (originalRequestUrl && originalRequestUrl.includes('/api/seats/showtimes')) ||
-        (originalRequestUrl && originalRequestUrl.includes('/api/auth/login'))
-      ) {
-        return Promise.reject(error); // Trả lỗi về cho Component tự xử lý UI, không logout
-      }
-
-      // Các API khác bị 401 (thực sự hết hạn token) thì mới đá về login
-      console.error('Token hết hạn hoặc không hợp lệ. Về trang Login...');
+    if (errorStatus === 401 && !isLoginRequest) {
       clearAuthSession();
-      window.location.href = '/login'; 
+      window.location.href = '/login';
     }
+
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

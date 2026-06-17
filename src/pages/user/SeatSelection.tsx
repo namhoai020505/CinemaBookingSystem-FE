@@ -3,7 +3,11 @@ import { FaChair, FaCouch } from "react-icons/fa";
 import { FiCalendar, FiClock, FiFilm, FiMapPin, FiTag } from "react-icons/fi";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../../lib/api";
-import { getCurrentUserProfile } from "../../lib/auth";
+import {
+  clearAuthSession,
+  getAccessToken,
+  getCurrentUserProfile,
+} from "../../lib/auth";
 
 const MAX_SEATS_ALLOWED = 6;
 const DEFAULT_LOCK_SECONDS = 600;
@@ -16,6 +20,17 @@ type ApiResponse<T> = {
   message?: string;
   data?: T | null;
 };
+
+const getHttpStatus = (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  "response" in error &&
+  typeof error.response === "object" &&
+  error.response !== null &&
+  "status" in error.response &&
+  typeof error.response.status === "number"
+    ? error.response.status
+    : undefined;
 
 type RouteState = {
   movie?: {
@@ -532,6 +547,13 @@ export default function SeatSelection() {
       return;
     }
 
+    const token = getAccessToken();
+    if (!token) {
+      clearAuthSession();
+      navigate("/login", { replace: true, state: { from: location.pathname } });
+      return;
+    }
+
     try {
       setLoading(true);
       const lockSession = readLockSession(showtimeId, userKey);
@@ -614,6 +636,12 @@ export default function SeatSelection() {
         seats: mappedSeats,
       });
     } catch (error) {
+      if (getHttpStatus(error) === 401) {
+        clearAuthSession();
+        navigate("/login", { replace: true, state: { from: location.pathname } });
+        return;
+      }
+
       console.error("Lỗi kết nối API sơ đồ ghế:", error);
       setSeatMap(null);
     } finally {
@@ -626,6 +654,8 @@ export default function SeatSelection() {
     routeStartTime,
     showtimeId,
     userKey,
+    navigate,
+    location.pathname,
   ]);
 
   useEffect(() => {
