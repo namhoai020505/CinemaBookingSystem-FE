@@ -1044,7 +1044,7 @@ export default function SeatSelection() {
   }
 
   return (
-    <div className="-m-4 min-h-screen bg-[#182437] px-4 py-6 text-white sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#182437] px-4 py-6 text-white sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-[1660px]">
         <div className="mb-6 flex flex-col gap-3 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>

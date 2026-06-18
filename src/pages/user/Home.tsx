@@ -308,7 +308,7 @@ export default function Home() {
   };
 
   return (
-    <div className="-m-4 bg-[#182437]">
+    <div className="bg-[#182437]">
       <section
         className="relative overflow-hidden bg-black"
         aria-label="Movie banners"
