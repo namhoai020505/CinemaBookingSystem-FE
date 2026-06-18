@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FaCheck,
   FaClock,
@@ -20,6 +20,7 @@ import api from "../../lib/api";
 import { getCurrentUserProfile } from "../../lib/auth";
 import {
   bookingService,
+  hideExpiredBookingFromHistory,
   type BookingSummary,
 } from "../../services/bookingService";
 import {
@@ -433,6 +434,8 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [paymentConfigRefreshTried, setPaymentConfigRefreshTried] = useState(false);
+  const [paymentExpiredDialogOpen, setPaymentExpiredDialogOpen] =
+    useState(false);
   const [copiedField, setCopiedField] = useState("");
   const [fnbCart, setFnbCart] = useState<Record<string, number>>({});
   const [errorMessage, setErrorMessage] = useState("");
@@ -489,6 +492,15 @@ export default function Checkout() {
   const selectedSeatLabels = selectedSeats.map(
     (seat) => seat.seatCode || `${seat.row}${seat.column}`,
   );
+  const redirectHomeAfterPaymentExpired = useCallback(() => {
+    hideExpiredBookingFromHistory(booking?.bookingId);
+
+    if (showtimeId) {
+      removePaymentSession(showtimeId, userKey);
+    }
+
+    navigate("/", { replace: true });
+  }, [booking?.bookingId, navigate, showtimeId, userKey]);
 
   useEffect(() => {
     let isMounted = true;
@@ -602,6 +614,36 @@ export default function Checkout() {
     const timer = window.setInterval(syncPaymentTimer, 1000);
     return () => window.clearInterval(timer);
   }, [paymentExpiresAt, step]);
+
+  useEffect(() => {
+    if (
+      step !== "payment" ||
+      !booking?.bookingId ||
+      booking.status?.toUpperCase() === "PAID" ||
+      paymentSeconds > 0
+    ) {
+      return undefined;
+    }
+
+    const openDialogTimer = window.setTimeout(() => {
+      setPaymentExpiredDialogOpen(true);
+    }, 0);
+
+    const redirectTimer = window.setTimeout(() => {
+      redirectHomeAfterPaymentExpired();
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(openDialogTimer);
+      window.clearTimeout(redirectTimer);
+    };
+  }, [
+    booking?.bookingId,
+    booking?.status,
+    paymentSeconds,
+    redirectHomeAfterPaymentExpired,
+    step,
+  ]);
 
   useEffect(() => {
     if (
@@ -1138,6 +1180,33 @@ export default function Checkout() {
             </aside>
           </div>
         </div>
+
+        {paymentExpiredDialogOpen && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-lg border border-rose-400/30 bg-[#111C44] p-6 text-center text-white shadow-2xl">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-rose-500/15 text-2xl text-rose-200">
+                <FaClock />
+              </div>
+              <p className="mt-5 text-xs font-black uppercase tracking-[0.2em] text-rose-200">
+                Hết thời gian đặt vé
+              </p>
+              <h2 className="mt-2 text-2xl font-black">
+                Đơn đặt vé đã quá 10 phút
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                Thời gian thanh toán đã kết thúc. Hệ thống sẽ tự chuyển bạn về
+                trang chủ để chọn lại suất chiếu và ghế mới.
+              </p>
+              <button
+                type="button"
+                onClick={redirectHomeAfterPaymentExpired}
+                className="mt-6 w-full rounded-md bg-[#FFD166] px-5 py-3 text-xs font-black uppercase tracking-wider text-black transition hover:bg-[#FFE7A3]"
+              >
+                Về trang chủ ngay
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

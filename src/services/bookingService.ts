@@ -102,6 +102,68 @@ export type CheckoutResponse = {
   expiredAt: string;
 };
 
+const HIDDEN_EXPIRED_BOOKINGS_KEY = 'g2c-hidden-expired-bookings';
+
+const normalizeBackendDate = (value?: string | null) => {
+  if (!value) {
+    return '';
+  }
+
+  return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+};
+
+const parseBackendTime = (value?: string | null) => {
+  const timestamp = Date.parse(normalizeBackendDate(value));
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
+const canUseLocalStorage = () =>
+  typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+
+export const getHiddenExpiredBookingIds = () => {
+  if (!canUseLocalStorage()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(HIDDEN_EXPIRED_BOOKINGS_KEY) || '[]',
+    );
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === 'string')
+      : [];
+  } catch {
+    localStorage.removeItem(HIDDEN_EXPIRED_BOOKINGS_KEY);
+    return [];
+  }
+};
+
+export const hideExpiredBookingFromHistory = (bookingId?: string | null) => {
+  if (!bookingId || !canUseLocalStorage()) {
+    return;
+  }
+
+  const bookingIds = new Set(getHiddenExpiredBookingIds());
+  bookingIds.add(bookingId);
+  localStorage.setItem(
+    HIDDEN_EXPIRED_BOOKINGS_KEY,
+    JSON.stringify(Array.from(bookingIds)),
+  );
+};
+
+export const isExpiredPendingBooking = (booking: BookingSummary) => {
+  if (booking.status.toUpperCase() !== 'PENDING_PAYMENT') {
+    return false;
+  }
+
+  const expiredAt = parseBackendTime(booking.expiredAt);
+  return expiredAt > 0 && expiredAt <= Date.now();
+};
+
+export const shouldHideBookingFromHistory = (booking: BookingSummary) =>
+  isExpiredPendingBooking(booking) ||
+  getHiddenExpiredBookingIds().includes(booking.bookingId);
+
 export const bookingService = {
   createBooking: async (payload: BookingPayload) => {
     const response = await axiosInstance.post('/api/bookings', payload) as unknown as ApiResponse<BookingSummary>;

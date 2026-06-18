@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { useLocation, useNavigate } from "react-router-dom";
 import slide1 from "../../assets/slide1.png";
 import slide2 from "../../assets/slide2.png";
 import slide3 from "../../assets/slide3.png";
@@ -7,6 +8,11 @@ import slide4 from "../../assets/slide4.png";
 import slide5 from "../../assets/slide5.png";
 import slide6 from "../../assets/slide6.png";
 import ShowtimePickerModal from "../../components/user/ShowtimePickerModal";
+import {
+  clearAuthSession,
+  getAccessToken,
+  isAccessTokenExpired,
+} from "../../lib/auth";
 import { movieService } from "../../services/movieService";
 
 type HeroSlide = {
@@ -167,6 +173,8 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
 };
 
 export default function Home() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [slideIndex, setSlideIndex] = useState(1);
   const [withTransition, setWithTransition] = useState(true);
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -266,6 +274,24 @@ export default function Home() {
 
   const goToSlide = (nextSlideIndex: number) => {
     setSlideIndex(nextSlideIndex + 1);
+  };
+
+  const handleBuyTicket = (movie: Movie) => {
+    const accessToken = getAccessToken();
+
+    if (!accessToken || isAccessTokenExpired(accessToken)) {
+      clearAuthSession();
+      navigate("/login", {
+        state: {
+          from: location.pathname,
+          intent: "buy-ticket",
+          movieId: movie.movieId,
+        },
+      });
+      return;
+    }
+
+    setSelectedShowtimeMovie(movie);
   };
 
   const handleSlideTransitionEnd = () => {
@@ -434,7 +460,7 @@ export default function Home() {
                   <button
                     type="button"
                     disabled={!movie.movieId}
-                    onClick={() => setSelectedShowtimeMovie(movie)}
+                    onClick={() => handleBuyTicket(movie)}
                     className="mt-5 h-10 w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] text-xs font-extrabold uppercase text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Mua vé

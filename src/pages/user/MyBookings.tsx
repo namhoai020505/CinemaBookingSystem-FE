@@ -14,6 +14,7 @@ import {
 import { Link } from "react-router-dom";
 import {
   bookingService,
+  shouldHideBookingFromHistory,
   type BookingSummary,
 } from "../../services/bookingService";
 
@@ -217,22 +218,30 @@ export default function MyBookings() {
     [bookings],
   );
 
+  const visibleBookings = useMemo(
+    () =>
+      sortedBookings.filter(
+        (booking) => !shouldHideBookingFromHistory(booking),
+      ),
+    [sortedBookings],
+  );
+
   const filteredBookings = useMemo(() => {
     if (activeFilter === "ALL") {
-      return sortedBookings;
+      return visibleBookings;
     }
 
-    return sortedBookings.filter(
+    return visibleBookings.filter(
       (booking) => booking.status.toUpperCase() === activeFilter,
     );
-  }, [activeFilter, sortedBookings]);
+  }, [activeFilter, visibleBookings]);
 
   const stats = useMemo(() => {
-    const paidBookings = bookings.filter(isPaid);
-    const pendingBookings = bookings.filter(isPendingPayment);
+    const paidBookings = visibleBookings.filter(isPaid);
+    const pendingBookings = visibleBookings.filter(isPendingPayment);
 
     return {
-      total: bookings.length,
+      total: visibleBookings.length,
       paid: paidBookings.length,
       pending: pendingBookings.length,
       totalSpent: paidBookings.reduce(
@@ -240,10 +249,10 @@ export default function MyBookings() {
         0,
       ),
     };
-  }, [bookings]);
+  }, [visibleBookings]);
 
   const filterCounts: Record<BookingFilter, number> = {
-    ALL: bookings.length,
+    ALL: visibleBookings.length,
     PENDING_PAYMENT: stats.pending,
     PAID: stats.paid,
   };
@@ -358,7 +367,7 @@ export default function MyBookings() {
             <div>
               <h2 className="text-lg font-black">Danh sách vé</h2>
               <p className="mt-1 text-sm text-slate-400">
-                {bookings.length > 0
+                {visibleBookings.length > 0
                   ? `${filteredBookings.length} vé đang hiển thị`
                   : "Bạn chưa có giao dịch đặt vé nào."}
               </p>
