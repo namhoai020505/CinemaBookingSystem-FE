@@ -7,7 +7,7 @@ export default function UserLayout() {
     <div className="min-h-screen flex flex-col bg-[#182437]">
       <Header />
       
-      <main className="flex-1 bg-[#182437]">
+      <main className="flex-1 bg-[#182437] pt-[94px]">
         <Outlet />
       </main>
 

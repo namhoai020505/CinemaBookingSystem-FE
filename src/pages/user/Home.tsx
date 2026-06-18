@@ -418,7 +418,7 @@ export default function Home() {
               movies.map((movie, index) => (
                 <article
                   key={movie.movieId || `${movie.title}-${index}`}
-                  className="flex min-w-0 flex-col"
+                  className="movie-card flex min-w-0 flex-col rounded-lg border border-transparent p-3 transition-colors"
                 >
                   <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-[#0F172A] shadow-lg shadow-black/20">
                     {movie.posterUrl ? (
