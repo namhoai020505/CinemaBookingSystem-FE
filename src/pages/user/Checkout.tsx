@@ -1112,7 +1112,7 @@ export default function Checkout() {
                   type="button"
                   onClick={() => void handleCheckPaymentStatus()}
                   disabled={checkingPayment}
-                  className="flex items-center justify-center gap-2 rounded-md bg-[#FFD166] px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-black transition hover:bg-[#FFE7A3] disabled:cursor-not-allowed disabled:opacity-70"
+                  className="flex items-center justify-center gap-2 rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <FaSyncAlt className={checkingPayment ? "animate-spin" : ""} />
                   {checkingPayment ? "Đang kiểm tra..." : "Tôi đã thanh toán"}

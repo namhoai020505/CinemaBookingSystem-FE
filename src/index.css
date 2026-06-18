@@ -4,3 +4,194 @@ html, body {
   max-width: 100%;
   overflow-x: hidden;
 }
+
+:root {
+  --g2c-light-bg: #F8FAFC;
+  --g2c-light-navbar: #E2E8F0;
+  --g2c-light-card: #FFFFFF;
+  --g2c-light-border: #CBD5E1;
+  --g2c-light-text: #1E293B;
+  --g2c-light-muted: #475569;
+  --g2c-light-accent: #FFD166;
+  --g2c-light-accent-bright: #FFE7A3;
+}
+
+html.light,
+body.g2c-light-mode {
+  color-scheme: light;
+}
+
+body.g2c-light-mode,
+body.g2c-light-mode #root {
+  background: var(--g2c-light-bg);
+  color: var(--g2c-light-text);
+}
+
+body.g2c-light-mode .bg-\[\#182437\],
+body.g2c-light-mode .bg-\[\#162338\],
+body.g2c-light-mode .bg-\[\#0A0A0C\],
+body.g2c-light-mode .bg-gray-50 {
+  background-color: var(--g2c-light-bg) !important;
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .bg-\[\#0F172A\],
+body.g2c-light-mode .bg-\[\#1E293B\],
+body.g2c-light-mode .bg-\[\#1C2A3D\],
+body.g2c-light-mode .bg-\[\#142039\],
+body.g2c-light-mode .bg-\[\#111827\],
+body.g2c-light-mode .bg-\[\#17264a\],
+body.g2c-light-mode .bg-slate-900,
+body.g2c-light-mode .bg-slate-900\/15 {
+  background-color: var(--g2c-light-navbar) !important;
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .bg-\[\#111C44\],
+body.g2c-light-mode .bg-\[\#111C44\]\/80,
+body.g2c-light-mode .bg-\[\#101c34\],
+body.g2c-light-mode .bg-\[\#0f1b35\],
+body.g2c-light-mode .bg-\[\#0D1637\],
+body.g2c-light-mode .bg-\[\#0D1637\]\/40,
+body.g2c-light-mode .bg-\[\#0D1637\]\/60,
+body.g2c-light-mode .bg-white\/\[0\.03\],
+body.g2c-light-mode .bg-white\/5,
+body.g2c-light-mode .bg-white\/10 {
+  background-color: var(--g2c-light-card) !important;
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .border-white\/10,
+body.g2c-light-mode .border-white\/15,
+body.g2c-light-mode .border-white\/20,
+body.g2c-light-mode .border-gray-800,
+body.g2c-light-mode .border-gray-800\/40,
+body.g2c-light-mode .border-\[\#474747\] {
+  border-color: var(--g2c-light-border) !important;
+}
+
+body.g2c-light-mode .text-white,
+body.g2c-light-mode .text-white\/90,
+body.g2c-light-mode .text-white\/80,
+body.g2c-light-mode .text-white\/75,
+body.g2c-light-mode .text-white\/70,
+body.g2c-light-mode .text-white\/60,
+body.g2c-light-mode .text-white\/55,
+body.g2c-light-mode .text-white\/50,
+body.g2c-light-mode .text-white\/45,
+body.g2c-light-mode .text-slate-100,
+body.g2c-light-mode .text-slate-200,
+body.g2c-light-mode .text-slate-300,
+body.g2c-light-mode .text-gray-300,
+body.g2c-light-mode .text-gray-400,
+body.g2c-light-mode .text-gray-500 {
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .hover\:text-white:hover,
+body.g2c-light-mode .hover\:text-white\/90:hover,
+body.g2c-light-mode .hover\:text-white\/80:hover,
+body.g2c-light-mode .hover\:text-white\/70:hover {
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .text-slate-400,
+body.g2c-light-mode .text-slate-500,
+body.g2c-light-mode .text-slate-600 {
+  color: var(--g2c-light-muted) !important;
+}
+
+body.g2c-light-mode .text-emerald-50 {
+  color: #064E3B !important;
+}
+
+body.g2c-light-mode .text-\[\#FFD166\],
+body.g2c-light-mode .hover\:text-\[\#FFD166\]:hover {
+  color: var(--g2c-light-accent) !important;
+}
+
+body.g2c-light-mode .bg-\[\#FFD166\],
+body.g2c-light-mode .hover\:bg-\[\#FFE7A3\]:hover {
+  background-color: var(--g2c-light-accent) !important;
+  background-image: none !important;
+}
+
+body.g2c-light-mode .bg-gradient-to-r.from-\[\#FFD166\],
+body.g2c-light-mode .bg-gradient-to-br.from-\[\#FFD166\] {
+  background-color: var(--g2c-light-accent) !important;
+  background-image: linear-gradient(90deg, #FFD166 0%, #FFE7A3 100%) !important;
+  color: #000000 !important;
+}
+
+body.g2c-light-mode .border-\[\#FFD166\]\/20,
+body.g2c-light-mode .border-\[\#FFD166\]\/30,
+body.g2c-light-mode .border-\[\#FFD166\]\/40 {
+  border-color: color-mix(in srgb, var(--g2c-light-accent) 45%, white) !important;
+}
+
+body.g2c-light-mode .bg-\[\#FFD166\]\/10 {
+  background-color: color-mix(in srgb, var(--g2c-light-accent-bright) 18%, white) !important;
+}
+
+body.g2c-light-mode .movie-card,
+body.g2c-light-mode article.overflow-hidden,
+body.g2c-light-mode aside.rounded-lg,
+body.g2c-light-mode section.rounded-lg {
+  background-color: var(--g2c-light-card) !important;
+  border-color: var(--g2c-light-border) !important;
+  color: var(--g2c-light-text) !important;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08) !important;
+}
+
+body.g2c-light-mode input,
+body.g2c-light-mode textarea,
+body.g2c-light-mode select {
+  background-color: #FFFFFF !important;
+  border-color: var(--g2c-light-border) !important;
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .bg-blue-600,
+body.g2c-light-mode .bg-\[\#1f6feb\],
+body.g2c-light-mode .bg-red-500,
+body.g2c-light-mode .bg-red-600,
+body.g2c-light-mode .bg-rose-500,
+body.g2c-light-mode .bg-sky-500,
+body.g2c-light-mode .bg-cyan-600,
+body.g2c-light-mode .bg-slate-600,
+body.g2c-light-mode .bg-slate-700,
+body.g2c-light-mode .bg-gray-800 {
+  color: #FFFFFF !important;
+}
+
+body.g2c-light-mode .shadow-black\/20,
+body.g2c-light-mode .shadow-2xl,
+body.g2c-light-mode .shadow-xl {
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08) !important;
+}
+
+body.g2c-light-mode .g2c-topbar {
+  background-color: #E2E8F0 !important;
+  color: #1E293B !important;
+}
+
+body.g2c-light-mode .g2c-topbar a,
+body.g2c-light-mode .g2c-topbar button {
+  color: inherit;
+}
+
+body.g2c-light-mode .g2c-topbar button[aria-label] {
+  background-color: #FFD166 !important;
+  border-color: #FFD166 !important;
+  color: #1E293B !important;
+}
+
+body:not(.g2c-light-mode) .text-black:not(.bg-\[\#FFD166\]):not(.bg-gradient-to-r):not(.bg-gradient-to-br):not(.bg-white):not(.bg-amber-500):not(.bg-yellow-300),
+body:not(.g2c-light-mode) .text-\[\#0F172A\]:not(.bg-gradient-to-r):not(.bg-gradient-to-br),
+body:not(.g2c-light-mode) .text-\[\#111827\],
+body:not(.g2c-light-mode) .text-\[\#1E293B\],
+body:not(.g2c-light-mode) .text-slate-950:not(.bg-yellow-300):not(.bg-amber-500),
+body:not(.g2c-light-mode) .text-slate-900,
+body:not(.g2c-light-mode) .text-gray-900 {
+  color: #FFFFFF !important;
+}

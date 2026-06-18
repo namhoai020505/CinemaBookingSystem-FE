@@ -1,79 +1,156 @@
+import { useEffect, useState } from 'react';
+import { FiChevronDown, FiMoon, FiSun } from 'react-icons/fi';
 import { Link, useNavigate } from 'react-router-dom';
-import { FiChevronDown } from 'react-icons/fi'; // Icon mũi tên chỉ xuống
-import logo from '../../assets/logo.png'; 
+import logo from '../../assets/logo.png';
 import { getAccessToken } from '../../lib/auth';
 import { logout } from '../../services/authService';
 
+type ThemeMode = 'dark' | 'light';
+
+const THEME_STORAGE_KEY = 'g2c-theme';
+
+const getInitialTheme = (): ThemeMode => {
+  if (typeof window === 'undefined') {
+    return 'dark';
+  }
+
+  return localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
+};
+
 export default function Header() {
   const navigate = useNavigate();
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme);
   const token = getAccessToken();
   const hasValidToken = Boolean(token);
   const fullName = localStorage.getItem('fullName');
+  const isLightMode = themeMode === 'light';
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    document.documentElement.classList.toggle('light', isLightMode);
+    document.body.classList.toggle('g2c-light-mode', isLightMode);
+    localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+  }, [isLightMode, themeMode]);
 
   const handleLogout = async () => {
     await logout();
-    navigate('/'); 
+    navigate('/');
   };
 
+  const handleToggleTheme = () => {
+    setThemeMode((currentMode) => (currentMode === 'light' ? 'dark' : 'light'));
+  };
+
+  const linkHoverClass = isLightMode ? 'hover:text-[#1E293B]' : 'hover:text-white';
+  const dividerClass = isLightMode ? 'text-slate-400' : 'text-gray-600';
+  const menuTextClass = isLightMode ? 'text-slate-800' : 'text-white';
+
+  const themeToggle = (
+    <button
+      type="button"
+      onClick={handleToggleTheme}
+      aria-label={isLightMode ? 'Chuyển sang dark mode' : 'Chuyển sang light mode'}
+      title={isLightMode ? 'Dark mode' : 'Light mode'}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-black transition ${
+        isLightMode
+          ? 'border-[#FFD166] bg-[#FFD166] text-[#1E293B] hover:brightness-105'
+          : 'border-white/25 bg-white/10 text-[#FFD166] hover:bg-white/15'
+      }`}
+    >
+      {isLightMode ? <FiMoon size={14} /> : <FiSun size={14} />}
+      <span>{isLightMode ? 'Dark' : 'Light'}</span>
+    </button>
+  );
+
   return (
-    <header className="w-full sticky top-0 z-50 shadow-lg">
-      
-      {/* TẦNG 1: TOPBAR (Màu nền #0F172A) */}
-      <div className="bg-[#0F172A] text-gray-300 py-1.5">
-        <div className="container mx-auto px-4 flex justify-end text-[13px]">
+    <header className="fixed left-0 top-0 z-50 w-full shadow-lg">
+      <div
+        className={`g2c-topbar py-1.5 transition-colors ${
+          isLightMode ? 'bg-[#E2E8F0] text-[#1E293B]' : 'bg-[#0F172A] text-gray-300'
+        }`}
+      >
+        <div className="container mx-auto flex justify-end px-4 text-[13px]">
           {hasValidToken ? (
             <div className="flex items-center gap-3">
-              <Link to="/profile" className="transition hover:text-white">
+              <Link to="/profile" className={`transition ${linkHoverClass}`}>
                 Chào, {fullName || 'Thành viên'}
               </Link>
-              <span className="text-gray-600">|</span>
-              <Link to="/my-bookings" className="hover:text-white transition font-medium">
+              <span className={dividerClass}>|</span>
+              <Link
+                to="/my-bookings"
+                className={`font-medium transition ${linkHoverClass}`}
+              >
                 Vé của tôi
               </Link>
-              <span className="text-gray-600">|</span>
-              <button onClick={handleLogout} className="hover:text-white transition font-medium">
+              <span className={dividerClass}>|</span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className={`font-medium transition ${linkHoverClass}`}
+              >
                 Đăng xuất
               </button>
+              <span className={dividerClass}>|</span>
+              {themeToggle}
             </div>
           ) : (
             <div className="flex items-center gap-3 font-medium">
-              <Link to="/login" className="hover:text-white transition">Đăng nhập</Link>
-              <span className="text-gray-600">|</span>
-              <Link to="/login" className="hover:text-white transition">Đăng ký</Link>
+              <Link to="/login" className={`transition ${linkHoverClass}`}>
+                Đăng nhập
+              </Link>
+              <span className={dividerClass}>|</span>
+              <Link to="/login" className={`transition ${linkHoverClass}`}>
+                Đăng ký
+              </Link>
+              <span className={dividerClass}>|</span>
+              {themeToggle}
             </div>
           )}
         </div>
       </div>
 
-      {/* TẦNG 2: MAIN MENU (Màu nền #1E293B, viền dưới #474747) */}
-      <div className="bg-[#1E293B] border-b border-[#474747] py-3">
-        <div className="container mx-auto px-4 flex justify-between items-center">
-          
-          {/* CỤM BÊN TRÁI: Logo + Dropdown Chọn Rạp */}
+      <div
+        className={`border-b py-3 transition-colors ${
+          isLightMode ? 'border-[#CBD5E1] bg-white' : 'border-[#474747] bg-[#1E293B]'
+        }`}
+      >
+        <div className="container mx-auto flex items-center justify-between px-4">
           <div className="flex items-center gap-6">
-            
-            {/* LOGO */}
             <Link to="/" className="flex items-center">
-              {/* Xóa dấu comment dòng dưới để dùng ảnh thật của bạn */}
               <img src={logo} alt="G2C Logo" className="h-10 object-contain" />
             </Link>
 
-            {/* DROPDOWN CHỌN RẠP (Bo tròn giống ảnh) */}
-            <button className="hidden sm:flex items-center gap-2 border border-white text-white rounded-full px-4 py-1.5 hover:bg-white/10 transition text-sm">
+            <button
+              className={`hidden items-center gap-2 rounded-full border px-4 py-1.5 text-sm transition sm:flex ${
+                isLightMode
+                  ? 'border-[#CBD5E1] text-[#1E293B] hover:bg-[#F8FAFC]'
+                  : 'border-white text-white hover:bg-white/10'
+              }`}
+            >
               <span>G2Cinema Thái Nguyên</span>
               <FiChevronDown size={18} />
             </button>
           </div>
 
-          {/* CỤM BÊN PHẢI: Các link điều hướng */}
-          <nav className="hidden lg:flex items-center gap-7 font-bold text-white text-sm tracking-wide">
-            <Link to="/" className="hover:text-[#FFD166] transition">GIÁ VÉ</Link>
-            <Link to="/" className="hover:text-[#FFD166] transition">PHIM</Link>
-            <Link to="/" className="hover:text-[#FFD166] transition">RẠP</Link>
-            <Link to="/" className="hover:text-[#FFD166] transition">LỊCH CHIẾU THEO RẠP</Link>
-            <Link to="/profile" className="hover:text-[#FFD166] transition">THÀNH VIÊN</Link>
+          <nav
+            className={`hidden items-center gap-7 text-sm font-bold tracking-wide lg:flex ${menuTextClass}`}
+          >
+            <Link to="/" className="transition hover:text-[#FFD166]">
+              GIÁ VÉ
+            </Link>
+            <Link to="/" className="transition hover:text-[#FFD166]">
+              PHIM
+            </Link>
+            <Link to="/" className="transition hover:text-[#FFD166]">
+              RẠP
+            </Link>
+            <Link to="/" className="transition hover:text-[#FFD166]">
+              LỊCH CHIẾU THEO RẠP
+            </Link>
+            <Link to="/profile" className="transition hover:text-[#FFD166]">
+              THÀNH VIÊN
+            </Link>
           </nav>
-
         </div>
       </div>
     </header>
