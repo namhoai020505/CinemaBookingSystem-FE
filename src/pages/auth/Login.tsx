@@ -51,7 +51,10 @@ export default function Login() {
               {!controller.isVerifyStep &&
               !controller.isResetPasswordStep &&
               !controller.isForgotMode ? (
-                <GoogleLoginButton />
+                <GoogleLoginButton
+                  onSuccess={controller.handleGoogleLogin}
+                  isLoading={controller.isLoading}
+                />
               ) : null}
             </form>
           </div>

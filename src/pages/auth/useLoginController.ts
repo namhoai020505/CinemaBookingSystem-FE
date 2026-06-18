@@ -166,6 +166,38 @@ export const useLoginController = () => {
     }
   };
 
+  const handleGoogleLogin = async (idToken: string) => {
+    resetFeedback();
+    setIsLoading(true);
+
+    try {
+      const response = unwrapApiResponse<AuthResponseData>(
+        await api.post('/api/auth/google-login', { idToken }),
+      );
+      const authData = response.data;
+      const token = authData?.accessToken || authData?.token;
+
+      if (!token) {
+        setError('Đăng nhập Google thành công nhưng backend không trả về access token.');
+        return;
+      }
+
+      localStorage.setItem('accessToken', token);
+      localStorage.removeItem('role');
+      localStorage.setItem('fullName', authData?.fullName || 'Người dùng');
+
+      if (authData?.refreshToken) {
+        localStorage.setItem('refreshToken', authData.refreshToken);
+      }
+
+      navigate(isAdminRole(getRoleFromAccessToken(token)) ? '/admin/dashboard' : '/');
+    } catch (err: unknown) {
+      setError(parseApiError(err).message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleRegister = async () => {
     const trimmedName = fullName.trim();
     const trimmedPhoneNumber = phoneNumber.trim();
@@ -431,6 +463,7 @@ export const useLoginController = () => {
     successMessage,
     verificationEmail,
     generateCaptcha,
+    handleGoogleLogin,
     handleResendOtp,
     handleResendPasswordResetOtp,
     handleSubmit,
