@@ -4,10 +4,10 @@ import Footer from './Footer';
 
 export default function UserLayout() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-[#182437]">
       <Header />
       
-      <main className="flex-1 p-4 bg-gray-50">
+      <main className="flex-1 bg-[#182437]">
         <Outlet />
       </main>
 

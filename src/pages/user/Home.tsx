@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import slide1 from "../../assets/slide1.png";
 import slide2 from "../../assets/slide2.png";
 import slide3 from "../../assets/slide3.png";
 import slide4 from "../../assets/slide4.png";
 import slide5 from "../../assets/slide5.png";
 import slide6 from "../../assets/slide6.png";
-import movie1 from "../../assets/movie1.jpg";
-import movie2 from "../../assets/movie2.jpg";
-import movie3 from "../../assets/movie3.jpg";
-import movie4 from "../../assets/movie4.jpg";
-import movie5 from "../../assets/movie5.jpg";
-import movie6 from "../../assets/movie6.jpg";
-import movie7 from "../../assets/movie7.jpg";
-import movie8 from "../../assets/movie8.jpg";
+import ShowtimePickerModal from "../../components/user/ShowtimePickerModal";
+import {
+  clearAuthSession,
+  getAccessToken,
+  isAccessTokenExpired,
+} from "../../lib/auth";
+import { movieService } from "../../services/movieService";
 
 type HeroSlide = {
   id: string;
@@ -31,6 +30,8 @@ type Movie = {
   ageRating: string;
   highlight?: string;
 };
+
+type MovieApiItem = Record<string, unknown>;
 
 const AUTO_PLAY_MS = 4500;
 const SLIDE_TRANSITION_MS = 700;
@@ -54,118 +55,147 @@ const getRealSlideIndex = (index: number) =>
     LAST_REAL_SLIDE_INDEX) +
   FIRST_REAL_SLIDE_INDEX;
 
-const mockNowShowingMovies: Movie[] = [
-  {
-    movieId: "M01",
-    title: "Tạm Biệt Gohan",
-    genre: "Tình cảm, Gia đình",
-    duration: "140 phút",
-    posterUrl: movie1,
-    ageRating: "K",
-    highlight: "HOT",
-  },
-  {
-    movieId: "M02",
-    title: "Heo Năm Móng",
-    genre: "Kinh dị",
-    duration: "103 phút",
-    posterUrl: movie2,
-    ageRating: "T18",
-    highlight: "HOT",
-  },
-  {
-    movieId: "M03",
-    title: "Ma Da Hàn Quốc: Hồ Nước Người",
-    genre: "Kinh dị",
-    duration: "95 phút",
-    posterUrl: movie3,
-    ageRating: "T18",
-    highlight: "HOT",
-  },
-  {
-    movieId: "M04",
-    title: "Thẩm Mỹ Viện Âm Phủ",
-    genre: "Kinh dị, Hồi hộp",
-    duration: "100 phút",
-    posterUrl: movie4,
-    ageRating: "T18",
-  },
-  {
-    movieId: "M05",
-    title: "Phì Phòng: Quỷ Máu Rừng Thiêng",
-    genre: "Kinh dị, Giật gân",
-    duration: "120 phút",
-    posterUrl: movie5,
-    ageRating: "T18",
-  },
-  {
-    movieId: "M06",
-    title: "Ngôi Đền Kỳ Quái 5",
-    genre: "Kinh dị, Hài hước",
-    duration: "118 phút",
-    posterUrl: movie6,
-    ageRating: "T16",
-  },
-  {
-    movieId: "M07",
-    title: "Ốc Mượn Hồn",
-    genre: "Bí ẩn, Tâm lý",
-    duration: "109 phút",
-    posterUrl: movie7,
-    ageRating: "T18",
-  },
-  {
-    movieId: "M08",
-    title: "Phim Shin - Cậu Bé Bút Chì: Quậy",
-    genre: "Hoạt hình, Gia đình",
-    duration: "104 phút",
-    posterUrl: movie8,
-    ageRating: "P",
-  },
-];
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || "http://localhost:5070";
 
-import { movieService } from "../../services/movieService";
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getStringValue = (item: MovieApiItem, keys: string[]) => {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+
+    if (typeof value === "number") {
+      return String(value);
+    }
+  }
+
+  return "";
+};
+
+const getGenreValue = (item: MovieApiItem) => {
+  const genre = item.genre ?? item.genres ?? item.genreName ?? item.categoryName;
+
+  if (Array.isArray(genre)) {
+    return genre
+      .map((value) => {
+        if (typeof value === "string") {
+          return value.trim();
+        }
+
+        if (isRecord(value)) {
+          return getStringValue(value, ["name", "genreName", "title"]);
+        }
+
+        return "";
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (typeof genre === "string" && genre.trim()) {
+    return genre.trim();
+  }
+
+  return "Đang cập nhật";
+};
+
+const resolvePosterUrl = (value: string) => {
+  const posterUrl = value.trim();
+  if (!posterUrl) {
+    return "";
+  }
+
+  if (/^(https?:|data:|blob:)/i.test(posterUrl)) {
+    return posterUrl;
+  }
+
+  if (posterUrl.startsWith("/")) {
+    return `${API_ORIGIN}${posterUrl}`;
+  }
+
+  return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
+};
+
+const extractMovieList = (response: unknown): MovieApiItem[] => {
+  if (Array.isArray(response)) {
+    return response.filter(isRecord);
+  }
+
+  if (!isRecord(response)) {
+    return [];
+  }
+
+  const nestedData = isRecord(response.data) ? response.data : null;
+  const candidates = [
+    response.data,
+    response.items,
+    response.results,
+    nestedData?.data,
+    nestedData?.items,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.filter(isRecord);
+    }
+  }
+
+  return [];
+};
+
+const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
+  const movieId = getStringValue(movie, ["movieId", "id", "movieID", "MovieId"]);
+  const title =
+    getStringValue(movie, ["movieNameVn", "title", "movieName", "name"]) ||
+    "Phim đang cập nhật";
+  const durationValue = getStringValue(movie, [
+    "duration",
+    "durationMinutes",
+    "runningTime",
+  ]);
+  const posterUrl = resolvePosterUrl(
+    getStringValue(movie, ["imagePoster", "posterUrl", "imageUrl", "poster"]),
+  );
+  const isHot = movie.isHot === true || movie.highlight === true;
+
+  return {
+    movieId,
+    title,
+    genre: getGenreValue(movie),
+    duration: durationValue ? `${durationValue} phút` : "Đang cập nhật",
+    posterUrl,
+    ageRating: getStringValue(movie, ["ageRating", "rating", "rated"]) || "P",
+    highlight: isHot ? "HOT" : undefined,
+  };
+};
 
 export default function Home() {
-  const navigate = useNavigate(); // Khởi tạo hook điều hướng
+  const navigate = useNavigate();
+  const location = useLocation();
   const [slideIndex, setSlideIndex] = useState(1);
   const [withTransition, setWithTransition] = useState(true);
-  const [movies, setMovies] = useState<Movie[]>(mockNowShowingMovies);
+  const [movies, setMovies] = useState<Movie[]>([]);
   const [loadingMovies, setLoadingMovies] = useState(true);
+  const [movieError, setMovieError] = useState("");
+  const [selectedShowtimeMovie, setSelectedShowtimeMovie] =
+    useState<Movie | null>(null);
 
   useEffect(() => {
     const fetchMovies = async () => {
       try {
         setLoadingMovies(true);
-        const response: any = await movieService.getActiveMovies();
-        
-        // Kiểm tra nếu API trả về mảng trực tiếp, hoặc trả về object { success: true, data: [...] }
-        let moviesData = [];
-        if (Array.isArray(response)) {
-          moviesData = response;
-        } else if (response && response.success && Array.isArray(response.data)) {
-          moviesData = response.data;
-        }
+        setMovieError("");
 
-        if (moviesData.length > 0) {
-          const apiMovies = moviesData.map((m: any) => ({
-            movieId: m.id || m.movieId,
-            title: m.movieNameVn || m.title || m.movieName,
-            genre: m.genre || "Đang cập nhật",
-            duration: m.duration ? `${m.duration} phút` : "Đang cập nhật",
-            posterUrl: m.imagePoster || m.posterUrl || movie1,
-            ageRating: m.ageRating || "P",
-            highlight: m.isHot ? "HOT" : undefined,
-          }));
-          setMovies(apiMovies);
-        } else {
-          console.warn("API không có dữ liệu, dùng dữ liệu mẫu (mock)");
-          setMovies(mockNowShowingMovies);
-        }
+        const response = await movieService.getActiveMovies();
+        const moviesData = extractMovieList(response);
+        setMovies(moviesData.map(mapApiMovieToCard));
       } catch (error) {
-        console.error("Lỗi lấy danh sách phim (Backend có thể đang bị lỗi 500):", error);
-        console.warn("Chuyển sang dùng dữ liệu mẫu (mock)");
-        setMovies(mockNowShowingMovies);
+        console.error("Lỗi lấy danh sách phim:", error);
+        setMovies([]);
+        setMovieError("Không tải được danh sách phim từ hệ thống.");
       } finally {
         setLoadingMovies(false);
       }
@@ -246,6 +276,24 @@ export default function Home() {
     setSlideIndex(nextSlideIndex + 1);
   };
 
+  const handleBuyTicket = (movie: Movie) => {
+    const accessToken = getAccessToken();
+
+    if (!accessToken || isAccessTokenExpired(accessToken)) {
+      clearAuthSession();
+      navigate("/login", {
+        state: {
+          from: location.pathname,
+          intent: "buy-ticket",
+          movieId: movie.movieId,
+        },
+      });
+      return;
+    }
+
+    setSelectedShowtimeMovie(movie);
+  };
+
   const handleSlideTransitionEnd = () => {
     if (slideIndex === CLONED_FIRST_SLIDE_INDEX) {
       setWithTransition(false);
@@ -260,7 +308,7 @@ export default function Home() {
   };
 
   return (
-    <div className="-m-4 bg-[#182437]">
+    <div className="bg-[#182437]">
       <section
         className="relative overflow-hidden bg-black"
         aria-label="Movie banners"
@@ -358,21 +406,34 @@ export default function Home() {
               <div className="col-span-full text-center text-white py-10 animate-pulse">
                 Đang tải danh sách phim...
               </div>
+            ) : movieError ? (
+              <div className="col-span-full rounded-lg border border-red-400/20 bg-red-400/10 px-4 py-10 text-center text-sm font-semibold text-red-100">
+                {movieError}
+              </div>
             ) : movies.length === 0 ? (
               <div className="col-span-full text-center text-gray-500 py-10">
                 Hiện chưa có phim nào đang chiếu.
               </div>
             ) : (
-              movies.map((movie) => (
-                <article key={movie.movieId} className="flex min-w-0 flex-col">
+              movies.map((movie, index) => (
+                <article
+                  key={movie.movieId || `${movie.title}-${index}`}
+                  className="flex min-w-0 flex-col"
+                >
                   <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-[#0F172A] shadow-lg shadow-black/20">
-                    <img
-                      src={movie.posterUrl}
-                      alt={movie.title}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                      draggable={false}
-                    />
+                    {movie.posterUrl ? (
+                      <img
+                        src={movie.posterUrl}
+                        alt={movie.title}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        draggable={false}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-[#111827] px-5 text-center text-sm font-bold uppercase tracking-wide text-white/45">
+                        Chưa có poster
+                      </div>
+                    )}
 
                     <div className="absolute left-2 top-2 rounded bg-white/90 px-2 py-1 text-[10px] font-extrabold leading-none text-[#8A8F98]">
                       {movie.ageRating}
@@ -398,8 +459,9 @@ export default function Home() {
 
                   <button
                     type="button"
-                    onClick={() => navigate(`/movie/${movie.movieId}/showtimes`)}
-                    className="mt-5 h-10 w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] text-xs font-extrabold uppercase text-black transition hover:brightness-105 cursor-pointer"
+                    disabled={!movie.movieId}
+                    onClick={() => handleBuyTicket(movie)}
+                    className="mt-5 h-10 w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] text-xs font-extrabold uppercase text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Mua vé
                   </button>
@@ -409,6 +471,13 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {selectedShowtimeMovie && (
+        <ShowtimePickerModal
+          movie={selectedShowtimeMovie}
+          onClose={() => setSelectedShowtimeMovie(null)}
+        />
+      )}
     </div>
   );
 }

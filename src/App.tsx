@@ -17,6 +17,9 @@ import Checkout from './pages/user/Checkout';
 import BookingSuccess from './pages/user/BookingSuccess';
 import MyBookings from './pages/user/MyBookings';
 
+const customerRoles = ['customer'];
+const adminRoles = ['admin'];
+
 const GlobalTimer = () => {
   useIdleTimeout(10); 
   return null;
@@ -37,12 +40,15 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/movie/:movieId/showtimes" element={<MovieShowtimes />} />
           <Route path="/booking/seats/:showtimeId" element={<SeatSelection />} />
-          <Route path="/booking/checkout/:showtimeId" element={<Checkout />} />
-          <Route path="/booking/success/:bookingId" element={<BookingSuccess />} />
-          <Route path="profile" element={<Profile />} />
+          <Route element={<RequireAuth allowedRoles={customerRoles} />}>
+            <Route path="/booking/checkout/:showtimeId" element={<Checkout />} />
+            <Route path="/booking/success/:bookingId" element={<BookingSuccess />} />
+            <Route path="/my-bookings" element={<MyBookings />} />
+            <Route path="profile" element={<Profile />} />
+          </Route>
         </Route>
 
-        <Route element={<RequireAuth />}>
+        <Route element={<RequireAuth allowedRoles={adminRoles} verifyAdmin />}>
           <Route path="/admin" element={<AdminLayout />}>
             <Route path="movies" element={<ManageMovie />} />
             <Route path="dashboard" element={<Dashboard />} />
