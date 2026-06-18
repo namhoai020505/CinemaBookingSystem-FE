@@ -95,11 +95,11 @@ export default function Header() {
             </div>
           ) : (
             <div className="flex items-center gap-3 font-medium">
-              <Link to="/login" className={`transition ${linkHoverClass}`}>
+              <Link to="/login" state={{ mode: 'login' }} className={`transition ${linkHoverClass}`}>
                 Đăng nhập
               </Link>
               <span className={dividerClass}>|</span>
-              <Link to="/login" className={`transition ${linkHoverClass}`}>
+              <Link to="/login" state={{ mode: 'register' }} className={`transition ${linkHoverClass}`}>
                 Đăng ký
               </Link>
               <span className={dividerClass}>|</span>
