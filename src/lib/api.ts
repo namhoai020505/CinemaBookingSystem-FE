@@ -76,8 +76,9 @@ api.interceptors.response.use(
               localStorage.setItem('fullName', authData.fullName);
             }
 
-            originalRequest.headers = originalRequest.headers || {};
-            originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`;
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`;
+            }
 
             return api(originalRequest);
           }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { FiArrowLeft } from "react-icons/fi";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api from "../../lib/api";
 
@@ -228,6 +229,10 @@ export default function MovieShowtimes() {
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
 
     const fetchShowtimeData = async () => {
@@ -384,6 +389,14 @@ export default function MovieShowtimes() {
   return (
     <div className="min-h-screen bg-[#0A0A0C] p-6 text-white">
       <div className="mx-auto max-w-5xl">
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          className="group mb-5 flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-white transition-all bg-white/5 hover:bg-white/10 px-3.5 py-1.5 rounded-lg border border-white/5 hover:border-white/15 cursor-pointer shadow-md w-fit"
+        >
+          <FiArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
+          Quay lại trang chủ
+        </button>
         {movieInfo ? (
           <div className="mb-8 flex items-center gap-6 rounded-3xl border border-gray-800 bg-[#111C44] p-6 shadow-2xl">
             <div className="h-36 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-900 shadow-md">

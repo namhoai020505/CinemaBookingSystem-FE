@@ -116,7 +116,7 @@ export default function Header() {
       >
         <div className="container mx-auto flex items-center justify-between px-4">
           <div className="flex items-center gap-6">
-            <Link to="/" className="flex items-center">
+            <Link to="/" onClick={() => sessionStorage.removeItem('home-scroll-y')} className="flex items-center">
               <img src={logo} alt="G2C Logo" className="h-10 object-contain" />
             </Link>
 
@@ -135,16 +135,16 @@ export default function Header() {
           <nav
             className={`hidden items-center gap-7 text-sm font-bold tracking-wide lg:flex ${menuTextClass}`}
           >
-            <Link to="/" className="transition hover:text-[#FFD166]">
+            <Link to="/" onClick={() => sessionStorage.removeItem('home-scroll-y')} className="transition hover:text-[#FFD166]">
               GIÁ VÉ
             </Link>
-            <Link to="/" className="transition hover:text-[#FFD166]">
+            <Link to="/" onClick={() => sessionStorage.removeItem('home-scroll-y')} className="transition hover:text-[#FFD166]">
               PHIM
             </Link>
-            <Link to="/" className="transition hover:text-[#FFD166]">
+            <Link to="/" onClick={() => sessionStorage.removeItem('home-scroll-y')} className="transition hover:text-[#FFD166]">
               RẠP
             </Link>
-            <Link to="/" className="transition hover:text-[#FFD166]">
+            <Link to="/" onClick={() => sessionStorage.removeItem('home-scroll-y')} className="transition hover:text-[#FFD166]">
               LỊCH CHIẾU THEO RẠP
             </Link>
             <Link to="/profile" className="transition hover:text-[#FFD166]">
