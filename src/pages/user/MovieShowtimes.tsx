@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiArrowLeft } from "react-icons/fi";
+import { FiArrowLeft, FiClock, FiGlobe, FiCalendar, FiFilm, FiPlay } from "react-icons/fi";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api from "../../lib/api";
 
@@ -52,6 +52,10 @@ type MovieInfo = {
   ageRating?: string;
   genre?: string;
   posterUrl?: string;
+  language?: string;
+  releaseDate?: string;
+  description?: string;
+  trailerUrl?: string;
 };
 
 type SeatAvailability = {
@@ -163,6 +167,10 @@ const mapMovieDetailToInfo = (
   ageRating: movie?.ageRating || "P",
   genre: movie?.genre || "Đang cập nhật",
   posterUrl: movie?.posterUrl || FALLBACK_POSTER,
+  language: movie?.language || "Tiếng Việt",
+  releaseDate: movie?.releaseDate || undefined,
+  description: movie?.description || undefined,
+  trailerUrl: movie?.trailerUrl || undefined,
 });
 
 const groupShowtimesByCinema = (
@@ -219,6 +227,19 @@ const groupShowtimesByCinema = (
   }));
 };
 
+const getYoutubeEmbedUrl = (url?: string) => {
+  if (!url) return "";
+  let videoId = "";
+  if (url.includes("watch?v=")) {
+    videoId = url.split("watch?v=")[1]?.split("&")[0] || "";
+  } else if (url.includes("youtu.be/")) {
+    videoId = url.split("youtu.be/")[1]?.split("?")[0] || "";
+  } else if (url.includes("embed/")) {
+    videoId = url.split("embed/")[1]?.split("?")[0] || "";
+  }
+  return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+};
+
 export default function MovieShowtimes() {
   const { movieId } = useParams();
   const navigate = useNavigate();
@@ -227,6 +248,7 @@ export default function MovieShowtimes() {
   const [showtimes, setShowtimes] = useState<ShowtimeSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [showTrailerModal, setShowTrailerModal] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -398,37 +420,108 @@ export default function MovieShowtimes() {
           Quay lại trang chủ
         </button>
         {movieInfo ? (
-          <div className="mb-8 flex items-center gap-6 rounded-3xl border border-gray-800 bg-[#111C44] p-6 shadow-2xl">
-            <div className="h-36 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-900 shadow-md">
-              <img
-                src={movieInfo.posterUrl || FALLBACK_POSTER}
-                alt={movieInfo.title}
-                className="h-full w-full object-cover"
-                onError={(event) => {
-                  if (event.currentTarget.src !== FALLBACK_POSTER) {
-                    event.currentTarget.src = FALLBACK_POSTER;
-                  }
-                }}
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="rounded bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase text-black">
-                  {movieInfo.ageRating || "P"}
-                </span>
-                <h1 className="text-2xl font-black tracking-wide">
-                  {movieInfo.title}
-                </h1>
+          <div className="relative mb-8 overflow-hidden rounded-3xl border border-gray-800 bg-[#111C44] shadow-2xl p-6 md:p-8">
+            {/* Backdrop Blur Poster */}
+            <div 
+              className="absolute inset-0 bg-cover bg-center blur-2xl opacity-10 pointer-events-none scale-110"
+              style={{ backgroundImage: `url(${movieInfo.posterUrl || FALLBACK_POSTER})` }}
+            />
+            
+            <div className="relative z-10 grid gap-6 md:grid-cols-[240px_1fr] items-start">
+              {/* Left: Movie Poster */}
+              <div className="mx-auto md:mx-0 w-full max-w-[240px] aspect-[2/3] overflow-hidden rounded-2xl bg-slate-900 shadow-xl border border-white/5 group relative">
+                <img
+                  src={movieInfo.posterUrl || FALLBACK_POSTER}
+                  alt={movieInfo.title}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  onError={(event) => {
+                    if (event.currentTarget.src !== FALLBACK_POSTER) {
+                      event.currentTarget.src = FALLBACK_POSTER;
+                    }
+                  }}
+                />
+                
+                {/* Watch Trailer Button Overlay on Poster Hover */}
+                {movieInfo.trailerUrl && (
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowTrailerModal(true)}
+                      className="bg-[#FFD166] text-black hover:bg-[#FFE7A3] font-bold p-3.5 rounded-full shadow-lg transition-transform transform scale-90 group-hover:scale-100 duration-300 flex items-center gap-2 cursor-pointer"
+                    >
+                      <FiPlay className="h-5 w-5 fill-black" />
+                    </button>
+                  </div>
+                )}
               </div>
-              <p className="mt-2 text-xs text-gray-300">
-                Thể loại: {movieInfo.genre || "Đang cập nhật"}
-                {movieInfo.durationMinutes ? (
-                  <> | Thời lượng: {movieInfo.durationMinutes} phút</>
-                ) : null}
-              </p>
-              <p className="mt-4 text-xs italic text-gray-500">
-                Lưu ý: Vui lòng mua vé đúng độ tuổi quy định của bộ phim.
-              </p>
+
+              {/* Right: Movie Details */}
+              <div className="flex flex-col gap-4 text-left">
+                {/* Title and Age Rating Badge */}
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span 
+                      className={`rounded px-3 py-1 text-[11px] font-black uppercase tracking-wider text-white shadow-sm ${
+                        movieInfo.ageRating?.includes("C18") ? "bg-red-650" :
+                        movieInfo.ageRating?.includes("C16") ? "bg-orange-600" :
+                        movieInfo.ageRating?.includes("C13") ? "bg-yellow-600" :
+                        "bg-green-600"
+                      }`}
+                    >
+                      {movieInfo.ageRating || "P"}
+                    </span>
+                    <h1 className="text-2xl md:text-3xl font-black tracking-wide text-white">
+                      {movieInfo.title}
+                    </h1>
+                  </div>
+                  <p className="text-[11px] text-[#FFD166] font-semibold mt-1">Lưu ý: Vui lòng mua vé đúng độ tuổi quy định của bộ phim.</p>
+                </div>
+
+                {/* Metadata List */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#0F172A]/50 border border-gray-800/80 rounded-2xl p-4 text-xs text-gray-300">
+                  <div className="flex items-center gap-2.5">
+                    <FiFilm className="h-4 w-4 text-[#FFD166] shrink-0" />
+                    <span><b>Thể loại:</b> {movieInfo.genre || "Đang cập nhật"}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <FiClock className="h-4 w-4 text-[#FFD166] shrink-0" />
+                    <span><b>Thời lượng:</b> {movieInfo.durationMinutes ? `${movieInfo.durationMinutes} phút` : "Đang cập nhật"}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <FiGlobe className="h-4 w-4 text-[#FFD166] shrink-0" />
+                    <span><b>Ngôn ngữ:</b> {movieInfo.language || "Tiếng Việt"}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <FiCalendar className="h-4 w-4 text-[#FFD166] shrink-0" />
+                    <span>
+                      <b>Khởi chiếu:</b>{" "}
+                      {movieInfo.releaseDate 
+                        ? new Date(movieInfo.releaseDate).toLocaleDateString("vi-VN") 
+                        : "Đang cập nhật"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Synopsis / Description */}
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Tóm tắt phim</h3>
+                  <p className="text-xs leading-6 text-slate-300 bg-slate-900/10 p-1.5 rounded-lg border border-transparent font-medium">
+                    {movieInfo.description || "Nội dung phim đang được cập nhật..."}
+                  </p>
+                </div>
+
+                {/* Trailer Button */}
+                {movieInfo.trailerUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setShowTrailerModal(true)}
+                    className="flex items-center justify-center gap-2 w-fit bg-red-650 hover:bg-red-600 text-white font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-red-900/20 transition-all text-xs active:scale-95 cursor-pointer mt-1"
+                  >
+                    <FiPlay className="h-4 w-4 fill-white" />
+                    Xem Trailer
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ) : null}
@@ -543,6 +636,34 @@ export default function MovieShowtimes() {
           )}
         </div>
       </div>
+
+      {/* WATCH TRAILER MODAL */}
+      {showTrailerModal && movieInfo?.trailerUrl && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm animate-fade-in"
+          onClick={() => setShowTrailerModal(false)}
+        >
+          <div 
+            className="relative w-full max-w-4xl aspect-video bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => setShowTrailerModal(false)} 
+              className="absolute top-4 right-4 text-white hover:text-red-500 text-xl font-bold bg-black/60 hover:bg-black w-8 h-8 rounded-full flex items-center justify-center transition-all z-50 cursor-pointer"
+            >
+              &times;
+            </button>
+            <iframe 
+              className="w-full h-full" 
+              src={getYoutubeEmbedUrl(movieInfo.trailerUrl)} 
+              title="Trailer" 
+              frameBorder="0" 
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+              allowFullScreen
+            ></iframe>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
