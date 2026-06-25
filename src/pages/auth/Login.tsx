@@ -19,7 +19,7 @@ export default function Login() {
     <div className="flex min-h-screen flex-col bg-[#1E293B]">
       <Header />
 
-      <main className="flex min-h-[80vh] items-center justify-center bg-[#1E293B] px-4 py-12">
+      <main className="flex min-h-[80vh] items-start justify-center bg-[#1E293B] px-4 pb-12 pt-32">
         <div className="w-full max-w-md">
           <AuthTabs authMode={controller.authMode} onSwitchMode={controller.switchMode} />
 
@@ -51,7 +51,10 @@ export default function Login() {
               {!controller.isVerifyStep &&
               !controller.isResetPasswordStep &&
               !controller.isForgotMode ? (
-                <GoogleLoginButton />
+                <GoogleLoginButton
+                  onSuccess={controller.handleGoogleLogin}
+                  isLoading={controller.isLoading}
+                />
               ) : null}
             </form>
           </div>

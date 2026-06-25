@@ -1,3 +1,5 @@
+import { GoogleLogin } from '@react-oauth/google';
+import { useRef } from 'react';
 import { FcGoogle } from 'react-icons/fc';
 import type { AuthMode } from '../authTypes';
 
@@ -17,6 +19,11 @@ type AuthSubmitButtonProps = {
   isResetPasswordStep: boolean;
   isForgotMode: boolean;
   isLoginMode: boolean;
+};
+
+type GoogleLoginButtonProps = {
+  onSuccess: (idToken: string) => void;
+  isLoading?: boolean;
 };
 
 export const AuthTabs = ({ authMode, onSwitchMode }: AuthTabsProps) => (
@@ -90,12 +97,58 @@ export const AuthSubmitButton = ({
   </button>
 );
 
-export const GoogleLoginButton = () => (
-  <button
-    type="button"
-    className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-white py-2.5 text-sm font-bold uppercase text-black shadow transition hover:bg-gray-100"
-  >
-    <FcGoogle size={20} />
-    Đăng Nhập Bằng Google
-  </button>
-);
+/**
+ * GoogleLoginButton renders a custom-styled button that triggers the Google
+ * One-Tap / popup flow from @react-oauth/google. The hidden <GoogleLogin>
+ * component provides the real Google OAuth button; our visible button clicks
+ * its inner <div> to open the popup programmatically.
+ *
+ * `credential` returned by onSuccess is a signed Google ID Token (JWT) —
+ * exactly what the backend expects in POST /api/auth/google-login { idToken }.
+ */
+export const GoogleLoginButton = ({ onSuccess, isLoading = false }: GoogleLoginButtonProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const triggerGoogleLogin = () => {
+    const btn = containerRef.current?.querySelector('div[role="button"]') as HTMLElement | null;
+    btn?.click();
+  };
+
+  return (
+    <div className="mt-2">
+      {/* Hidden Google button – provides the real OAuth popup trigger */}
+      <div
+        ref={containerRef}
+        style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', opacity: 0 }}
+        aria-hidden="true"
+      >
+        <GoogleLogin
+          onSuccess={(credentialResponse) => {
+            if (credentialResponse.credential) {
+              onSuccess(credentialResponse.credential);
+            }
+          }}
+          onError={() => {
+            console.error('Google login failed or was cancelled');
+          }}
+          useOneTap={false}
+        />
+      </div>
+
+      {/* Visible custom-styled button */}
+      <button
+        type="button"
+        disabled={isLoading}
+        onClick={triggerGoogleLogin}
+        className={`flex w-full items-center justify-center gap-2 rounded-md bg-white py-2.5 text-sm font-bold uppercase text-black shadow transition ${
+          isLoading ? 'cursor-not-allowed opacity-70' : 'hover:bg-gray-100'
+        }`}
+      >
+        <FcGoogle size={20} />
+        {isLoading ? 'Đang xử lý...' : 'Đăng Nhập Bằng Google'}
+      </button>
+    </div>
+  );
+};
+
+

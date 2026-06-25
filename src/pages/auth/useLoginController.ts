@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
 import { getRoleFromAccessToken, isAdminRole } from '../../lib/auth';
 import type { AuthMode, AuthResponseData, PasswordResetStep, RegisterResponseData, RegisterStep } from './authTypes';
@@ -13,8 +13,13 @@ import {
 
 export const useLoginController = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [authMode, setAuthMode] = useState<AuthMode>(() => {
+    // Giá trị khởi tạo lần đầu dựa vào state của navigation
+    const state = location.state as { mode?: string } | null;
+    return state?.mode === 'register' ? 'register' : 'login';
+  });
   const [registerStep, setRegisterStep] = useState<RegisterStep>('form');
   const [passwordResetStep, setPasswordResetStep] = useState<PasswordResetStep>('request');
   const [fullName, setFullName] = useState('');
@@ -63,6 +68,18 @@ export const useLoginController = () => {
 
     return () => window.clearInterval(timer);
   }, [hasActiveOtpTimer]);
+
+  // Theo dõi location.state để xử lý navigate đến /login cùng route (không remount)
+  // Ví dụ: click "Đăng ký" từ header → {mode:'register'}, click "Đăng nhập" → {mode:'login'}
+  useEffect(() => {
+    const state = location.state as { mode?: string } | null;
+    if (state?.mode === 'register') {
+      setAuthMode('register');
+    } else if (state?.mode === 'login') {
+      setAuthMode('login');
+    }
+    // Nếu không có state, giữ nguyên mode hiện tại (user định tần có thể tự switch tab)
+  }, [location.state]);
 
   const generateCaptcha = () => {
     setCaptchaText(createCaptcha());
@@ -161,6 +178,38 @@ export const useLoginController = () => {
       }
 
       setError(apiError.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async (idToken: string) => {
+    resetFeedback();
+    setIsLoading(true);
+
+    try {
+      const response = unwrapApiResponse<AuthResponseData>(
+        await api.post('/api/auth/google-login', { idToken }),
+      );
+      const authData = response.data;
+      const token = authData?.accessToken || authData?.token;
+
+      if (!token) {
+        setError('Đăng nhập Google thành công nhưng backend không trả về access token.');
+        return;
+      }
+
+      localStorage.setItem('accessToken', token);
+      localStorage.removeItem('role');
+      localStorage.setItem('fullName', authData?.fullName || 'Người dùng');
+
+      if (authData?.refreshToken) {
+        localStorage.setItem('refreshToken', authData.refreshToken);
+      }
+
+      navigate(isAdminRole(getRoleFromAccessToken(token)) ? '/admin/dashboard' : '/');
+    } catch (err: unknown) {
+      setError(parseApiError(err).message);
     } finally {
       setIsLoading(false);
     }
@@ -431,6 +480,7 @@ export const useLoginController = () => {
     successMessage,
     verificationEmail,
     generateCaptcha,
+    handleGoogleLogin,
     handleResendOtp,
     handleResendPasswordResetOtp,
     handleSubmit,

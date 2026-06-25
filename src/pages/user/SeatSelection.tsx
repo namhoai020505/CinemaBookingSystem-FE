@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FaChair, FaCouch } from "react-icons/fa";
-import { FiCalendar, FiClock, FiFilm, FiMapPin, FiTag } from "react-icons/fi";
+import { FiArrowLeft, FiCalendar, FiClock, FiFilm, FiMapPin, FiTag } from "react-icons/fi";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../../lib/api";
 import {
@@ -470,6 +470,10 @@ export default function SeatSelection() {
     },
     [showtimeId, userKey],
   );
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -1022,6 +1026,10 @@ export default function SeatSelection() {
     return <FaChair className="h-4 w-4 sm:h-5 sm:w-5" />;
   };
 
+  const handleBack = () => {
+    navigate("/");
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#182437] text-white">
@@ -1048,6 +1056,14 @@ export default function SeatSelection() {
       <div className="mx-auto w-full max-w-[1660px]">
         <div className="mb-6 flex flex-col gap-3 border-b border-white/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
+            <button
+              type="button"
+              onClick={handleBack}
+              className="group mb-3.5 flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-white transition-all bg-white/5 hover:bg-white/10 px-3.5 py-1.5 rounded-lg border border-white/5 hover:border-white/15 cursor-pointer shadow-md w-fit"
+            >
+              <FiArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
+              Quay lại
+            </button>
             <p className="text-xs font-bold text-[#FFD166]">
               Trang chủ &gt; Đặt vé &gt; {displayMovieTitle}
             </p>

@@ -203,6 +203,33 @@ export default function Home() {
     fetchMovies();
   }, []);
 
+  // Save scroll position when user scrolls the Home page
+  useEffect(() => {
+    const handleScroll = () => {
+      sessionStorage.setItem("home-scroll-y", String(window.scrollY));
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  // Restore scroll position after movie cards have been loaded and rendered
+  useEffect(() => {
+    if (!loadingMovies) {
+      const savedScrollY = sessionStorage.getItem("home-scroll-y");
+      if (savedScrollY) {
+        const timer = setTimeout(() => {
+          window.scrollTo({
+            top: parseInt(savedScrollY, 10),
+            behavior: "instant" as ScrollBehavior,
+          });
+        }, 80);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [loadingMovies]);
+
   const carouselSlides = useMemo(() => {
     const lastSlide = mockHeroSlides[mockHeroSlides.length - 1];
     const firstSlide = mockHeroSlides[0];
@@ -420,7 +447,10 @@ export default function Home() {
                   key={movie.movieId || `${movie.title}-${index}`}
                   className="movie-card flex min-w-0 flex-col rounded-lg border border-transparent p-3 transition-colors"
                 >
-                  <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-[#0F172A] shadow-lg shadow-black/20">
+                  <div
+                    onClick={() => navigate(`/movie/${movie.movieId}/showtimes`)}
+                    className="relative aspect-[2/3] overflow-hidden rounded-lg bg-[#0F172A] shadow-lg shadow-black/20 cursor-pointer hover:opacity-90 hover:scale-[1.01] transition-all"
+                  >
                     {movie.posterUrl ? (
                       <img
                         src={movie.posterUrl}
@@ -460,7 +490,10 @@ export default function Home() {
                   <button
                     type="button"
                     disabled={!movie.movieId}
-                    onClick={() => handleBuyTicket(movie)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleBuyTicket(movie);
+                    }}
                     className="mt-5 h-10 w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] text-xs font-extrabold uppercase text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Mua vé
