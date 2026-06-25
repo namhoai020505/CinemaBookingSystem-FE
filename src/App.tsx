@@ -10,6 +10,8 @@ import RequireAuth from './components/RequireAuth';
 import ManageMovie from './pages/admin/ManageMovie';
 import ManageShowtime from './pages/admin/ManageShowtime';
 import ManageStaff from './pages/admin/ManageStaff';
+import ManageRooms from './pages/admin/ManageRooms';
+import ManageSeatLayout from './pages/admin/ManageSeatLayout';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import MovieShowtimes from './pages/user/MovieShowtimes';
 import SeatSelection from './pages/user/SeatSelection';
@@ -54,6 +56,8 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="showtime" element={<ManageShowtime />} />
             <Route path="staff" element={<ManageStaff />} />
+            <Route path="rooms" element={<ManageRooms />} />
+            <Route path="rooms/:roomId/seats" element={<ManageSeatLayout />} />
             {/* Nếu sau này có thêm trang quản lý phim, user... bạn cứ ném vào trong cụm này */}
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />

@@ -427,7 +427,6 @@ export default function SeatSelection() {
   const navigate = useNavigate();
   const location = useLocation();
   const routeState = location.state as RouteState | null;
-  const routeMovieId = routeState?.movie?.movieId;
   const routeMovieTitle = routeState?.movie?.title;
   const routeMovieGenre = routeState?.movie?.genre;
   const routeMovieDuration =

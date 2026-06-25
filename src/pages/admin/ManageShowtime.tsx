@@ -298,12 +298,8 @@ export default function ManageShowtime() {
     const rowElement = e.currentTarget as HTMLElement;
     const rect = rowElement.getBoundingClientRect();
 
-    // Lấy độ trượt ngang chính xác từ thẻ chứa scroll lớn
-    const scrollContainer = document.getElementById("timeline-scroll-wrapper");
-    const currentScrollLeft = scrollContainer ? scrollContainer.scrollLeft : 0;
-
     // Tính tọa độ vị trí thả chuột chuẩn xác 100%
-    const relativeX = (e.clientX - rect.left) + currentScrollLeft;
+    const relativeX = e.clientX - rect.left;
     const rawStartMinutes = Math.round(relativeX / MINUTE_WIDTH);
 
     const SNAP_INTERVAL = 15;
