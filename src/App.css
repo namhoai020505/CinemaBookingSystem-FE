@@ -1,3 +1,4 @@
+/* Style mẫu cho counter/demo component nếu còn được dùng ở các trang thử nghiệm. */
 .counter {
   font-size: 16px;
   padding: 5px 10px;
@@ -17,6 +18,7 @@
   }
 }
 
+/* Nhóm style hero demo cũ của Vite/React, hiện không phải giao diện chính của rạp. */
 .hero {
   position: relative;
 
@@ -56,6 +58,7 @@
   }
 }
 
+/* Căn giữa nội dung demo theo cột. */
 #center {
   display: flex;
   flex-direction: column;
@@ -70,6 +73,7 @@
   }
 }
 
+/* Khu vực next steps demo, giữ responsive cho màn nhỏ. */
 #next-steps {
   display: flex;
   border-top: 1px solid var(--border);
@@ -95,6 +99,7 @@
   }
 }
 
+/* Border tách khu docs trong layout demo. */
 #docs {
   border-right: 1px solid var(--border);
 
@@ -104,6 +109,7 @@
   }
 }
 
+/* Danh sách link social/docs demo. */
 #next-steps ul {
   list-style: none;
   padding: 0;
@@ -153,6 +159,7 @@
   }
 }
 
+/* Spacer demo dùng để tạo khoảng nghỉ cuối trang. */
 #spacer {
   height: 88px;
   border-top: 1px solid var(--border);
@@ -161,6 +168,7 @@
   }
 }
 
+/* Tạo mũi nhọn trang trí ở hai đầu thanh ticks demo. */
 .ticks {
   position: relative;
   width: 100%;

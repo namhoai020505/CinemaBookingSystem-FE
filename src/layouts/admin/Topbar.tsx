@@ -6,12 +6,14 @@ interface TopbarProps {
   onToggle: () => void;
 }
 
+// Topbar admin chứa nút thu gọn sidebar, thông tin admin và nút logout.
 const Topbar = ({ onToggle }: TopbarProps) => {
   const navigate = useNavigate();
 
   // Lấy tên thật từ localStorage, nếu không có thì để mặc định là 'Quản trị viên'
   const fullName = localStorage.getItem('fullName') || 'Quản trị viên';
 
+  // Logout qua backend rồi đưa admin về trang chủ.
   const handleLogout = async () => {
     await logout();
     navigate('/');
@@ -34,7 +36,7 @@ const Topbar = ({ onToggle }: TopbarProps) => {
         zIndex: 50,
       }}
     >
-      {/* Hamburger toggle (visible on all sizes as a secondary trigger) */}
+      {/* Nút hamburger để đóng/mở sidebar. */}
       <button
         onClick={onToggle}
         title="Toggle sidebar"
@@ -68,12 +70,12 @@ const Topbar = ({ onToggle }: TopbarProps) => {
         </svg>
       </button>
 
-      {/* Breadcrumb / page title placeholder */}
+      {/* Khoảng trống dành cho breadcrumb hoặc title nếu cần mở rộng sau này. */}
       <div style={{ flex: 1 }} />
 
-      {/* Right section */}
+      {/* Cụm action bên phải: thông báo, thông tin user, logout. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        {/* Notification bell */}
+        {/* Nút chuông thông báo, hiện tại là UI placeholder. */}
         <button
           style={{
             width: '36px',
@@ -116,10 +118,10 @@ const Topbar = ({ onToggle }: TopbarProps) => {
           />
         </button>
 
-        {/* Divider */}
+        {/* Đường phân cách giữa notification và user info. */}
         <div style={{ width: '1px', height: '24px', background: '#e2e8f0' }} />
 
-        {/* User info */}
+        {/* Link profile của admin đang đăng nhập. */}
         <Link
           to="/profile"
           style={{
@@ -163,7 +165,7 @@ const Topbar = ({ onToggle }: TopbarProps) => {
           </div>
         </Link>
 
-        {/* Logout button */}
+        {/* Nút đăng xuất phiên admin. */}
         <button
           onClick={handleLogout}
           style={{

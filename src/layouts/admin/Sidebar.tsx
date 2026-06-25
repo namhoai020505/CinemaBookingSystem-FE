@@ -5,6 +5,7 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
+// Danh sách item menu admin, mỗi item gồm URL, nhãn hiển thị và icon SVG.
 const navItems = [
   {
     to: '/admin/dashboard',
@@ -85,6 +86,7 @@ const navItems = [
   },
 ];
 
+// Sidebar admin hiển thị navigation, highlight route hiện tại và hỗ trợ chế độ thu gọn.
 const Sidebar = ({ collapsed }: SidebarProps) => {
   const location = useLocation();
 
@@ -104,7 +106,7 @@ const Sidebar = ({ collapsed }: SidebarProps) => {
         flexShrink: 0,
       }}
     >
-      {/* Logo / Brand */}
+      {/* Khối thương hiệu ở đầu sidebar. */}
       <div
         style={{
           height: '64px',
@@ -117,7 +119,7 @@ const Sidebar = ({ collapsed }: SidebarProps) => {
           transition: 'padding 0.3s',
         }}
       >
-        {/* Cinema icon */}
+        {/* Icon phim đại diện cho khu admin. */}
         <div
           style={{
             width: '36px',
@@ -148,7 +150,7 @@ const Sidebar = ({ collapsed }: SidebarProps) => {
 
       </div>
 
-      {/* Navigation */}
+      {/* Danh sách navigation chính của admin. */}
       <nav style={{ flex: 1, padding: '16px 8px', overflowY: 'auto', overflowX: 'hidden' }}>
         {!collapsed && (
           <div
@@ -204,7 +206,7 @@ const Sidebar = ({ collapsed }: SidebarProps) => {
                 }
               }}
             >
-              {/* Active left indicator bar */}
+              {/* Vạch trái giúp admin nhận biết menu đang active. */}
               {isActive && (
                 <div
                   style={{
@@ -246,7 +248,7 @@ const Sidebar = ({ collapsed }: SidebarProps) => {
         })}
       </nav>
 
-      {/* Bottom user section */}
+      {/* Khu thông tin user admin ở cuối sidebar. */}
       <div
         style={{
           padding: collapsed ? '12px 8px' : '12px',

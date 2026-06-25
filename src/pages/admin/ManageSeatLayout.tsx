@@ -13,6 +13,7 @@ const SEAT_TYPES = [
   { id: 'SEAT_TYPE_SWEETBOX', label: 'Sweetbox', color: '#EC4899', hoverColor: '#F472B6', selectedBorder: '#F9A8D4' },
 ] as const;
 
+// Lấy cấu hình màu/label của từng loại ghế để dùng lại ở grid và legend.
 const getSeatColor = (seatTypeId: string) => {
   const found = SEAT_TYPES.find((t) => t.id === seatTypeId);
   return found ?? SEAT_TYPES[0];
@@ -21,6 +22,7 @@ const getSeatColor = (seatTypeId: string) => {
 // ============================================================
 // Component
 // ============================================================
+// Trang cấu hình sơ đồ ghế cho một phòng chiếu cụ thể.
 export default function ManageSeatLayout() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -45,6 +47,7 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Data fetching
   // ──────────────────────────────────────────
+  // Tải thông tin phòng và danh sách ghế hiện tại của phòng.
   const fetchData = useCallback(async () => {
     if (!roomId) return;
     try {
@@ -63,6 +66,7 @@ export default function ManageSeatLayout() {
     }
   }, [roomId]);
 
+  // Gọi fetchData khi roomId thay đổi để luôn hiển thị đúng phòng đang quản lý.
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
@@ -70,6 +74,7 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Seat grid grouping
   // ──────────────────────────────────────────
+  // Gom danh sách ghế phẳng thành từng hàng để render giống sơ đồ phòng chiếu.
   const seatGrid = (() => {
     const rowMap = new Map<string, SeatResponse[]>();
     for (const seat of seats) {
@@ -86,11 +91,13 @@ export default function ManageSeatLayout() {
     return sortedRows;
   })();
 
+  // Số cột lớn nhất giúp căn chỉnh header/grid ngay cả khi các hàng không đều nhau.
   const maxCols = seatGrid.reduce((max, [, rowSeats]) => Math.max(max, rowSeats.length), 0);
 
   // ──────────────────────────────────────────
   // Selection handlers
   // ──────────────────────────────────────────
+  // Chọn hoặc bỏ chọn một ghế trong grid để thao tác hàng loạt.
   const toggleSeat = (seatId: string) => {
     setSelectedSeatIds((prev) => {
       const next = new Set(prev);
@@ -103,6 +110,7 @@ export default function ManageSeatLayout() {
     });
   };
 
+  // Chọn/bỏ chọn toàn bộ ghế trong một hàng.
   const toggleRow = (rowLabel: string) => {
     const rowSeats = seats.filter((s) => s.rowLabel === rowLabel);
     const allSelected = rowSeats.every((s) => selectedSeatIds.has(s.seatId));
@@ -119,6 +127,7 @@ export default function ManageSeatLayout() {
     });
   };
 
+  // Toggle chọn toàn bộ ghế trong phòng.
   const selectAll = () => {
     if (selectedSeatIds.size === seats.length) {
       setSelectedSeatIds(new Set());
@@ -127,11 +136,13 @@ export default function ManageSeatLayout() {
     }
   };
 
+  // Xóa toàn bộ lựa chọn hiện tại.
   const clearSelection = () => setSelectedSeatIds(new Set());
 
   // ──────────────────────────────────────────
   // Auto generate seats
   // ──────────────────────────────────────────
+  // Sinh lại sơ đồ ghế theo số hàng/cột/type admin nhập.
   const handleGenerateSeats = async () => {
     if (!roomId) return;
 
@@ -218,6 +229,7 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Batch operations
   // ──────────────────────────────────────────
+  // Đổi loại ghế cho toàn bộ ghế đang được chọn.
   const handleBatchChangeType = async () => {
     if (selectedSeatIds.size === 0) {
       toast.error('Vui lòng chọn ít nhất 1 ghế!');
@@ -249,6 +261,7 @@ export default function ManageSeatLayout() {
 
   // Backend DELETE /api/seats/{seatId} = soft-delete (set isActive = false)
   // There is no "reactivate" endpoint, so we only support deactivation.
+  // Vô hiệu hóa các ghế đã chọn để không hiển thị cho khách hàng.
   const handleBatchDeactivate = async () => {
     if (selectedSeatIds.size === 0) {
       toast.error('Vui lòng chọn ít nhất 1 ghế!');
@@ -295,6 +308,7 @@ export default function ManageSeatLayout() {
     }
   };
 
+  // Xóa mềm các ghế đã chọn; backend vẫn có thể chặn nếu ghế đang liên quan suất chiếu.
   const handleBatchDelete = async () => {
     if (selectedSeatIds.size === 0) {
       toast.error('Vui lòng chọn ít nhất 1 ghế!');
@@ -343,6 +357,7 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Stats
   // ──────────────────────────────────────────
+  // Tính nhanh số lượng từng loại ghế để hiển thị các card thống kê.
   const seatStats = (() => {
     const stats = { total: seats.length, normal: 0, vip: 0, sweetbox: 0, inactive: 0 };
     for (const s of seats) {

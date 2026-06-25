@@ -20,6 +20,7 @@ type ApiResponse<T> = {
   data?: T | null;
 };
 
+// Lấy HTTP status từ lỗi Axios mà không cần ép kiểu any.
 const getHttpStatus = (error: unknown) =>
   typeof error === "object" &&
   error !== null &&
@@ -150,6 +151,7 @@ type SeatLockSession = {
   updatedAt: string;
 };
 
+// Parse lockedUntil từ backend/localStorage về timestamp để tính thời gian giữ ghế.
 const parseLockTime = (value?: string | null) => {
   if (!value) {
     return 0;
@@ -163,9 +165,11 @@ const parseLockTime = (value?: string | null) => {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+// Kiểm tra lock còn hiệu lực hay đã hết hạn.
 const isActiveLock = (lockedUntil?: string | null) =>
   parseLockTime(lockedUntil) > Date.now();
 
+// Map mã loại ghế backend sang type UI của FE.
 const getSeatType = (seatTypeId: string): SeatType => {
   if (seatTypeId === "ST02" || seatTypeId === "SEAT_TYPE_VIP") {
     return "VIP";
@@ -178,6 +182,7 @@ const getSeatType = (seatTypeId: string): SeatType => {
   return "NORMAL";
 };
 
+// Giá fallback nếu backend chưa trả price cho ghế.
 const getSeatPrice = (type: SeatType) => {
   if (type === "VIP") {
     return 100000;
@@ -190,14 +195,17 @@ const getSeatPrice = (type: SeatType) => {
   return 80000;
 };
 
+// Key localStorage tách theo user + showtime để mỗi tài khoản có lock session riêng.
 const getStorageKey = (showtimeId: string, userKey: string) =>
   `g2c-seat-locks:${userKey}:${showtimeId}`;
 
+// Lấy định danh user từ JWT để phân biệt ghế user hiện tại đang giữ.
 const getUserKey = () => {
   const profile = getCurrentUserProfile();
   return profile?.userId || profile?.email || "anonymous";
 };
 
+// Đọc lock session và tự dọn các ghế đã hết hạn khỏi localStorage.
 const readLockSession = (
   showtimeId: string,
   userKey: string,
@@ -242,6 +250,7 @@ const readLockSession = (
   }
 };
 
+// Ghi lock session mới sau khi chọn/khóa/bỏ khóa ghế.
 const writeLockSession = (session: SeatLockSession) => {
   localStorage.setItem(
     getStorageKey(session.showtimeId, session.userKey),
@@ -252,10 +261,12 @@ const writeLockSession = (session: SeatLockSession) => {
   );
 };
 
+// Xóa toàn bộ lock session của user cho suất chiếu hiện tại.
 const removeLockSession = (showtimeId: string, userKey: string) => {
   localStorage.removeItem(getStorageKey(showtimeId, userKey));
 };
 
+// Tính thời gian còn lại dựa trên lock hết hạn sớm nhất trong session.
 const getSessionRemainingSeconds = (session: SeatLockSession | null) => {
   if (!session) {
     return DEFAULT_LOCK_SECONDS;
@@ -280,6 +291,7 @@ const getSessionRemainingSeconds = (session: SeatLockSession | null) => {
   return Math.max(0, Math.ceil((earliestExpiry - Date.now()) / 1000));
 };
 
+// Chuyển SeatItem đang chọn sang dạng lưu localStorage.
 const toStoredLockedSeat = (
   seat: SeatItem,
   lockedUntil: string,
@@ -294,11 +306,13 @@ const toStoredLockedSeat = (
   lockedUntil,
 });
 
+// Sắp xếp hàng ghế theo thứ tự tự nhiên A, B, C hoặc số nếu có.
 const sortSeatRows = (rows: string[]) =>
   [...rows].sort((left, right) =>
     left.localeCompare(right, undefined, { numeric: true }),
   );
 
+// Suy luận loại ghế theo vị trí hàng khi backend thiếu loại ghế chi tiết.
 const buildSeatRowTypeMap = (rows: string[]): Record<string, SeatType> => {
   const orderedRows = sortSeatRows(rows);
   const lastRowIndex = orderedRows.length - 1;
@@ -318,6 +332,7 @@ const buildSeatRowTypeMap = (rows: string[]): Record<string, SeatType> => {
   }, {});
 };
 
+// Map từng ghế từ API sang model render và nhận diện ghế do chính user giữ.
 const mapSeat = (
   item: SeatMapItemResponse,
   status: SeatStatus,
@@ -343,6 +358,7 @@ const mapSeat = (
   };
 };
 
+// Format giây thành mm:ss cho bộ đếm giữ ghế.
 const formatTimer = (seconds: number) => {
   const safeSeconds = Math.max(0, seconds);
   const mins = Math.floor(safeSeconds / 60);
@@ -352,9 +368,11 @@ const formatTimer = (seconds: number) => {
     .padStart(2, "0")}`;
 };
 
+// Chỉ ghế trống hoặc ghế user đang giữ mới được click chọn/bỏ chọn.
 const isSelectableSeat = (seat: SeatItem) =>
   seat.status === "AVAILABLE" || seat.status === "LOCKED_BY_ME";
 
+// Format giá ngắn trong legend ghế, ví dụ 80k.
 const formatCompactPrice = (value?: number | null) => {
   if (!value) {
     return "";
@@ -363,9 +381,11 @@ const formatCompactPrice = (value?: number | null) => {
   return ` (${Math.round(value / 1000)}k)`;
 };
 
+// Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("vi-VN").format(value) + "đ";
 
+// Format thời gian chiếu để hiển thị ở sidebar thông tin phim.
 const formatDateTime = (value?: string | null) => {
   if (!value) {
     return "Đang cập nhật";
@@ -390,6 +410,7 @@ const formatDateTime = (value?: string | null) => {
       });
 };
 
+// Chuyển poster path tương đối thành URL đầy đủ.
 const resolvePosterUrl = (value?: string | null) => {
   const posterUrl = value?.trim();
   if (!posterUrl) {
@@ -407,6 +428,7 @@ const resolvePosterUrl = (value?: string | null) => {
   return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
 };
 
+// Label tiếng Việt cho từng loại ghế.
 const getSeatTypeLabel = (type: SeatType) => {
   if (type === "VIP") {
     return "Ghế VIP";
@@ -419,9 +441,11 @@ const getSeatTypeLabel = (type: SeatType) => {
   return "Ghế thường";
 };
 
+// Ưu tiên seatCode từ backend, fallback về row + column.
 const getSeatDisplayName = (seat: SeatItem) =>
   seat.seatCode || `${seat.row}${seat.column}`;
 
+// Trang chọn ghế: tải sơ đồ ghế, giữ ghế tạm thời và chuyển sang checkout.
 export default function SeatSelection() {
   const { showtimeId = "" } = useParams();
   const navigate = useNavigate();
@@ -451,6 +475,7 @@ export default function SeatSelection() {
   const [displayDetails, setDisplayDetails] =
     useState<ShowtimeDisplayDetails | null>(null);
 
+  // Đồng bộ danh sách ghế đang chọn vào lock session đã có.
   const persistSelectedLockedSeats = useCallback(
     (nextSelectedSeats: SeatItem[]) => {
       const session = readLockSession(showtimeId, userKey);
@@ -471,10 +496,12 @@ export default function SeatSelection() {
     [showtimeId, userKey],
   );
 
+  // Luôn đưa user lên đầu trang khi vào màn chọn ghế.
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
+  // Tải thông tin phim/suất chiếu phụ trợ để sidebar không bị "Đang cập nhật".
   useEffect(() => {
     let isMounted = true;
 
@@ -546,6 +573,7 @@ export default function SeatSelection() {
     };
   }, [showtimeId]);
 
+  // Tải sơ đồ ghế mới nhất, merge với lock session local để biết ghế nào do chính user giữ.
   const refreshSeatMap = useCallback(async () => {
     if (!showtimeId) {
       return;
@@ -664,6 +692,7 @@ export default function SeatSelection() {
     location.pathname,
   ]);
 
+  // Gọi refreshSeatMap sau khi component mount.
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       void refreshSeatMap();
@@ -672,6 +701,7 @@ export default function SeatSelection() {
     return () => window.clearTimeout(timeoutId);
   }, [refreshSeatMap]);
 
+  // Bộ đếm giữ ghế chạy theo lockedUntil thực tế nên refresh trang không reset thời gian.
   useEffect(() => {
     const timer = window.setInterval(() => {
       const session = readLockSession(showtimeId, userKey);
@@ -707,6 +737,7 @@ export default function SeatSelection() {
     return () => window.clearInterval(timer);
   }, [refreshSeatMap, showtimeId, userKey]);
 
+  // Chặn lựa chọn tạo ra một ghế trống kẹt giữa hai ghế đã chọn/đã bán.
   const validateSeatGaps = (currentSelection: SeatItem[]) => {
     if (!seatMap) {
       return true;
@@ -761,6 +792,7 @@ export default function SeatSelection() {
     return true;
   };
 
+  // Gọi API unlock để user có thể bỏ ghế cũ rồi chọn ghế khác.
   const releaseLockedSeat = async (seat: SeatItem) => {
     setUnlockingSeatId(seat.seatId);
 
@@ -821,6 +853,7 @@ export default function SeatSelection() {
     }
   };
 
+  // Xử lý click ghế: chọn mới, bỏ chọn, hoặc unlock nếu ghế đang do user giữ.
   const handleSelectSeat = async (seat: SeatItem) => {
     if (unlockingSeatId || !isSelectableSeat(seat)) {
       return;
@@ -849,6 +882,7 @@ export default function SeatSelection() {
   const totalAmount = selectedSeats.reduce((sum, seat) => sum + seat.price, 0);
   const selectedSeatCodes = selectedSeats.map(getSeatDisplayName);
 
+  // Lock toàn bộ ghế đã chọn rồi chuyển sang trang checkout/F&B.
   const handleProceed = async () => {
     if (selectedSeats.length === 0) {
       alert("Vui lòng chọn ít nhất một ghế.");
@@ -947,6 +981,7 @@ export default function SeatSelection() {
     }
   };
 
+  // Tính giá thấp nhất của từng loại ghế để hiển thị trong legend.
   const seatTypePrices = useMemo(() => {
     const prices: Partial<Record<SeatType, number>> = {};
 
@@ -985,6 +1020,7 @@ export default function SeatSelection() {
   const displayStartTime =
     seatMap?.startTime || routeStartTime || displayDetails?.startTime;
 
+  // Chọn class màu cho ghế theo trạng thái và loại ghế.
   const getSeatStyles = (seat: SeatItem) => {
     const isChoosing = selectedSeats.some((item) => item.seatId === seat.seatId);
 
@@ -1014,6 +1050,7 @@ export default function SeatSelection() {
     }
   };
 
+  // Render icon ghế đơn/ghế đôi theo loại ghế.
   const renderSeatIcon = (seat: SeatItem) => {
     if (seat.type === "SWEETBOX") {
       return <FaCouch className="h-5 w-10 sm:h-6 sm:w-12" />;
@@ -1026,6 +1063,7 @@ export default function SeatSelection() {
     return <FaChair className="h-4 w-4 sm:h-5 sm:w-5" />;
   };
 
+  // Quay lại trang chủ từ màn chọn ghế.
   const handleBack = () => {
     navigate("/");
   };

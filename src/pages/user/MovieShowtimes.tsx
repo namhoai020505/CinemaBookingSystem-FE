@@ -101,8 +101,10 @@ const weekdays = [
   "Thứ Bảy",
 ];
 
+// Lấy yyyy-MM-dd từ startTime ISO để gom suất chiếu theo ngày.
 const getDateKey = (value: string) => value.split("T")[0] || "";
 
+// Tạo key ngày hôm nay theo timezone trình duyệt.
 const getTodayKey = () => {
   const today = new Date();
   const year = today.getFullYear();
@@ -111,6 +113,7 @@ const getTodayKey = () => {
   return `${year}-${month}-${date}`;
 };
 
+// Chuyển chuỗi ngày thành dữ liệu hiển thị cho tab chọn ngày.
 const buildDayTab = (dateValue: string): DayTab => {
   const [, month, date] = dateValue.split("-");
   const dateObject = new Date(`${dateValue}T00:00:00`);
@@ -126,6 +129,7 @@ const buildDayTab = (dateValue: string): DayTab => {
   };
 };
 
+// Format ISO datetime thành HH:mm cho nút suất chiếu.
 const formatISOToShortTime = (value: string) => {
   if (!value) {
     return "";
@@ -138,11 +142,14 @@ const formatISOToShortTime = (value: string) => {
   return timePart?.substring(0, 5) || "";
 };
 
+// Format số tiền theo chuẩn Việt Nam.
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("vi-VN").format(value);
 
+// Chuẩn hóa id từ route param để so sánh chắc chắn với dữ liệu API.
 const normalizeMovieId = (value: string | undefined) => String(value || "");
 
+// Tính số ghế available/locked/sold từ seat map của một suất chiếu.
 const getAvailability = (seatMap: SeatMapResponse): SeatAvailability => {
   const available = seatMap.availableSeats?.length ?? 0;
   const locked = seatMap.lockedSeats?.length ?? 0;
@@ -156,6 +163,7 @@ const getAvailability = (seatMap: SeatMapResponse): SeatAvailability => {
   };
 };
 
+// Map movie detail từ backend sang dữ liệu header/aside của trang.
 const mapMovieDetailToInfo = (
   movieId: string,
   movie?: MovieDetailResponse | null,
@@ -173,6 +181,7 @@ const mapMovieDetailToInfo = (
   trailerUrl: movie?.trailerUrl || undefined,
 });
 
+// Gom suất chiếu theo cụm rạp và phòng chiếu để render danh sách rõ ràng.
 const groupShowtimesByCinema = (
   showtimes: ShowtimeSlot[],
   selectedDate: string,
@@ -227,6 +236,7 @@ const groupShowtimesByCinema = (
   }));
 };
 
+// Chuyển URL YouTube thường sang embed URL dùng trong modal trailer.
 const getYoutubeEmbedUrl = (url?: string) => {
   if (!url) return "";
   let videoId = "";
@@ -240,6 +250,7 @@ const getYoutubeEmbedUrl = (url?: string) => {
   return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
 };
 
+// Trang lịch chiếu của một phim, cho phép chọn ngày và đi tới chọn ghế.
 export default function MovieShowtimes() {
   const { movieId } = useParams();
   const navigate = useNavigate();
@@ -250,10 +261,12 @@ export default function MovieShowtimes() {
   const [errorMessage, setErrorMessage] = useState("");
   const [showTrailerModal, setShowTrailerModal] = useState(false);
 
+  // Khi đổi phim trên URL, reset trạng thái để tránh hiển thị data phim cũ.
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
+  // Tải movie detail, danh sách showtimes và số ghế còn lại cho từng suất.
   useEffect(() => {
     let isMounted = true;
 
@@ -359,6 +372,7 @@ export default function MovieShowtimes() {
     };
   }, [movieId]);
 
+  // Tạo danh sách ngày có suất chiếu, nếu chưa có thì vẫn có ngày hôm nay.
   const daysFilter = useMemo(() => {
     const dateValues = Array.from(
       new Set(showtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean)),
@@ -374,21 +388,25 @@ export default function MovieShowtimes() {
     ? selectedDateFromUrl
     : daysFilter[0]?.dateValue || "";
 
+  // Đồng bộ ngày đang chọn lên query string để reload/back vẫn giữ tab ngày.
   useEffect(() => {
     if (!loading && currentSelectedDate && selectedDateFromUrl !== currentSelectedDate) {
       setSearchParams({ date: currentSelectedDate }, { replace: true });
     }
   }, [currentSelectedDate, loading, selectedDateFromUrl, setSearchParams]);
 
+  // Lọc showtimes theo ngày đang chọn rồi group theo rạp/phòng.
   const groupedCinemas = useMemo(
     () => groupShowtimesByCinema(showtimes, currentSelectedDate),
     [currentSelectedDate, showtimes],
   );
 
+  // Cập nhật tab ngày và query string khi user chọn ngày khác.
   const handleDateChange = (dateValue: string) => {
     setSearchParams({ date: dateValue });
   };
 
+  // Điều hướng sang trang chọn ghế, truyền kèm movie/showtime để tránh màn loading thiếu dữ liệu.
   const handleSelectShowtime = (slot: ShowtimeSlot) => {
     navigate(`/booking/seats/${slot.showtimeId}`, {
       state: {

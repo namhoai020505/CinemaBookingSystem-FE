@@ -13,6 +13,7 @@ type RefreshTokenResponse = {
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
 
+// Axios client chính: mọi service FE dùng instance này để tự có baseURL và JSON header.
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'https://localhost:7122',
   headers: {
@@ -20,6 +21,7 @@ const api = axios.create({
   },
 });
 
+// Client riêng cho refresh token để tránh interceptor chính tự gọi lặp vô hạn khi 401.
 const refreshClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'https://localhost:7122',
   headers: {
@@ -27,6 +29,7 @@ const refreshClient = axios.create({
   },
 });
 
+// Trước mỗi request, tự gắn access token vào header trừ các endpoint auth.
 api.interceptors.request.use(
   (config) => {
     const token = getAccessToken();
@@ -42,6 +45,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
+// Sau mỗi response, unwrap response.data và thử refresh token một lần khi gặp 401.
 api.interceptors.response.use(
   (response) => response.data,
   async (error) => {
@@ -66,6 +70,7 @@ api.interceptors.response.use(
           const nextAccessToken = authData?.accessToken || authData?.token;
 
           if (nextAccessToken) {
+            // Lưu token mới để các request sau tiếp tục dùng phiên đăng nhập hiện tại.
             localStorage.setItem('accessToken', nextAccessToken);
 
             if (authData?.refreshToken) {

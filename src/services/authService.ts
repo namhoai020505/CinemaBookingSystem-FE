@@ -12,6 +12,7 @@ type ApiResponse<T> = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
+// Gọi API logout nếu có refreshToken, sau đó luôn xóa session local ở FE.
 export const logout = async () => {
   const refreshToken = getRefreshToken();
 
@@ -24,6 +25,7 @@ export const logout = async () => {
   }
 };
 
+// Xác minh lại với backend rằng JWT hiện tại thật sự thuộc admin.
 export const verifyAdminSession = async () => {
   const response = (await api.get('/api/auth-test/admin')) as unknown;
 

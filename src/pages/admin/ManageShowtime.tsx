@@ -72,6 +72,7 @@ for (let i = TIMELINE_START_HOUR; i <= TIMELINE_END_HOUR; i++) {
 // =================================================================
 
 /** Tính số phút tính từ 08:00 dựa trên ISO string */
+// Quy đổi startTime ISO thành vị trí phút trên timeline bắt đầu từ 08:00.
 const isoToMinutesFrom8AM = (isoString: string): number => {
   const date = new Date(isoString);
   const hours = date.getHours();
@@ -80,6 +81,7 @@ const isoToMinutesFrom8AM = (isoString: string): number => {
 };
 
 /** Lấy "HH:mm" ngắn từ ISO string */
+// Rút gọn ISO datetime thành HH:mm để hiển thị trong slot và thông báo lỗi.
 const getShortTimeFromISO = (isoString: string): string => {
   if (!isoString) return "";
   const date = new Date(isoString);
@@ -87,11 +89,13 @@ const getShortTimeFromISO = (isoString: string): string => {
 };
 
 /** Tính số phút chênh lệch giữa 2 ISO datetime */
+// Tính thời lượng suất chiếu theo phút từ start/end ISO.
 const diffMinutes = (startISO: string, endISO: string): number => {
   return Math.round((new Date(endISO).getTime() - new Date(startISO).getTime()) / 60000);
 };
 
 /** Format ngày "yyyy-MM-dd" */
+// Format Date thành yyyy-MM-dd để dùng cho input type="date" và filter theo ngày.
 const formatDateToYMD = (date: Date): string => {
   const y = date.getFullYear();
   const m = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -100,6 +104,7 @@ const formatDateToYMD = (date: Date): string => {
 };
 
 /** Tạo ISO datetime từ ngày đã chọn + số phút tính từ 08:00 */
+// Quy đổi vị trí kéo-thả trên timeline thành startTime ISO gửi về backend.
 const minutesFrom8AMToISO = (selectedDate: string, minutesFrom8AM: number): string => {
   const totalMinutes = TIMELINE_START_HOUR * 60 + minutesFrom8AM;
   const hours = Math.floor(totalMinutes / 60);
@@ -110,6 +115,7 @@ const minutesFrom8AMToISO = (selectedDate: string, minutesFrom8AM: number): stri
 /** Map màu sắc cho phim dựa trên movieId → stable color */
 const movieColorMap = new Map<string, string>();
 let colorIndex = 0;
+// Gán màu ổn định cho từng phim để cùng một phim luôn có màu giống nhau trên timeline.
 const getMovieColor = (movieId: string): string => {
   if (!movieColorMap.has(movieId)) {
     movieColorMap.set(movieId, MOVIE_COLORS[colorIndex % MOVIE_COLORS.length]);
@@ -121,6 +127,7 @@ const getMovieColor = (movieId: string): string => {
 // =================================================================
 // 💡 COMPONENT CHÍNH
 // =================================================================
+// Trang xếp lịch chiếu bằng thao tác kéo phim vào timeline phòng chiếu.
 export default function ManageShowtime() {
   // ---------- State: Data từ API ----------
   const [cinemas, setCinemas] = useState<CinemaResponse[]>([]);
@@ -146,11 +153,13 @@ export default function ManageShowtime() {
   } | null>(null);
 
   // ---------- Computed: Phòng chiếu lọc theo rạp đã chọn ----------
+  // Chỉ hiển thị phòng đang ACTIVE thuộc rạp được chọn.
   const filteredRooms = rooms.filter(
     (r) => r.cinemaId === selectedCinemaId && r.roomStatus === "ACTIVE"
   );
 
   // ---------- Computed: Danh sách phim chờ (sidebar) ----------
+  // Chuẩn hóa danh sách phim sang dạng card ở sidebar để kéo vào timeline.
   const unscheduledMovies: UnscheduledMovie[] = movies.map((m) => ({
     movieId: m.id,
     movieNameVn: m.movieNameVn,
@@ -163,6 +172,7 @@ export default function ManageShowtime() {
   // 💡 FETCH DATA TỪ API
   // =================================================================
 
+  // Tải danh sách rạp active và tự chọn rạp đầu tiên nếu chưa có filter.
   const fetchCinemas = useCallback(async () => {
     try {
       const data = await showtimeService.getCinemas();
@@ -177,6 +187,7 @@ export default function ManageShowtime() {
     }
   }, [selectedCinemaId]);
 
+  // Tải danh sách phòng để lọc theo rạp và render từng dòng timeline.
   const fetchRooms = useCallback(async () => {
     try {
       const data = await showtimeService.getRooms();
@@ -187,6 +198,7 @@ export default function ManageShowtime() {
     }
   }, []);
 
+  // Tải danh sách phim có thể xếp lịch.
   const fetchMovies = useCallback(async () => {
     try {
       const data = await showtimeService.getMoviesForScheduling();
@@ -197,6 +209,7 @@ export default function ManageShowtime() {
     }
   }, []);
 
+  // Tải toàn bộ suất chiếu rồi filter client-side theo rạp/ngày.
   const fetchShowtimes = useCallback(async () => {
     try {
       const data = await showtimeService.getShowtimes();
@@ -208,6 +221,7 @@ export default function ManageShowtime() {
   }, []);
 
   /** Fetch toàn bộ data ban đầu */
+  // Load dữ liệu nền khi mở trang để timeline có đủ rạp, phòng, phim và lịch chiếu.
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -226,6 +240,7 @@ export default function ManageShowtime() {
   // =================================================================
   // 💡 BUILD SCHEDULE TỪ SHOWTIMES + FILTERS
   // =================================================================
+  // Build lại schedule mỗi khi danh sách suất chiếu hoặc bộ lọc thay đổi.
   useEffect(() => {
     if (filteredRooms.length === 0) {
       setSchedule({});
@@ -280,17 +295,20 @@ export default function ManageShowtime() {
   // 💡 DRAG & DROP HANDLERS
   // =================================================================
 
+  // Bắt đầu kéo một phim chưa xếp lịch từ sidebar.
   const handleDragStartFromSidebar = (movie: UnscheduledMovie) => {
     isToastActive.current = false;
     setDraggingMovie({ ...movie, isNew: true });
   };
 
+  // Bắt đầu kéo một slot đã có để di chuyển sang thời gian/phòng khác.
   const handleDragStartFromTimeline = (roomShowtime: ShowtimeSlot, roomId: string) => {
     isToastActive.current = false;
     setDraggingMovie({ ...roomShowtime, isNew: false, originalRoomId: roomId });
   };
 
   // --- HÀM THẢ CHUỘT CHUẨN HÓA + GỌI API ---
+  // Thả phim/slot vào một dòng phòng, tính giờ bắt đầu, check overlap rồi gọi API lưu.
   const handleDropOnRow = async (e: React.DragEvent<HTMLDivElement>, roomId: string) => {
     e.preventDefault();
     if (!draggingMovie) return;
@@ -400,6 +418,7 @@ export default function ManageShowtime() {
     setDraggingMovie(null);
   };
 
+  // Mở modal xác nhận xóa cho một suất chiếu cụ thể.
   const handleDeleteShowtime = (roomId: string, slotId: string) => {
     const slot = schedule[roomId]?.find((s) => s.id === slotId);
     if (!slot) return;
@@ -419,6 +438,7 @@ export default function ManageShowtime() {
     });
   };
 
+  // Gọi API xóa suất chiếu sau khi admin xác nhận trong modal.
   const confirmDeleteShowtime = async () => {
     if (!deleteConfirm) return;
     const { slotId } = deleteConfirm;
@@ -450,10 +470,12 @@ export default function ManageShowtime() {
   // 💡 EVENT HANDLERS CHO BỘ LỌC
   // =================================================================
 
+  // Đổi rạp đang xem, schedule sẽ tự build lại theo selectedCinemaId.
   const handleCinemaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedCinemaId(e.target.value);
   };
 
+  // Đổi ngày đang xem lịch chiếu.
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSelectedDate(e.target.value);
   };

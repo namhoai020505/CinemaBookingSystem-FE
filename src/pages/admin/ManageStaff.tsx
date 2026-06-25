@@ -7,6 +7,7 @@ type ParsedApiError = {
   errorCode?: string;
 };
 
+// Map mã lỗi backend sang thông báo dễ hiểu cho admin khi mời staff.
 const staffErrorMessages: Record<string, string> = {
   DUPLICATE_EMAIL: 'Email này đã tồn tại trong hệ thống.',
   CINEMA_NOT_FOUND: 'Chưa có rạp trong hệ thống. Vui lòng seed dữ liệu rạp trước.',
@@ -15,9 +16,11 @@ const staffErrorMessages: Record<string, string> = {
   VALIDATION_ERROR: 'Email hoặc tên nhân viên chưa hợp lệ.',
 };
 
+// Type guard giúp đọc object lỗi từ Axios mà vẫn giữ type-safe.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
+// Chuẩn hóa lỗi từ API create staff thành message để hiển thị và toast.
 const parseApiError = (error: unknown): ParsedApiError => {
   if (!isRecord(error)) {
     return { message: 'Đã xảy ra lỗi không xác định.' };
@@ -47,6 +50,7 @@ const parseApiError = (error: unknown): ParsedApiError => {
   return { message: 'Đã xảy ra lỗi không xác định.' };
 };
 
+// Trang admin mời user trở thành staff qua email.
 export default function ManageStaff() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
@@ -54,10 +58,12 @@ export default function ManageStaff() {
   const [error, setError] = useState('');
   const [invitation, setInvitation] = useState<StaffInvitationData | null>(null);
 
+  // Link preview để admin có thể kiểm tra trang staff tạo mật khẩu sau khi gửi lời mời.
   const staffSetPasswordPath = invitation?.email
     ? `/staff/set-password?email=${encodeURIComponent(invitation.email)}`
     : '/staff/set-password';
 
+  // Gửi email được nhập lên backend để tạo tài khoản staff và gửi invitation OTP.
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
@@ -169,17 +175,12 @@ export default function ManageStaff() {
                 <p className="mb-2 text-xs font-semibold uppercase text-gray-400">
                   Trang đặt mật khẩu
                 </p>
-                <a
-                  href={staffSetPasswordPath}
-                  className="break-all text-sm font-semibold text-[#FFD166] transition hover:text-[#FFEBA4]"
-                >
-                  {staffSetPasswordPath}
-                </a>
+                <code className="break-all text-sm text-[#FFD166]">{staffSetPasswordPath}</code>
               </div>
             </div>
           ) : (
-            <div className="rounded-xl border border-gray-800 bg-[#0F172A] p-4 text-sm text-gray-400">
-              Chưa có lời mời staff nào trong phiên này.
+            <div className="rounded-xl border border-gray-800 bg-[#0F172A] p-5 text-sm text-gray-400">
+              Sau khi gửi lời mời thành công, thông tin invitation sẽ hiển thị tại đây.
             </div>
           )}
         </div>

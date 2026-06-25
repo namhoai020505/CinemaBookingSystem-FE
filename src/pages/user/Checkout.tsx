@@ -130,6 +130,7 @@ type PaymentSession = {
   createdAt: string;
 };
 
+// Chuẩn hóa datetime backend trả về để Date.parse hiểu được cả khi thiếu hậu tố Z.
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";
@@ -138,6 +139,7 @@ const normalizeBackendDate = (value?: string | null) => {
   return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
 };
 
+// Parse datetime backend thành timestamp, trả 0 nếu dữ liệu không hợp lệ.
 const parseBackendTime = (value?: string | null) => {
   const normalized = normalizeBackendDate(value);
   if (!normalized) {
@@ -148,9 +150,11 @@ const parseBackendTime = (value?: string | null) => {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+// Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
+// Format giây thành mm:ss cho bộ đếm giữ ghế/thanh toán.
 const formatTimer = (seconds: number) => {
   const safeSeconds = Math.max(0, seconds);
   const mins = Math.floor(safeSeconds / 60);
@@ -160,6 +164,7 @@ const formatTimer = (seconds: number) => {
     .padStart(2, "0")}`;
 };
 
+// Format thời gian chiếu thành chuỗi dễ đọc cho sidebar.
 const formatDateTime = (value?: string | null) => {
   const timestamp = parseBackendTime(value);
   if (!timestamp) {
@@ -172,6 +177,7 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
+// Chuyển poster path tương đối thành URL đầy đủ.
 const resolvePosterUrl = (value?: string | null) => {
   const posterUrl = value?.trim();
   if (!posterUrl) {
@@ -189,17 +195,21 @@ const resolvePosterUrl = (value?: string | null) => {
   return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
 };
 
+// Lấy định danh user hiện tại để tách session theo tài khoản.
 const getUserKey = () => {
   const profile = getCurrentUserProfile();
   return profile?.userId || profile?.email || "anonymous";
 };
 
+// Key localStorage lưu ghế đang giữ của user cho suất chiếu.
 const getSeatLockStorageKey = (showtimeId: string, userKey: string) =>
   `g2c-seat-locks:${userKey}:${showtimeId}`;
 
+// Key localStorage lưu payment đang pending để user quay lại vẫn tiếp tục được.
 const getPaymentStorageKey = (showtimeId: string, userKey: string) =>
   `g2c-payment:${userKey}:${showtimeId}`;
 
+// Đọc lock session ghế và tự loại các lock đã hết hạn.
 const readSeatLockSession = (
   showtimeId: string,
   userKey: string,
@@ -243,10 +253,12 @@ const readSeatLockSession = (
   }
 };
 
+// Xóa session giữ ghế sau khi thanh toán xong/hết hạn.
 const removeSeatLockSession = (showtimeId: string, userKey: string) => {
   localStorage.removeItem(getSeatLockStorageKey(showtimeId, userKey));
 };
 
+// Đọc payment session còn hạn từ localStorage.
 const readPaymentSession = (
   showtimeId: string,
   userKey: string,
@@ -271,6 +283,7 @@ const readPaymentSession = (
   }
 };
 
+// Ghi payment session để refresh trang không mất QR/booking đang pending.
 const writePaymentSession = (session: PaymentSession) => {
   localStorage.setItem(
     getPaymentStorageKey(session.showtimeId, session.userKey),
@@ -278,10 +291,12 @@ const writePaymentSession = (session: PaymentSession) => {
   );
 };
 
+// Xóa payment session khi thanh toán xong hoặc hết hạn.
 const removePaymentSession = (showtimeId: string, userKey: string) => {
   localStorage.removeItem(getPaymentStorageKey(showtimeId, userKey));
 };
 
+// Tính số giây từ hiện tại tới một datetime hết hạn.
 const getSecondsUntil = (value?: string | null, fallback = 0) => {
   const timestamp = parseBackendTime(value);
 
@@ -292,6 +307,7 @@ const getSecondsUntil = (value?: string | null, fallback = 0) => {
   return Math.max(0, Math.ceil((timestamp - Date.now()) / 1000));
 };
 
+// Lấy thời gian giữ ghế còn lại dựa trên lockedUntil sớm nhất.
 const getSeatHoldRemainingSeconds = (
   showtimeId: string,
   userKey: string,
@@ -316,6 +332,7 @@ const getSeatHoldRemainingSeconds = (
   return Math.max(0, Math.ceil((earliestExpiry - Date.now()) / 1000));
 };
 
+// Map tên ngân hàng backend trả về sang mã bank mà SePay QR API cần.
 const getSepayBankCode = (bankName: string) => {
   const normalized = bankName.toLowerCase().replace(/[\s._-]/g, "");
   const bankCodes: Record<string, string> = {
@@ -328,6 +345,7 @@ const getSepayBankCode = (bankName: string) => {
   return bankCodes[normalized] || bankName;
 };
 
+// Lấy danh sách ghế đang giữ từ session khi user vào checkout trực tiếp/refresh.
 const getSeatsFromSession = (showtimeId: string, userKey: string) => {
   const session = readSeatLockSession(showtimeId, userKey);
 
@@ -340,6 +358,7 @@ const getSeatsFromSession = (showtimeId: string, userKey: string) => {
     .filter(Boolean);
 };
 
+// Tạo URL ảnh QR SePay từ thông tin payment backend trả về.
 const getSepayQrUrl = (payment: CreatePaymentResponse | null) => {
   if (payment?.qrUrl) {
     return payment.qrUrl;
@@ -364,6 +383,7 @@ const getSepayQrUrl = (payment: CreatePaymentResponse | null) => {
   return `https://qr.sepay.vn/img?${query.toString()}`;
 };
 
+// Chuẩn hóa message lỗi API để hiển thị cho user.
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   if (typeof error === "object" && error && "response" in error) {
     const response = (error as { response?: { data?: { message?: string } } })
@@ -376,6 +396,7 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
+// Trang checkout: chọn F&B, tạo booking, tạo QR SePay và theo dõi thanh toán.
 export default function Checkout() {
   const { showtimeId = "" } = useParams();
   const location = useLocation();
@@ -443,6 +464,7 @@ export default function Checkout() {
   const [displayDetails, setDisplayDetails] =
     useState<CheckoutDisplayDetails | null>(null);
 
+  // Tổng tiền ghế từ danh sách đã chọn.
   const seatsTotalAmount = useMemo(
     () =>
       routeState?.totalAmount ??
@@ -450,6 +472,7 @@ export default function Checkout() {
     [routeState?.totalAmount, selectedSeats],
   );
 
+  // Tổng tiền F&B dựa trên số lượng combo user chọn.
   const fnbTotalAmount = useMemo(
     () =>
       FNB_ITEMS.reduce(
@@ -492,6 +515,7 @@ export default function Checkout() {
   const selectedSeatLabels = selectedSeats.map(
     (seat) => seat.seatCode || `${seat.row}${seat.column}`,
   );
+  // Khi quá hạn thanh toán, dọn session local và đưa user về trang chủ.
   const redirectHomeAfterPaymentExpired = useCallback(() => {
     hideExpiredBookingFromHistory(booking?.bookingId);
 
@@ -502,6 +526,7 @@ export default function Checkout() {
     navigate("/", { replace: true });
   }, [booking?.bookingId, navigate, showtimeId, userKey]);
 
+  // Tải lại thông tin phim/suất chiếu để sidebar không phụ thuộc hoàn toàn vào route state.
   useEffect(() => {
     let isMounted = true;
 
@@ -580,6 +605,7 @@ export default function Checkout() {
     };
   }, [showtimeId]);
 
+  // Đồng bộ bộ đếm giữ ghế trước khi tạo booking/payment.
   useEffect(() => {
     if (step === "payment") {
       return undefined;
@@ -601,6 +627,7 @@ export default function Checkout() {
     return () => window.clearInterval(timer);
   }, [selectedSeats, showtimeId, step, userKey]);
 
+  // Đồng bộ bộ đếm thanh toán theo expiresAt của payment.
   useEffect(() => {
     if (step !== "payment" || !paymentExpiresAt) {
       return undefined;
@@ -615,6 +642,7 @@ export default function Checkout() {
     return () => window.clearInterval(timer);
   }, [paymentExpiresAt, step]);
 
+  // Khi QR hết hạn, mở popup báo hết thời gian và tự chuyển về trang chủ.
   useEffect(() => {
     if (
       step !== "payment" ||
@@ -645,6 +673,7 @@ export default function Checkout() {
     step,
   ]);
 
+  // Nếu payment session thiếu thông tin QR/ngân hàng thì gọi lại createPayment để refresh cấu hình.
   useEffect(() => {
     if (
       step !== "payment" ||
@@ -719,6 +748,7 @@ export default function Checkout() {
     userKey,
   ]);
 
+  // Poll trạng thái booking để tự chuyển sang trang vé khi webhook xác nhận Paid.
   useEffect(() => {
     if (step !== "payment" || !booking?.bookingId) {
       return undefined;
@@ -770,6 +800,7 @@ export default function Checkout() {
     };
   }, [booking?.bookingId, navigate, showtimeId, step, userKey]);
 
+  // Tăng/giảm số lượng combo F&B trong giỏ.
   const handleQuantityChange = (itemId: string, delta: number) => {
     setFnbCart((current) => ({
       ...current,
@@ -777,6 +808,7 @@ export default function Checkout() {
     }));
   };
 
+  // Copy số tài khoản/nội dung chuyển khoản vào clipboard.
   const handleCopy = async (value: string, field: string) => {
     if (!value) {
       return;
@@ -791,6 +823,7 @@ export default function Checkout() {
     }
   };
 
+  // User bấm "Tôi đã thanh toán" để kiểm tra lại trạng thái booking ngay lập tức.
   const handleCheckPaymentStatus = async () => {
     if (!booking?.bookingId) {
       return;
@@ -837,6 +870,7 @@ export default function Checkout() {
     }
   };
 
+  // Tạo booking Pending rồi khởi tạo payment QR cho đơn đó.
   const handleCreatePayment = async () => {
     if (!showtimeId || selectedSeats.length === 0) {
       setErrorMessage("Không tìm thấy thông tin ghế đã chọn.");

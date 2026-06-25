@@ -8,13 +8,13 @@ const AdminLayout = () => {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f1f5f9' }}>
-      {/* Sidebar */}
+      {/* Sidebar quản trị, có thể thu gọn để tăng diện tích nội dung. */}
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(prev => !prev)}
       />
 
-      {/* Right column: Topbar + Page content */}
+      {/* Cột phải chứa topbar và vùng nội dung thay đổi theo route con. */}
       <div
         style={{
           flex: 1,
@@ -26,7 +26,7 @@ const AdminLayout = () => {
       >
         <Topbar sidebarCollapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(prev => !prev)} />
 
-        {/* Main content area */}
+        {/* Outlet render trang admin hiện tại: dashboard, phim, phòng, lịch chiếu... */}
         <main
           style={{
             padding: '24px',

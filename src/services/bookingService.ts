@@ -104,6 +104,7 @@ export type CheckoutResponse = {
 
 const HIDDEN_EXPIRED_BOOKINGS_KEY = 'g2c-hidden-expired-bookings';
 
+// Chuẩn hóa thời gian backend trả về để Date.parse đọc ổn cả khi thiếu timezone.
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return '';
@@ -112,14 +113,17 @@ const normalizeBackendDate = (value?: string | null) => {
   return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
 };
 
+// Parse chuỗi thời gian backend thành timestamp; lỗi thì trả 0 để xử lý an toàn.
 const parseBackendTime = (value?: string | null) => {
   const timestamp = Date.parse(normalizeBackendDate(value));
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+// Kiểm tra localStorage có dùng được không, tránh lỗi khi render ngoài browser.
 const canUseLocalStorage = () =>
   typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
+// Lấy danh sách booking pending đã hết hạn mà FE chủ động ẩn khỏi lịch sử.
 export const getHiddenExpiredBookingIds = () => {
   if (!canUseLocalStorage()) {
     return [];
@@ -138,6 +142,7 @@ export const getHiddenExpiredBookingIds = () => {
   }
 };
 
+// Ghi một booking hết hạn vào localStorage để trang "Vé của tôi" không hiển thị nữa.
 export const hideExpiredBookingFromHistory = (bookingId?: string | null) => {
   if (!bookingId || !canUseLocalStorage()) {
     return;
@@ -151,6 +156,7 @@ export const hideExpiredBookingFromHistory = (bookingId?: string | null) => {
   );
 };
 
+// Kiểm tra booking pending payment đã quá expiredAt chưa.
 export const isExpiredPendingBooking = (booking: BookingSummary) => {
   if (booking.status.toUpperCase() !== 'PENDING_PAYMENT') {
     return false;
@@ -160,26 +166,32 @@ export const isExpiredPendingBooking = (booking: BookingSummary) => {
   return expiredAt > 0 && expiredAt <= Date.now();
 };
 
+// Điều kiện chung để lọc booking khỏi lịch sử: đã hết hạn hoặc đã được FE đánh dấu ẩn.
 export const shouldHideBookingFromHistory = (booking: BookingSummary) =>
   isExpiredPendingBooking(booking) ||
   getHiddenExpiredBookingIds().includes(booking.bookingId);
 
+// Gom các API liên quan tới tạo booking, checkout và lịch sử vé.
 export const bookingService = {
+  // POST /api/bookings: tạo booking cơ bản từ showtime và ghế.
   createBooking: async (payload: BookingPayload) => {
     const response = await axiosInstance.post('/api/bookings', payload) as unknown as ApiResponse<BookingSummary>;
     return response;
   },
 
+  // POST /api/bookings/checkout: tạo đơn có ghế, F&B và voucher trong một bước.
   checkout: async (payload: CheckoutPayload) => {
     const response = await axiosInstance.post('/api/bookings/checkout', payload) as unknown as ApiResponse<CheckoutResponse>;
     return response;
   },
 
+  // GET /api/bookings/{bookingId}: lấy chi tiết vé để hiển thị QR/check-in.
   getBookingById: async (bookingId: string | number) => {
     const response = await axiosInstance.get(`/api/bookings/${bookingId}`) as unknown as ApiResponse<BookingDetails>;
     return response;
   },
 
+  // GET /api/bookings/my-bookings: lấy lịch sử vé của customer đang đăng nhập.
   getMyBookings: async () => {
     const response = await axiosInstance.get('/api/bookings/my-bookings') as unknown as ApiResponse<BookingSummary[]>;
     return response;

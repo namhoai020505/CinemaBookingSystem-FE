@@ -10,6 +10,7 @@ const ROOM_STATUS_OPTIONS = [
   { value: 'MAINTENANCE', label: 'Bảo Trì', color: 'yellow' },
 ] as const;
 
+// Trả về badge màu tương ứng với trạng thái phòng để bảng dễ scan.
 const getStatusBadge = (status: string) => {
   switch (status) {
     case 'ACTIVE':
@@ -38,6 +39,7 @@ const getStatusBadge = (status: string) => {
   }
 };
 
+// Trang quản lý phòng chiếu: lọc theo rạp, thêm/sửa/xóa phòng và đi tới sơ đồ ghế.
 export default function ManageRooms() {
   const navigate = useNavigate();
 
@@ -63,6 +65,7 @@ export default function ManageRooms() {
   // ──────────────────────────────────────────
   // Data fetching
   // ──────────────────────────────────────────
+  // Tải đồng thời danh sách phòng và rạp để render bảng và form chọn rạp.
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -80,11 +83,13 @@ export default function ManageRooms() {
     }
   };
 
+  // Lấy dữ liệu lần đầu khi admin mở trang phòng chiếu.
   useEffect(() => {
     void fetchData();
   }, []);
 
   // Esc to close modal
+  // Đóng modal bằng phím Escape để thao tác quản trị nhanh hơn.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isModalOpen) {
@@ -99,6 +104,7 @@ export default function ManageRooms() {
   // ──────────────────────────────────────────
   // Filtered data
   // ──────────────────────────────────────────
+  // Lọc phòng theo rạp được chọn, chọn ALL thì hiển thị toàn bộ.
   const filteredRooms = filterCinemaId === 'ALL'
     ? rooms
     : rooms.filter((r) => r.cinemaId === filterCinemaId);
@@ -106,6 +112,7 @@ export default function ManageRooms() {
   // ──────────────────────────────────────────
   // Modal handlers
   // ──────────────────────────────────────────
+  // Chuẩn bị form trống khi admin muốn thêm phòng mới.
   const handleOpenAdd = () => {
     setEditingRoom(null);
     setFormCinemaId(cinemas[0]?.cinemaId || '');
@@ -115,6 +122,7 @@ export default function ManageRooms() {
     setIsModalOpen(true);
   };
 
+  // Đổ dữ liệu phòng hiện tại vào form để sửa.
   const handleOpenEdit = (room: RoomResponse) => {
     setEditingRoom(room);
     setFormCinemaId(room.cinemaId);
@@ -124,6 +132,7 @@ export default function ManageRooms() {
     setIsModalOpen(true);
   };
 
+  // Validate form rồi gọi API create/update phòng tùy đang thêm mới hay chỉnh sửa.
   const handleSubmit = async () => {
     if (!formRoomName.trim()) {
       toast.error('Tên phòng không được để trống!');
@@ -160,6 +169,7 @@ export default function ManageRooms() {
     }
   };
 
+  // Xác nhận trước khi xóa phòng vì backend có thể xóa kèm sơ đồ ghế của phòng.
   const handleDelete = async (room: RoomResponse) => {
     const confirmed = window.confirm(
       `⚠️ Bạn có chắc chắn muốn xóa phòng "${room.roomName}" khỏi hệ thống? Tất cả ghế trong phòng cũng sẽ bị xóa.`

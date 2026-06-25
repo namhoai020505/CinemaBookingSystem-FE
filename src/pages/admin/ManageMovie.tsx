@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import { movieService } from "../../services/movieService";
 import type { MovieData } from "../../services/movieService";
 
+// Trang quản trị danh sách phim: tải dữ liệu, mở modal thêm/sửa và gọi API lưu phim.
 export default function ManageMovie() {
   const [movies, setMovies] = useState<MovieData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +25,7 @@ export default function ManageMovie() {
   const [errors, setErrors] = useState<{ movieNameVn?: string }>({});
 
   // 1. Hàm lấy danh sách phim
+  // Lấy danh sách phim từ backend để render bảng quản lý.
   const fetchMovies = async () => {
     try {
       setLoading(true);
@@ -39,6 +41,7 @@ export default function ManageMovie() {
   };
 
   // Khối useEffect lấy data ban đầu - Cố định mảng rỗng [] không thay đổi size (Sửa lỗi 4)
+  // Tải dữ liệu lần đầu khi admin mở trang quản lý phim.
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
       void fetchMovies();
@@ -48,6 +51,7 @@ export default function ManageMovie() {
   }, []);
 
   // Khối useEffect lắng nghe phím Esc - Cố định mảng phụ thuộc (Sửa lỗi 3, 4)
+  // Cho phép đóng modal nhanh bằng phím Escape.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && isModalOpen) {
@@ -61,6 +65,7 @@ export default function ManageMovie() {
     };
   }, [isModalOpen]);
 
+  // Reset form về trạng thái thêm mới rồi mở modal.
   const handleOpenAddModal = () => {
     setEditingMovieId(null);
     setFormData({
@@ -78,6 +83,7 @@ export default function ManageMovie() {
     setIsModalOpen(true);
   };
 
+  // Đổ thông tin phim hiện tại vào form để admin chỉnh sửa.
   const handleOpenEditModal = (movie: MovieData) => {
     if (!movie.id) {
       return;
@@ -99,6 +105,7 @@ export default function ManageMovie() {
     setIsModalOpen(true);
   };
 
+  // Xác nhận rồi gọi API xóa phim khỏi hệ thống.
   const handleDeleteMovie = async (movie: MovieData) => {
     if (!movie.id) {
       return;
@@ -122,6 +129,7 @@ export default function ManageMovie() {
     }
   };
 
+  // Cập nhật state form mỗi khi admin nhập dữ liệu trong modal.
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
@@ -132,6 +140,7 @@ export default function ManageMovie() {
     }
   };
 
+  // Validate form và quyết định gọi API create hay update tùy trạng thái editingMovieId.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.movieNameVn.trim()) {
