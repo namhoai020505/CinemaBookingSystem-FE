@@ -66,6 +66,10 @@ export interface CheckoutPayload {
   showtimeId: string | number;
   showtimeSeatIds: (string | number)[];
   voucherCode?: string;
+  foodAndBeverages?: {
+    fbItemId: string;
+    quantity: number;
+  }[];
   foodItems?: {
     fbItemId: string;
     quantity: number;
@@ -89,17 +93,23 @@ export type CheckoutFoodItem = {
 
 export type CheckoutResponse = {
   bookingId: string;
-  bookingStatus: string;
+  bookingStatus?: string;
+  status?: string;
   showtimeId: string;
-  seats: CheckoutSeat[];
-  foodItems: CheckoutFoodItem[];
-  seatSubtotal: number;
-  foodSubtotal: number;
-  grossAmount: number;
-  voucherDiscount: number;
-  rewardDiscount: number;
+  movieTitle?: string;
+  cinemaName?: string;
+  roomName?: string;
+  startTime?: string | null;
+  seats?: CheckoutSeat[];
+  foodItems?: CheckoutFoodItem[];
+  seatSubtotal?: number;
+  foodSubtotal?: number;
+  grossAmount?: number;
+  voucherDiscount?: number;
+  rewardDiscount?: number;
   totalAmount: number;
-  expiredAt: string;
+  createdAt?: string;
+  expiredAt?: string | null;
 };
 
 const HIDDEN_EXPIRED_BOOKINGS_KEY = 'g2c-hidden-expired-bookings';
@@ -179,9 +189,14 @@ export const bookingService = {
     return response;
   },
 
-  // POST /api/bookings/checkout: tạo đơn có ghế, F&B và voucher trong một bước.
+  // Lưu ý: BE hiện chưa có POST /api/bookings/checkout, nên checkout gọi POST /api/bookings.
   checkout: async (payload: CheckoutPayload) => {
-    const response = await axiosInstance.post('/api/bookings/checkout', payload) as unknown as ApiResponse<CheckoutResponse>;
+    const response = await axiosInstance.post('/api/bookings', {
+      showtimeId: payload.showtimeId,
+      showtimeSeatIds: payload.showtimeSeatIds,
+      voucherCode: payload.voucherCode,
+      foodAndBeverages: payload.foodAndBeverages ?? payload.foodItems,
+    }) as unknown as ApiResponse<CheckoutResponse>;
     return response;
   },
 

@@ -895,14 +895,14 @@ export default function Checkout() {
       setSubmitting(true);
       setErrorMessage("");
 
-      const foodItems = Object.entries(fnbCart)
+      const foodAndBeverages = Object.entries(fnbCart)
         .filter(([, quantity]) => quantity > 0)
         .map(([fbItemId, quantity]) => ({ fbItemId, quantity }));
 
       const checkoutResponse = await bookingService.checkout({
         showtimeId,
         showtimeSeatIds,
-        foodItems: foodItems.length > 0 ? foodItems : undefined,
+        foodAndBeverages: foodAndBeverages.length > 0 ? foodAndBeverages : undefined,
       });
 
       if (!checkoutResponse.success || !checkoutResponse.data?.bookingId) {
@@ -912,14 +912,14 @@ export default function Checkout() {
       const checkout = checkoutResponse.data;
       const nextBooking: BookingSummary = {
         bookingId: checkout.bookingId,
-        showtimeId: checkout.showtimeId,
-        movieTitle: seatMap?.movieName,
-        cinemaName: seatMap?.cinemaName,
-        roomName: seatMap?.roomName,
-        startTime: seatMap?.startTime || null,
+        showtimeId: checkout.showtimeId || showtimeId,
+        movieTitle: checkout.movieTitle || seatMap?.movieName,
+        cinemaName: checkout.cinemaName || seatMap?.cinemaName,
+        roomName: checkout.roomName || seatMap?.roomName,
+        startTime: checkout.startTime || seatMap?.startTime || null,
         totalAmount: checkout.totalAmount,
-        status: checkout.bookingStatus,
-        createdAt: new Date().toISOString(),
+        status: checkout.bookingStatus || checkout.status || "PENDING_PAYMENT",
+        createdAt: checkout.createdAt || new Date().toISOString(),
         expiredAt: checkout.expiredAt,
       };
 
