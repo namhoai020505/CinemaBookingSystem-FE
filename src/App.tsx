@@ -11,6 +11,7 @@ import ManageRooms from './pages/admin/ManageRooms';
 import ManageSeatLayout from './pages/admin/ManageSeatLayout';
 import ManageShowtime from './pages/admin/ManageShowtime';
 import ManageStaff from './pages/admin/ManageStaff';
+import ReviewModeration from './pages/admin/ReviewModeration';
 import BookingSuccess from './pages/user/BookingSuccess';
 import Checkout from './pages/user/Checkout';
 import Home from './pages/user/Home';
@@ -63,6 +64,7 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="showtime" element={<ManageShowtime />} />
             <Route path="staff" element={<ManageStaff />} />
+            <Route path="reviews" element={<ReviewModeration />} />
             <Route path="rooms" element={<ManageRooms />} />
             <Route path="rooms/:roomId/seats" element={<ManageSeatLayout />} />
 
@@ -73,7 +75,7 @@ function App() {
         </Route>
 
         {/* Fallback: URL không tồn tại sẽ về trang chủ user. */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+..        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

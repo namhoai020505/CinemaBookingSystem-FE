@@ -73,6 +73,16 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    to: '/admin/reviews',
+    label: 'Kiểm duyệt Reviews',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+        <path d="m9 10 2 2 4-4" />
+      </svg>
+    ),
+  },
 
   {
     to: '/admin/staff',

@@ -151,6 +151,18 @@ type SeatLockSession = {
   updatedAt: string;
 };
 
+type StoredPaymentSession = {
+  showtimeId: string;
+  userKey: string;
+  expiresAt?: string;
+  selectedSeatIds?: string[];
+  seatSignature?: string;
+  booking?: {
+    status?: string;
+    expiredAt?: string | null;
+  };
+};
+
 // Parse lockedUntil từ backend/localStorage về timestamp để tính thời gian giữ ghế.
 const parseLockTime = (value?: string | null) => {
   if (!value) {
@@ -198,6 +210,9 @@ const getSeatPrice = (type: SeatType) => {
 // Key localStorage tách theo user + showtime để mỗi tài khoản có lock session riêng.
 const getStorageKey = (showtimeId: string, userKey: string) =>
   `g2c-seat-locks:${userKey}:${showtimeId}`;
+
+const getPaymentStorageKey = (showtimeId: string, userKey: string) =>
+  `g2c-payment:${userKey}:${showtimeId}`;
 
 // Lấy định danh user từ JWT để phân biệt ghế user hiện tại đang giữ.
 const getUserKey = () => {
@@ -266,6 +281,10 @@ const removeLockSession = (showtimeId: string, userKey: string) => {
   localStorage.removeItem(getStorageKey(showtimeId, userKey));
 };
 
+const removePaymentSession = (showtimeId: string, userKey: string) => {
+  localStorage.removeItem(getPaymentStorageKey(showtimeId, userKey));
+};
+
 // Tính thời gian còn lại dựa trên lock hết hạn sớm nhất trong session.
 const getSessionRemainingSeconds = (session: SeatLockSession | null) => {
   if (!session) {
@@ -289,6 +308,73 @@ const getSessionRemainingSeconds = (session: SeatLockSession | null) => {
   }
 
   return Math.max(0, Math.ceil((earliestExpiry - Date.now()) / 1000));
+};
+
+// Doc payment pending cua user hien tai de khong render ghe PENDING_PAYMENT thanh ghe da ban.
+const readPendingPaymentSeatIds = (showtimeId: string, userKey: string) => {
+  const storageKey = getPaymentStorageKey(showtimeId, userKey);
+  const rawValue = localStorage.getItem(storageKey);
+
+  if (!rawValue) {
+    return new Set<string>();
+  }
+
+  try {
+    const session = JSON.parse(rawValue) as StoredPaymentSession;
+    const status = session.booking?.status?.toUpperCase() || "PENDING_PAYMENT";
+    const expiresAt = session.expiresAt || session.booking?.expiredAt;
+
+    if (
+      status === "PAID" ||
+      status === "CANCELLED" ||
+      parseLockTime(expiresAt) <= Date.now()
+    ) {
+      localStorage.removeItem(storageKey);
+      return new Set<string>();
+    }
+
+    return new Set(session.selectedSeatIds || []);
+  } catch {
+    localStorage.removeItem(storageKey);
+    return new Set<string>();
+  }
+};
+
+const getVisualSeatStatus = (
+  seat: SeatMapItemResponse,
+  fallbackStatus: SeatStatus,
+  pendingPaymentSeatIds: Set<string>,
+): SeatStatus => {
+  if (
+    pendingPaymentSeatIds.has(seat.seatId) ||
+    pendingPaymentSeatIds.has(seat.showtimeSeatId)
+  ) {
+    return "HOLDING";
+  }
+
+  const backendStatus = seat.seatStatus?.toUpperCase();
+  if (
+    backendStatus === "LOCKED" ||
+    backendStatus === "HELD" ||
+    backendStatus === "HOLDING" ||
+    backendStatus === "PENDING_PAYMENT"
+  ) {
+    return "HOLDING";
+  }
+
+  if (
+    backendStatus === "BOOKED" ||
+    backendStatus === "SOLD" ||
+    backendStatus === "PAID"
+  ) {
+    return "BOOKED";
+  }
+
+  if (backendStatus === "AVAILABLE") {
+    return "AVAILABLE";
+  }
+
+  return fallbackStatus;
 };
 
 // Chuyển SeatItem đang chọn sang dạng lưu localStorage.
@@ -592,6 +678,7 @@ export default function SeatSelection() {
       setSeatMapError("");
       const lockSession = readLockSession(showtimeId, userKey);
       const ownedLocks = lockSession?.lockedSeats || {};
+      const pendingPaymentSeatIds = readPendingPaymentSeatIds(showtimeId, userKey);
       const response = (await api.get(
         `/api/seats/showtimes/${showtimeId}/map`,
       )) as unknown as ApiResponse<SeatMapResponse>;
@@ -610,13 +697,28 @@ export default function SeatSelection() {
       );
       const mappedSeats = [
         ...availableSeats.map((seat) =>
-          mapSeat(seat, "AVAILABLE", ownedLocks, rowTypeMap),
+          mapSeat(
+            seat,
+            getVisualSeatStatus(seat, "AVAILABLE", pendingPaymentSeatIds),
+            ownedLocks,
+            rowTypeMap,
+          ),
         ),
         ...lockedSeats.map((seat) =>
-          mapSeat(seat, "HOLDING", ownedLocks, rowTypeMap),
+          mapSeat(
+            seat,
+            getVisualSeatStatus(seat, "HOLDING", pendingPaymentSeatIds),
+            ownedLocks,
+            rowTypeMap,
+          ),
         ),
         ...soldSeats.map((seat) =>
-          mapSeat(seat, "BOOKED", ownedLocks, rowTypeMap),
+          mapSeat(
+            seat,
+            getVisualSeatStatus(seat, "BOOKED", pendingPaymentSeatIds),
+            ownedLocks,
+            rowTypeMap,
+          ),
         ),
       ];
       const ownedVisibleSeatIds = new Set(
@@ -966,6 +1068,7 @@ export default function SeatSelection() {
       }));
 
       setSelectedSeats(nextSelectedSeats);
+      removePaymentSession(showtimeId, userKey);
       navigate(`/booking/checkout/${showtimeId}`, {
         state: {
           selectedSeats: nextSelectedSeats,
