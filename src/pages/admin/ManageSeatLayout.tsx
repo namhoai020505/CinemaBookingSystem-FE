@@ -557,6 +557,7 @@ export default function ManageSeatLayout() {
           rowLabel: seat.rowLabel,
           seatNumber: seat.seatNumber,
           seatTypeId: batchType,
+          isActive: seat.isActive,
         });
       });
       await Promise.all(promises);

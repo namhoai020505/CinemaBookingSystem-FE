@@ -18,7 +18,7 @@ export default function ManageMovie() {
     title: "",
     durationMinutes: 120,
     genre: "",
-    language: "Tiếng Việt",
+    language: "",
     releaseDate: "",
     ageRating: "",
     description: "",
@@ -43,9 +43,6 @@ export default function ManageMovie() {
   // States for DB-backed Genre Selection
   const [genres, setGenres] = useState<{ genreId: number; name: string }[]>([]);
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
-  const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
-  const [genreSearch, setGenreSearch] = useState("");
-  const genreDropdownRef = useRef<HTMLDivElement>(null);
 
   // 1. Hàm lấy danh sách phim (Fetch tất cả để xử lý client-side)
   const fetchMovies = async () => {
@@ -93,20 +90,7 @@ export default function ManageMovie() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        genreDropdownRef.current &&
-        !genreDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsGenreDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
+
 
   const handleStatusFilterChange = (status: string) => {
     setSelectedStatus(status);
@@ -133,7 +117,7 @@ export default function ManageMovie() {
       title: "",
       durationMinutes: 120,
       genre: "",
-      language: "Tiếng Việt",
+      language: "",
       releaseDate: "",
       ageRating: "P",
       description: "",
@@ -160,7 +144,7 @@ export default function ManageMovie() {
           title: detail.title || "",
           durationMinutes: detail.durationMinutes || 120,
           genre: detail.genre || "",
-          language: detail.language || "Tiếng Việt",
+          language: detail.language || "",
           releaseDate: detail.releaseDate || "",
           ageRating: detail.ageRating || "P",
           description: detail.description || "",
@@ -652,7 +636,7 @@ export default function ManageMovie() {
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    Tên Phim (Tiếng Việt) <span className="text-red-500">*</span>
+                    Tên Phim () <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -685,106 +669,23 @@ export default function ManageMovie() {
 
               {/* Thể loại, Đạo diễn & Ngôn ngữ */}
               <div className="grid grid-cols-3 gap-4">
-                <div className="relative" ref={genreDropdownRef}>
+                <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     Thể Loại
                   </label>
-                  <div
-                    onClick={() => setIsGenreDropdownOpen(!isGenreDropdownOpen)}
-                    className="min-h-[38px] w-full px-3 py-1.5 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer flex flex-wrap gap-1.5 items-center select-none"
+                  <select
+                    value={selectedGenreIds.length > 0 ? selectedGenreIds[0] : ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedGenreIds(val ? [Number(val)] : []);
+                    }}
+                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                   >
-                    {selectedGenreIds.length === 0 ? (
-                      <span className="text-gray-500">Chọn thể loại...</span>
-                    ) : (
-                      selectedGenreIds.map((id) => {
-                        const g = genres.find((item) => item.genreId === id);
-                        if (!g) return null;
-                        return (
-                          <span
-                            key={id}
-                            className="flex items-center gap-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-md text-xs font-semibold"
-                          >
-                            {g.name}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedGenreIds(selectedGenreIds.filter((x) => x !== id));
-                              }}
-                              className="text-blue-400 hover:text-blue-200 focus:outline-none font-bold"
-                            >
-                              &times;
-                            </button>
-                          </span>
-                        );
-                      })
-                    )}
-                  </div>
-
-                  {isGenreDropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full bg-[#1E293B] border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-60 flex flex-col animate-fadeIn">
-                      <div className="p-2 border-b border-gray-800 bg-[#0F172A]">
-                        <input
-                          type="text"
-                          placeholder="Tìm thể loại..."
-                          value={genreSearch}
-                          onChange={(e) => setGenreSearch(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full px-3 py-1 bg-[#1E293B] border border-gray-800 rounded-lg text-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div className="overflow-y-auto flex-1">
-                        {genres
-                          .filter((g) =>
-                            g.name.toLowerCase().includes(genreSearch.toLowerCase())
-                          )
-                          .map((g) => {
-                            const isSelected = selectedGenreIds.includes(g.genreId);
-                            return (
-                              <div
-                                key={g.genreId}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (isSelected) {
-                                    setSelectedGenreIds(
-                                      selectedGenreIds.filter((x) => x !== g.genreId)
-                                    );
-                                  } else {
-                                    setSelectedGenreIds([...selectedGenreIds, g.genreId]);
-                                  }
-                                }}
-                                className={`px-4 py-2 text-sm text-gray-200 hover:bg-[#334155] cursor-pointer flex items-center justify-between transition-colors duration-150 ${isSelected ? "bg-blue-500/10 text-blue-400" : ""
-                                  }`}
-                              >
-                                <span>{g.name}</span>
-                                {isSelected && (
-                                  <svg
-                                    className="w-4 h-4 text-blue-400"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth="2"
-                                      d="M5 13l4 4L19 7"
-                                    />
-                                  </svg>
-                                )}
-                              </div>
-                            );
-                          })}
-                        {genres.filter((g) =>
-                          g.name.toLowerCase().includes(genreSearch.toLowerCase())
-                        ).length === 0 && (
-                            <div className="px-4 py-3 text-xs text-gray-500 text-center">
-                              Không tìm thấy thể loại
-                            </div>
-                          )}
-                      </div>
-                    </div>
-                  )}
+                    <option value="">Chọn thể loại...</option>
+                    {genres.map(g => (
+                      <option key={g.genreId} value={g.genreId}>{g.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
@@ -803,14 +704,21 @@ export default function ManageMovie() {
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     Ngôn Ngữ
                   </label>
-                  <input
-                    type="text"
+                  <select
                     name="language"
                     value={formData.language}
                     onChange={handleInputChange}
-                    placeholder="Tiếng Việt, Phụ đề Tiếng Anh..."
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="">Chọn ngôn ngữ...</option>
+                    <option value="VN">Tiếng Việt</option>
+                    <option value="EN_SUB_VN">Tiếng Anh phụ đề tiếng Việt</option>
+                    <option value="EN_DUB_VN">Tiếng Anh lồng tiếng Việt</option>
+                    <option value="KR_SUB_VN">Tiếng Hàn phụ đề tiếng Việt</option>
+                    <option value="JP_SUB_VN">Tiếng Nhật phụ đề tiếng Việt</option>
+                    <option value="TH_SUB_VN">Tiếng Thái phụ đề tiếng Việt</option>
+                    <option value="CN_SUB_VN">Tiếng Trung phụ đề tiếng Việt</option>
+                  </select>
                 </div>
               </div>
 
