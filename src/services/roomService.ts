@@ -56,6 +56,7 @@ export interface UpdateSeatPayload {
   rowLabel: string;
   seatNumber: number;
   seatTypeId: string;
+  isActive?: boolean;
 }
 
 // Kiểu dữ liệu rạp dùng khi tạo phòng.
@@ -126,7 +127,7 @@ export const roomService = {
 
   // PUT /api/seats/{seatId}: cập nhật thông tin một ghế.
   updateSeat: async (seatId: string, payload: UpdateSeatPayload): Promise<SeatResponse> => {
-    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, payload) as unknown as ApiEnvelope<SeatResponse>;
+    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, { seatId, ...payload }) as unknown as ApiEnvelope<SeatResponse>;
     return envelope.data;
   },
 
