@@ -1,6 +1,4 @@
 import { GoogleLogin } from '@react-oauth/google';
-import { useRef } from 'react';
-import { FcGoogle } from 'react-icons/fc';
 import type { AuthMode } from '../authTypes';
 
 type AuthTabsProps = {
@@ -107,46 +105,23 @@ export const AuthSubmitButton = ({
  * exactly what the backend expects in POST /api/auth/google-login { idToken }.
  */
 export const GoogleLoginButton = ({ onSuccess, isLoading = false }: GoogleLoginButtonProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const triggerGoogleLogin = () => {
-    const btn = containerRef.current?.querySelector('div[role="button"]') as HTMLElement | null;
-    btn?.click();
-  };
-
   return (
-    <div className="mt-2">
-      {/* Hidden Google button – provides the real OAuth popup trigger */}
-      <div
-        ref={containerRef}
-        style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', opacity: 0 }}
-        aria-hidden="true"
-      >
-        <GoogleLogin
-          onSuccess={(credentialResponse) => {
-            if (credentialResponse.credential) {
-              onSuccess(credentialResponse.credential);
-            }
-          }}
-          onError={() => {
-            console.error('Google login failed or was cancelled');
-          }}
-          useOneTap={false}
-        />
-      </div>
-
-      {/* Visible custom-styled button */}
-      <button
-        type="button"
-        disabled={isLoading}
-        onClick={triggerGoogleLogin}
-        className={`flex w-full items-center justify-center gap-2 rounded-md bg-white py-2.5 text-sm font-bold uppercase text-black shadow transition ${
-          isLoading ? 'cursor-not-allowed opacity-70' : 'hover:bg-gray-100'
-        }`}
-      >
-        <FcGoogle size={20} />
-        {isLoading ? 'Đang xử lý...' : 'Đăng Nhập Bằng Google'}
-      </button>
+    <div className={`mt-2 flex justify-center w-full ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
+      <GoogleLogin
+        onSuccess={(credentialResponse) => {
+          if (credentialResponse.credential) {
+            onSuccess(credentialResponse.credential);
+          }
+        }}
+        onError={() => {
+          console.error('Google login failed or was cancelled');
+        }}
+        useOneTap={false}
+        theme="outline"
+        size="large"
+        shape="rectangular"
+        width="382"
+      />
     </div>
   );
 };

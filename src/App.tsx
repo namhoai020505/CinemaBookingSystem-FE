@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
 import AdminLayout from './layouts/admin/AdminLayout';
 import UserLayout from './layouts/user/UserLayout';
 import Dashboard from './pages/admin/Dashboard';
@@ -6,7 +6,7 @@ import Home from './pages/user/Home';
 import Profile from './pages/user/Profile';
 import Login from './pages/auth/Login';
 import StaffSetPassword from './pages/auth/StaffSetPassword';
-import RequireAuth from './components/RequireAuth'; 
+import RequireAuth from './components/RequireAuth';
 import ManageMovie from './pages/admin/ManageMovie';
 import ManageShowtime from './pages/admin/ManageShowtime';
 import ManageStaff from './pages/admin/ManageStaff';
@@ -22,52 +22,76 @@ import MyBookings from './pages/user/MyBookings';
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
 
-const GlobalTimer = () => {
-  useIdleTimeout(10); 
-  return null;
+/**
+ * RootLayout: wrapper ngoài cùng, luôn render bên trong RouterProvider
+ * → có thể dùng useNavigate, useLocation, useBlocker...
+ */
+const RootLayout = () => {
+  useIdleTimeout(10);
+  return <Outlet />;
 };
 
+// Sử dụng createBrowserRouter (Data Router) để hỗ trợ useBlocker
+const router = createBrowserRouter([
+  {
+    // Root wrapper — bao mọi route để GlobalTimer hoạt động trong router context
+    element: <RootLayout />,
+    children: [
+      {
+        path: '/login',
+        element: <Login />,
+      },
+      {
+        path: '/staff/set-password',
+        element: <StaffSetPassword />,
+      },
+      {
+        // User layout
+        element: <UserLayout />,
+        children: [
+          { path: '/', element: <Home /> },
+          { path: '/movie/:movieId/showtimes', element: <MovieShowtimes /> },
+          { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
+          {
+            element: <RequireAuth allowedRoles={customerRoles} />,
+            children: [
+              { path: '/booking/checkout/:showtimeId', element: <Checkout /> },
+              { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
+              { path: '/my-bookings', element: <MyBookings /> },
+              { path: 'profile', element: <Profile /> },
+            ],
+          },
+        ],
+      },
+      {
+        // Admin layout
+        element: <RequireAuth allowedRoles={adminRoles} verifyAdmin />,
+        children: [
+          {
+            path: '/admin',
+            element: <AdminLayout />,
+            children: [
+              { index: true, element: <Navigate to="dashboard" replace /> },
+              { path: 'dashboard', element: <Dashboard /> },
+              { path: 'movies', element: <ManageMovie /> },
+              { path: 'showtime', element: <ManageShowtime /> },
+              { path: 'staff', element: <ManageStaff /> },
+              { path: 'rooms', element: <ManageRooms /> },
+              { path: 'rooms/:roomId/seats', element: <ManageSeatLayout /> },
+            ],
+          },
+        ],
+      },
+      {
+        path: '*',
+        element: <Navigate to="/" replace />,
+      },
+    ],
+  },
+]);
+
 function App() {
-  return (
-    <BrowserRouter>
-    
-      {/* 2. Đặt nó ở ĐÂY - bên trong BrowserRouter */}
-      <GlobalTimer /> 
-
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/staff/set-password" element={<StaffSetPassword />} />
-
-        <Route element={<UserLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/movie/:movieId/showtimes" element={<MovieShowtimes />} />
-          <Route path="/booking/seats/:showtimeId" element={<SeatSelection />} />
-          <Route element={<RequireAuth allowedRoles={customerRoles} />}>
-            <Route path="/booking/checkout/:showtimeId" element={<Checkout />} />
-            <Route path="/booking/success/:bookingId" element={<BookingSuccess />} />
-            <Route path="/my-bookings" element={<MyBookings />} />
-            <Route path="profile" element={<Profile />} />
-          </Route>
-        </Route>
-
-        <Route element={<RequireAuth allowedRoles={adminRoles} verifyAdmin />}>
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route path="movies" element={<ManageMovie />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="showtime" element={<ManageShowtime />} />
-            <Route path="staff" element={<ManageStaff />} />
-            <Route path="rooms" element={<ManageRooms />} />
-            <Route path="rooms/:roomId/seats" element={<ManageSeatLayout />} />
-            {/* Nếu sau này có thêm trang quản lý phim, user... bạn cứ ném vào trong cụm này */}
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-          </Route>
-        </Route>
-
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={router} />;
 }
 
 export default App;

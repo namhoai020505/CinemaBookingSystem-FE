@@ -18,6 +18,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import fallbackPoster from "../../assets/movie1.jpg";
 import api from "../../lib/api";
 import { getCurrentUserProfile } from "../../lib/auth";
+import { getMediaUrl } from "../../lib/media";
 import {
   bookingService,
   hideExpiredBookingFromHistory,
@@ -32,7 +33,7 @@ const PAYMENT_PROVIDER_ID = "PP_SEPAY";
 const PAYMENT_WINDOW_SECONDS = 600;
 const DEFAULT_LOCK_SECONDS = 600;
 const PAYMENT_STATUS_POLL_MS = 5000;
-const API_ORIGIN = String(api.defaults.baseURL || "").replace(/\/$/, "");
+
 
 const FNB_ITEMS = [
   {
@@ -172,22 +173,7 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-const resolvePosterUrl = (value?: string | null) => {
-  const posterUrl = value?.trim();
-  if (!posterUrl) {
-    return "";
-  }
 
-  if (/^(https?:|data:|blob:)/i.test(posterUrl)) {
-    return posterUrl;
-  }
-
-  if (posterUrl.startsWith("/")) {
-    return `${API_ORIGIN}${posterUrl}`;
-  }
-
-  return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
-};
 
 const getUserKey = () => {
   const profile = getCurrentUserProfile();
@@ -560,7 +546,7 @@ export default function Checkout() {
             ? `${movie.durationMinutes} phút`
             : undefined,
           ageRating: movie?.ageRating || undefined,
-          posterUrl: resolvePosterUrl(movie?.posterUrl),
+          posterUrl: getMediaUrl(movie?.posterUrl),
           cinemaName: showtime.cinemaName,
           roomName: showtime.roomName,
           startTime: showtime.startTime,

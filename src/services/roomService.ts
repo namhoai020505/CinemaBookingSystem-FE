@@ -60,6 +60,7 @@ export interface UpdateSeatPayload {
   rowLabel: string;
   seatNumber: number;
   seatTypeId: string;
+  isActive?: boolean;
 }
 
 /** Khớp CinemaSystem.Contracts.Cinemas.CinemaResponse */
@@ -140,7 +141,7 @@ export const roomService = {
 
   /** PUT /api/seats/{seatId} – Cập nhật ghế */
   updateSeat: async (seatId: string, payload: UpdateSeatPayload): Promise<SeatResponse> => {
-    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, payload) as unknown as ApiEnvelope<SeatResponse>;
+    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, { seatId, ...payload }) as unknown as ApiEnvelope<SeatResponse>;
     return envelope.data;
   },
 

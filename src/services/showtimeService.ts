@@ -63,7 +63,7 @@ export interface RoomResponse {
 export interface MovieResponse {
   id: string;
   movieNameVn: string;
-  genre?: string;
+  genres?: string[];
   duration: number;
   imagePoster?: string;
   ageRating?: string;
@@ -79,6 +79,14 @@ interface ApiEnvelope<T> {
   message: string;
   data: T;
   errorCode?: string;
+}
+
+/** Kớp cấu trúc PagedList<T> từ BE */
+interface PagedListEnvelope<T> {
+  items: T[];
+  pageIndex: number;
+  pageSize: number;
+  totalCount: number;
 }
 
 // ============================================================
@@ -125,11 +133,12 @@ export const showtimeService = {
     return envelope?.data ?? [];
   },
 
-  /** GET /api/movies?status=NOW_SHOWING */
+  /** GET /api/movies – BE trả về PagedList<MovieResponse> */
   getMoviesForScheduling: async (): Promise<MovieResponse[]> => {
     const envelope = await axiosInstance.get('/api/movies', {
-      params: { status: 'NOW_SHOWING' }
-    }) as unknown as ApiEnvelope<MovieResponse[]>;
-    return envelope?.data ?? [];
+      params: { pageSize: 200 }  // Lấy đủ phim, không bị cắt trang
+    }) as unknown as ApiEnvelope<PagedListEnvelope<MovieResponse>>;
+    // BE trả về { data: { items: [...], pageIndex, pageSize, totalCount } }
+    return envelope?.data?.items ?? [];
   },
 };
