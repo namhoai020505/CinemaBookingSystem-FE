@@ -558,22 +558,34 @@ export default function Checkout() {
   );
 
   // Release local lock va goi backend unlock cho cac ghe dang giu truoc khi user roi checkout.
-  const releaseSelectedSeatLocks = useCallback(async () => {
-    if (
-      booking?.bookingId &&
-      booking.status?.toUpperCase() !== "PAID" &&
-      booking.status?.toUpperCase() !== "COMPLETED"
-    ) {
-      await api
-        .post(`/api/bookings/${booking.bookingId}/cancel`)
-        .catch((error) => {
-          console.warn("Khong the huy booking pending ngay lap tuc:", error);
-        });
+  const releaseSelectedSeatLocks = useCallback(async (strictBookingCancel = false) => {
+    const hasPendingBooking =
+      Boolean(booking?.bookingId) &&
+      booking?.status?.toUpperCase() !== "PAID" &&
+      booking?.status?.toUpperCase() !== "COMPLETED";
+    let bookingCancelSucceeded = false;
+    let bookingCancelFailed = false;
+
+    if (hasPendingBooking && booking?.bookingId) {
+      try {
+        const response = await bookingService.cancelPendingBooking(booking.bookingId);
+        if (!response.success) {
+          throw new Error(response.message || "Khong the huy booking pending.");
+        }
+        bookingCancelSucceeded = true;
+      } catch (error) {
+        bookingCancelFailed = true;
+        console.warn("Khong the huy booking pending ngay lap tuc:", error);
+
+        if (strictBookingCancel) {
+          throw error;
+        }
+      }
     }
 
     const seatsToRelease = selectedSeats.filter((seat) => Boolean(seat.seatId));
 
-    if (seatsToRelease.length > 0) {
+    if (!bookingCancelSucceeded && seatsToRelease.length > 0) {
       const results = await Promise.allSettled(
         seatsToRelease.map((seat) =>
           api.post("/api/seats/unlock", {
@@ -594,8 +606,10 @@ export default function Checkout() {
       }
     }
 
-    removeSeatLockSession(showtimeId, userKey);
-    removePaymentSession(showtimeId, userKey);
+    if (!bookingCancelFailed || !strictBookingCancel) {
+      removeSeatLockSession(showtimeId, userKey);
+      removePaymentSession(showtimeId, userKey);
+    }
   }, [booking?.bookingId, booking?.status, selectedSeats, showtimeId, userKey]);
 
   // Khi quá hạn thanh toán, dọn session local và đưa user về trang chủ.
@@ -631,7 +645,7 @@ export default function Checkout() {
       try {
         setIsCancelling(true);
         setErrorMessage("");
-        await releaseSelectedSeatLocks();
+        await releaseSelectedSeatLocks(true);
         hideExpiredBookingFromHistory(booking?.bookingId);
         navigate(redirectTo, { replace: true });
       } catch (error) {
