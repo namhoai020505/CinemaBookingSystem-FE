@@ -43,6 +43,8 @@ export default function ManageMovie() {
   // States for DB-backed Genre Selection
   const [genres, setGenres] = useState<{ genreId: number; name: string }[]>([]);
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
+  const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
+  const genreDropdownRef = useRef<HTMLDivElement>(null);
 
   // 1. Hàm lấy danh sách phim (Fetch tất cả để xử lý client-side)
   const fetchMovies = async () => {
@@ -83,6 +85,21 @@ export default function ManageMovie() {
 
   useEffect(() => {
     void fetchGenres();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        genreDropdownRef.current &&
+        !genreDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsGenreDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   useEffect(() => {
@@ -636,7 +653,7 @@ export default function ManageMovie() {
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    Tên Phim () <span className="text-red-500">*</span>
+                    Tên Phim <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -669,23 +686,63 @@ export default function ManageMovie() {
 
               {/* Thể loại, Đạo diễn & Ngôn ngữ */}
               <div className="grid grid-cols-3 gap-4">
-                <div>
+                <div className="relative" ref={genreDropdownRef}>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     Thể Loại
                   </label>
-                  <select
-                    value={selectedGenreIds.length > 0 ? selectedGenreIds[0] : ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSelectedGenreIds(val ? [Number(val)] : []);
-                    }}
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  <div
+                    onClick={() => setIsGenreDropdownOpen(!isGenreDropdownOpen)}
+                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer flex items-center justify-between"
                   >
-                    <option value="">Chọn thể loại...</option>
-                    {genres.map(g => (
-                      <option key={g.genreId} value={g.genreId}>{g.name}</option>
-                    ))}
-                  </select>
+                    <span className={selectedGenreIds.length === 0 ? "text-gray-400" : ""}>
+                      {selectedGenreIds.length > 0
+                        ? genres.find(g => g.genreId === selectedGenreIds[0])?.name || "Chọn thể loại..."
+                        : "Chọn thể loại..."}
+                    </span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+
+                  {isGenreDropdownOpen && (
+                    <div className="absolute z-50 mt-1 w-full bg-[#1E293B] border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-60 flex flex-col animate-fadeIn">
+                      <div className="overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#1E293B] [&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-500">
+                        <div
+                          onClick={() => {
+                            setSelectedGenreIds([]);
+                            setIsGenreDropdownOpen(false);
+                          }}
+                          className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${
+                            selectedGenreIds.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
+                          }`}
+                        >
+                          Chọn thể loại...
+                        </div>
+                        {genres.map((g) => {
+                          const isSelected = selectedGenreIds.includes(g.genreId);
+                          return (
+                            <div
+                              key={g.genreId}
+                              onClick={() => {
+                                setSelectedGenreIds([g.genreId]);
+                                setIsGenreDropdownOpen(false);
+                              }}
+                              className={`px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between transition-colors duration-150 ${
+                                isSelected ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
+                              }`}
+                            >
+                              <span>{g.name}</span>
+                              {isSelected && (
+                                <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
