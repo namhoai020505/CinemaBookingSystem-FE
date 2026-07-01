@@ -13,6 +13,7 @@ import {
   getAccessToken,
   isAccessTokenExpired,
 } from "../../lib/auth";
+import { getMediaUrl } from "../../lib/media";
 import { movieService } from "../../services/movieService";
 
 type HeroSlide = {
@@ -26,6 +27,7 @@ type Movie = {
   title: string;
   genre: string;
   duration: string;
+  director?: string;
   posterUrl: string;
   ageRating: string;
   highlight?: string;
@@ -56,7 +58,7 @@ const getRealSlideIndex = (index: number) =>
     LAST_REAL_SLIDE_INDEX) +
   FIRST_REAL_SLIDE_INDEX;
 
-const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || "http://localhost:5070";
+
 
 // Type guard dùng khi đọc dữ liệu phim có shape chưa cố định từ backend.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -163,7 +165,7 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     "durationMinutes",
     "runningTime",
   ]);
-  const posterUrl = resolvePosterUrl(
+  const posterUrl = getMediaUrl(
     getStringValue(movie, ["imagePoster", "posterUrl", "imageUrl", "poster"]),
   );
   const isHot = movie.isHot === true || movie.highlight === true;
@@ -173,6 +175,7 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     title,
     genre: getGenreValue(movie),
     duration: durationValue ? `${durationValue} phút` : "Đang cập nhật",
+    director: getStringValue(movie, ["director", "Director"]) || "Đang cập nhật",
     posterUrl,
     ageRating: getStringValue(movie, ["ageRating", "rating", "rated"]) || "P",
     highlight: isHot ? "HOT" : undefined,
@@ -499,6 +502,9 @@ export default function Home() {
                     {movie.title}
                   </h3>
                   <p className="mt-1 text-xs leading-5 text-white">
+                    Đạo diễn: <span className="text-white/80">{movie.director}</span>
+                  </p>
+                  <p className="text-xs leading-5 text-white">
                     Thể loại: <span className="text-white/80">{movie.genre}</span>
                   </p>
                   <p className="text-xs leading-5 text-white">

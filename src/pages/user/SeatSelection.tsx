@@ -7,12 +7,13 @@ import {
   getAccessToken,
   getCurrentUserProfile,
 } from "../../lib/auth";
+import { getMediaUrl } from "../../lib/media";
 
 const MAX_SEATS_ALLOWED = 6;
 const DEFAULT_LOCK_SECONDS = 600;
 const FALLBACK_POSTER =
   "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop";
-const API_ORIGIN = String(api.defaults.baseURL || "").replace(/\/$/, "");
+
 
 type ApiResponse<T> = {
   success: boolean;
@@ -23,12 +24,12 @@ type ApiResponse<T> = {
 // Lấy HTTP status từ lỗi Axios mà không cần ép kiểu any.
 const getHttpStatus = (error: unknown) =>
   typeof error === "object" &&
-  error !== null &&
-  "response" in error &&
-  typeof error.response === "object" &&
-  error.response !== null &&
-  "status" in error.response &&
-  typeof error.response.status === "number"
+    error !== null &&
+    "response" in error &&
+    typeof error.response === "object" &&
+    error.response !== null &&
+    "status" in error.response &&
+    typeof error.response.status === "number"
     ? error.response.status
     : undefined;
 
@@ -491,9 +492,9 @@ const formatDateTime = (value?: string | null) => {
   return Number.isNaN(timestamp)
     ? "Đang cập nhật"
     : new Date(timestamp).toLocaleString("vi-VN", {
-        dateStyle: "short",
-        timeStyle: "short",
-      });
+      dateStyle: "short",
+      timeStyle: "short",
+    });
 };
 
 // Chuyển poster path tương đối thành URL đầy đủ.
@@ -511,8 +512,6 @@ const resolvePosterUrl = (value?: string | null) => {
     return `${API_ORIGIN}${posterUrl}`;
   }
 
-  return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
-};
 
 // Label tiếng Việt cho từng loại ghế.
 const getSeatTypeLabel = (type: SeatType) => {
@@ -638,7 +637,7 @@ export default function SeatSelection() {
           duration: movie?.durationMinutes
             ? `${movie.durationMinutes} phút`
             : undefined,
-          posterUrl: resolvePosterUrl(movie?.posterUrl),
+          posterUrl: getMediaUrl(movie?.posterUrl),
           ageRating: movie?.ageRating || undefined,
           roomName: showtime.roomName,
           cinemaName: showtime.cinemaName,
@@ -824,13 +823,13 @@ export default function SeatSelection() {
         setSeatMap((current) =>
           current
             ? {
-                ...current,
-                seats: current.seats.map((seat) =>
-                  seat.status === "LOCKED_BY_ME"
-                    ? { ...seat, status: "AVAILABLE", lockedUntil: null }
-                    : seat,
-                ),
-              }
+              ...current,
+              seats: current.seats.map((seat) =>
+                seat.status === "LOCKED_BY_ME"
+                  ? { ...seat, status: "AVAILABLE", lockedUntil: null }
+                  : seat,
+              ),
+            }
             : current,
         );
       }
@@ -869,9 +868,9 @@ export default function SeatSelection() {
         const isBlocked = (item: SeatItem | undefined, column: number) =>
           Boolean(
             item &&
-              (item.status === "BOOKED" ||
-                item.status === "HOLDING" ||
-                selectedCols.includes(column)),
+            (item.status === "BOOKED" ||
+              item.status === "HOLDING" ||
+              selectedCols.includes(column)),
           );
 
         if (
@@ -937,13 +936,13 @@ export default function SeatSelection() {
       setSeatMap((current) =>
         current
           ? {
-              ...current,
-              seats: current.seats.map((item) =>
-                item.seatId === seat.seatId
-                  ? { ...item, status: "AVAILABLE", lockedUntil: null }
-                  : item,
-              ),
-            }
+            ...current,
+            seats: current.seats.map((item) =>
+              item.seatId === seat.seatId
+                ? { ...item, status: "AVAILABLE", lockedUntil: null }
+                : item,
+            ),
+          }
           : current,
       );
     } catch (error) {
@@ -1111,7 +1110,7 @@ export default function SeatSelection() {
   const displayMovieDuration =
     routeMovieDuration || displayDetails?.duration || "Đang cập nhật";
   const displayPosterUrl =
-    resolvePosterUrl(routeMoviePoster) ||
+    getMediaUrl(routeMoviePoster) ||
     displayDetails?.posterUrl ||
     FALLBACK_POSTER;
   const displayMovieAgeRating =
@@ -1258,13 +1257,25 @@ export default function SeatSelection() {
                       .filter((seat) => seat.row === row)
                       .sort((left, right) => left.column - right.column);
 
+                    const filteredSeatsInRow: SeatItem[] = [];
+                    const skipCols = new Set<number>();
+                    for (const seat of seatsInRow) {
+                      if (skipCols.has(seat.column)) {
+                        continue;
+                      }
+                      filteredSeatsInRow.push(seat);
+                      if (seat.type === "SWEETBOX") {
+                        skipCols.add(seat.column + 1);
+                      }
+                    }
+
                     return (
                       <div key={row} className="flex items-center justify-center gap-3">
                         <div className="w-6 text-center text-xs font-black text-slate-500">
                           {row}
                         </div>
                         <div className="flex items-center justify-center gap-1.5 xl:gap-2">
-                          {seatsInRow.map((seat) => {
+                          {filteredSeatsInRow.map((seat) => {
                             const disabled =
                               unlockingSeatId === seat.seatId || !isSelectableSeat(seat);
 
@@ -1279,11 +1290,10 @@ export default function SeatSelection() {
                                 onClick={() => {
                                   void handleSelectSeat(seat);
                                 }}
-                                className={`group relative flex h-8 shrink-0 items-center justify-center rounded-md border transition-all sm:h-9 ${
-                                  seat.type === "SWEETBOX"
+                                className={`group relative flex h-8 shrink-0 items-center justify-center rounded-md border transition-all sm:h-9 ${seat.type === "SWEETBOX"
                                     ? "w-14 sm:w-16 xl:w-[70px]"
                                     : "w-8 sm:w-9"
-                                } ${getSeatStyles(seat)}`}
+                                  } ${getSeatStyles(seat)}`}
                               >
                                 {renderSeatIcon(seat)}
                                 <span className="pointer-events-none absolute -bottom-5 left-1/2 hidden -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-bold text-white group-hover:block">
@@ -1362,11 +1372,10 @@ export default function SeatSelection() {
                 type="button"
                 disabled={selectedSeats.length === 0 || submitting}
                 onClick={handleProceed}
-                className={`h-12 self-center rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all ${
-                  selectedSeats.length > 0 && !submitting
+                className={`h-12 self-center rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all ${selectedSeats.length > 0 && !submitting
                     ? "bg-[#FFD166] text-black hover:-translate-y-0.5 hover:bg-[#FFE7A3]"
                     : "cursor-not-allowed bg-slate-800 text-slate-500"
-                }`}
+                  }`}
               >
                 {submitting ? "Đang giữ..." : "Tiếp tục"}
               </button>
