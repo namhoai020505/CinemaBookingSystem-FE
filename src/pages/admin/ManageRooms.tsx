@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { roomService } from '../../services/roomService';
@@ -10,52 +10,33 @@ const ROOM_STATUS_OPTIONS = [
   { value: 'MAINTENANCE', label: 'Bảo Trì', color: 'yellow' },
 ] as const;
 
-const STATUS_CONFIG: Record<string, { label: string; dot: string; badge: string }> = {
-  ACTIVE: {
-    label: 'Hoạt Động',
-    dot: 'bg-emerald-400 animate-pulse',
-    badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  },
-  INACTIVE: {
-    label: 'Ngừng HĐ',
-    dot: 'bg-red-400',
-    badge: 'bg-red-500/10 text-red-400 border-red-500/20',
-  },
-  MAINTENANCE: {
-    label: 'Bảo Trì',
-    dot: 'bg-yellow-400 animate-pulse',
-    badge: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-  },
-};
-
+// Trả về badge màu tương ứng với trạng thái phòng để bảng dễ scan.
 const getStatusBadge = (status: string) => {
-  const cfg = STATUS_CONFIG[status];
-  if (!cfg) return <span className="text-xs text-gray-400">{status}</span>;
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 border rounded-lg text-xs font-semibold ${cfg.badge}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-      {cfg.label}
-    </span>
-  );
-};
-
-// Next status in cycle: ACTIVE → MAINTENANCE → INACTIVE → ACTIVE
-const NEXT_STATUS: Record<string, string> = {
-  ACTIVE: 'MAINTENANCE',
-  MAINTENANCE: 'INACTIVE',
-  INACTIVE: 'ACTIVE',
-};
-
-const STATUS_CYCLE_LABEL: Record<string, string> = {
-  ACTIVE: '🔧 Bảo Trì',
-  MAINTENANCE: '⛔ Ngừng HĐ',
-  INACTIVE: '✅ Kích Hoạt',
-};
-
-const STATUS_CYCLE_CLASS: Record<string, string> = {
-  ACTIVE: 'bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border-yellow-500/20',
-  MAINTENANCE: 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20',
-  INACTIVE: 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20',
+  switch (status) {
+    case 'ACTIVE':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-semibold">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Hoạt Động
+        </span>
+      );
+    case 'INACTIVE':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+          Ngừng HĐ
+        </span>
+      );
+    case 'MAINTENANCE':
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded-lg text-xs font-semibold">
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+          Bảo Trì
+        </span>
+      );
+    default:
+      return <span className="text-xs text-gray-400">{status}</span>;
+  }
 };
 
 // Trang quản lý phòng chiếu: lọc theo rạp, thêm/sửa/xóa phòng và đi tới sơ đồ ghế.
@@ -66,11 +47,9 @@ export default function ManageRooms() {
   const [rooms, setRooms] = useState<RoomResponse[]>([]);
   const [cinemas, setCinemas] = useState<CinemaResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [togglingRoomId, setTogglingRoomId] = useState<string | null>(null);
 
-  // Filters
+  // Filter
   const [filterCinemaId, setFilterCinemaId] = useState<string>('ALL');
-  const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -86,7 +65,8 @@ export default function ManageRooms() {
   // ──────────────────────────────────────────
   // Data fetching
   // ──────────────────────────────────────────
-  const fetchData = useCallback(async () => {
+  // Tải đồng thời danh sách phòng và rạp để render bảng và form chọn rạp.
+  const fetchData = async () => {
     try {
       setLoading(true);
       const [roomsData, cinemasData] = await Promise.all([
@@ -96,16 +76,17 @@ export default function ManageRooms() {
       setRooms(roomsData);
       setCinemas(cinemasData);
     } catch (err) {
+      console.error('Lỗi tải dữ liệu phòng chiếu:', err);
       toast.error('Không thể tải dữ liệu phòng chiếu.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   // Lấy dữ liệu lần đầu khi admin mở trang phòng chiếu.
   useEffect(() => {
     void fetchData();
-  }, [fetchData]);
+  }, []);
 
   // Esc to close modal
   // Đóng modal bằng phím Escape để thao tác quản trị nhanh hơn.
@@ -123,42 +104,10 @@ export default function ManageRooms() {
   // ──────────────────────────────────────────
   // Filtered data
   // ──────────────────────────────────────────
-  const filteredRooms = rooms.filter((r) => {
-    const matchCinema = filterCinemaId === 'ALL' || r.cinemaId === filterCinemaId;
-    const matchStatus = filterStatus === 'ALL' || r.roomStatus === filterStatus;
-    return matchCinema && matchStatus;
-  });
-
-  // ──────────────────────────────────────────
-  // Status cycle toggle
-  // ──────────────────────────────────────────
-  const handleCycleStatus = async (room: RoomResponse) => {
-    const nextStatus = NEXT_STATUS[room.roomStatus] ?? 'ACTIVE';
-    const nextLabel = STATUS_CONFIG[nextStatus]?.label ?? nextStatus;
-
-    const confirmed = window.confirm(
-      `Đổi trạng thái phòng "${room.roomName}" thành "${nextLabel}"?`
-    );
-    if (!confirmed) return;
-
-    try {
-      setTogglingRoomId(room.roomId);
-      await roomService.updateRoom(room.roomId, {
-        roomName: room.roomName,
-        capacity: room.capacity,
-        roomStatus: nextStatus,
-      });
-      toast.success(`Đã đổi trạng thái phòng "${room.roomName}" thành ${nextLabel}!`);
-      // Optimistic update in local state
-      setRooms((prev) =>
-        prev.map((r) => r.roomId === room.roomId ? { ...r, roomStatus: nextStatus } : r)
-      );
-    } catch (err) {
-      toast.error('Đổi trạng thái thất bại. Vui lòng thử lại.');
-    } finally {
-      setTogglingRoomId(null);
-    }
-  };
+  // Lọc phòng theo rạp được chọn, chọn ALL thì hiển thị toàn bộ.
+  const filteredRooms = filterCinemaId === 'ALL'
+    ? rooms
+    : rooms.filter((r) => r.cinemaId === filterCinemaId);
 
   // ──────────────────────────────────────────
   // Modal handlers
@@ -213,6 +162,7 @@ export default function ManageRooms() {
       setEditingRoom(null);
       await fetchData();
     } catch (err) {
+      console.error('Lỗi lưu phòng chiếu:', err);
       toast.error('Lưu phòng chiếu thất bại. Kiểm tra lại dữ liệu.');
     } finally {
       setSubmitting(false);
@@ -232,6 +182,7 @@ export default function ManageRooms() {
       toast.success(`Đã xóa phòng "${room.roomName}" thành công!`);
       await fetchData();
     } catch (err) {
+      console.error('Lỗi xóa phòng:', err);
       toast.error('Xóa phòng thất bại. Có thể phòng đang được sử dụng.');
     } finally {
       setLoading(false);
@@ -260,45 +211,18 @@ export default function ManageRooms() {
       </div>
 
       {/* FILTER BAR */}
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold uppercase text-gray-400 shrink-0">Rạp:</label>
-          <select
-            value={filterCinemaId}
-            onChange={(e) => setFilterCinemaId(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition min-w-[180px]"
-          >
-            <option value="ALL">Tất cả rạp</option>
-            {cinemas.map((c) => (
-              <option key={c.cinemaId} value={c.cinemaId}>{c.cinemaName}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold uppercase text-gray-400 shrink-0">Trạng thái:</label>
-          <div className="flex gap-1.5">
-            {['ALL', 'ACTIVE', 'MAINTENANCE', 'INACTIVE'].map((s) => {
-              const cfg = STATUS_CONFIG[s];
-              const isSelected = filterStatus === s;
-              return (
-                <button
-                  key={s}
-                  onClick={() => setFilterStatus(s)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${isSelected
-                      ? s === 'ALL'
-                        ? 'bg-[#4318FF] text-white border-[#4318FF]'
-                        : `${cfg?.badge ?? ''} ring-2 ring-white/20`
-                      : 'bg-gray-800/40 text-gray-400 border-gray-700 hover:bg-gray-700/60'
-                    }`}
-                >
-                  {s === 'ALL' ? 'Tất cả' : (cfg?.label ?? s)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
+      <div className="mb-5 flex items-center gap-3">
+        <label className="text-xs font-semibold uppercase text-gray-400">Lọc theo rạp:</label>
+        <select
+          value={filterCinemaId}
+          onChange={(e) => setFilterCinemaId(e.target.value)}
+          className="px-4 py-2 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition min-w-[220px]"
+        >
+          <option value="ALL">Tất cả rạp</option>
+          {cinemas.map((c) => (
+            <option key={c.cinemaId} value={c.cinemaId}>{c.cinemaName}</option>
+          ))}
+        </select>
         <span className="text-xs text-gray-500 ml-auto">
           Hiển thị {filteredRooms.length} / {rooms.length} phòng
         </span>
@@ -318,7 +242,7 @@ export default function ManageRooms() {
           <p className="text-gray-400 text-sm">
             {rooms.length === 0
               ? 'Chưa có phòng chiếu nào trong hệ thống.'
-              : 'Không có phòng chiếu nào khớp với bộ lọc đã chọn.'}
+              : 'Không có phòng chiếu nào thuộc rạp đã chọn.'}
           </p>
         </div>
       ) : (
@@ -335,70 +259,53 @@ export default function ManageRooms() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50 text-sm">
-              {filteredRooms.map((room) => {
-                const isToggling = togglingRoomId === room.roomId;
-                return (
-                  <tr
-                    key={room.roomId}
-                    className={`hover:bg-blue-950/10 transition group ${room.roomStatus === 'INACTIVE' ? 'opacity-60' : ''}`}
-                  >
-                    <td className="p-4">
-                      <div className="font-semibold text-white">{room.roomName}</div>
-                      <div className="text-[10px] text-gray-500 mt-0.5 font-mono">{room.roomId}</div>
-                    </td>
-                    <td className="p-4 text-gray-300">{room.cinemaName}</td>
-                    <td className="p-4 text-center">
-                      <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-xs font-semibold">
-                        {room.capacity} chỗ
-                      </span>
-                    </td>
-                    <td className="p-4 text-center">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${room.seatCount > 0
-                          ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                          : 'bg-gray-500/10 text-gray-500 border border-gray-500/20'
-                        }`}>
-                        {room.seatCount} ghế
-                      </span>
-                    </td>
-                    <td className="p-4 text-center">{getStatusBadge(room.roomStatus)}</td>
-                    <td className="p-4">
-                      <div className="flex justify-center gap-2 flex-wrap">
-                        {/* Seat layout button — only available for non-inactive rooms */}
-                        <button
-                          onClick={() => navigate(`/admin/rooms/${room.roomId}/seats`)}
-                          className="px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 text-xs font-semibold rounded-lg transition"
-                          title="Thiết kế sơ đồ ghế"
-                        >
-                          Sơ Đồ Ghế
-                        </button>
-
-                        {/* Quick status cycle button */}
-                        <button
-                          onClick={() => void handleCycleStatus(room)}
-                          disabled={isToggling}
-                          className={`px-3 py-1.5 border text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed ${STATUS_CYCLE_CLASS[room.roomStatus] ?? 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}
-                          title={`Chuyển sang: ${STATUS_CONFIG[NEXT_STATUS[room.roomStatus] ?? 'ACTIVE']?.label ?? ''}`}
-                        >
-                          {isToggling ? '...' : (STATUS_CYCLE_LABEL[room.roomStatus] ?? '↻')}
-                        </button>
-
-                        <button
-                          onClick={() => handleOpenEdit(room)}
-                          className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 text-xs font-semibold rounded-lg transition"
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          onClick={() => void handleDelete(room)}
-                          className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 text-xs font-semibold rounded-lg transition"
-                        >
-                          Xóa
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filteredRooms.map((room) => (
+                <tr key={room.roomId} className="hover:bg-blue-950/10 transition group">
+                  <td className="p-4">
+                    <div className="font-semibold text-white">{room.roomName}</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5 font-mono">{room.roomId}</div>
+                  </td>
+                  <td className="p-4 text-gray-300">{room.cinemaName}</td>
+                  <td className="p-4 text-center">
+                    <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-xs font-semibold">
+                      {room.capacity} chỗ
+                    </span>
+                  </td>
+                  <td className="p-4 text-center">
+                    <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${
+                      room.seatCount > 0
+                        ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                        : 'bg-gray-500/10 text-gray-500 border border-gray-500/20'
+                    }`}>
+                      {room.seatCount} ghế
+                    </span>
+                  </td>
+                  <td className="p-4 text-center">{getStatusBadge(room.roomStatus)}</td>
+                  <td className="p-4">
+                    <div className="flex justify-center gap-2">
+                      <button
+                        onClick={() => navigate(`/admin/rooms/${room.roomId}/seats`)}
+                        className="px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 text-xs font-semibold rounded-lg transition"
+                        title="Thiết kế sơ đồ ghế"
+                      >
+                        Sơ Đồ Ghế
+                      </button>
+                      <button
+                        onClick={() => handleOpenEdit(room)}
+                        className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 text-xs font-semibold rounded-lg transition"
+                      >
+                        Sửa
+                      </button>
+                      <button
+                        onClick={() => handleDelete(room)}
+                        className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 text-xs font-semibold rounded-lg transition"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -434,8 +341,9 @@ export default function ManageRooms() {
                   value={formCinemaId}
                   onChange={(e) => setFormCinemaId(e.target.value)}
                   disabled={!!editingRoom}
-                  className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${editingRoom ? 'opacity-60 cursor-not-allowed' : ''
-                    }`}
+                  className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${
+                    editingRoom ? 'opacity-60 cursor-not-allowed' : ''
+                  }`}
                 >
                   <option value="" disabled>-- Chọn rạp chiếu --</option>
                   {cinemas.map((c) => (
@@ -503,10 +411,11 @@ export default function ManageRooms() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleSubmit()}
+                onClick={handleSubmit}
                 disabled={submitting}
-                className={`px-6 py-2 bg-[#4318FF] text-white font-semibold text-sm rounded-xl shadow-lg transition ${submitting ? 'cursor-not-allowed opacity-70' : 'hover:bg-blue-700'
-                  }`}
+                className={`px-6 py-2 bg-[#4318FF] text-white font-semibold text-sm rounded-xl shadow-lg transition ${
+                  submitting ? 'cursor-not-allowed opacity-70' : 'hover:bg-blue-700'
+                }`}
               >
                 {submitting
                   ? 'Đang xử lý...'

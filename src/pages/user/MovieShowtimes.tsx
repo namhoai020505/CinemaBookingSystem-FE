@@ -40,7 +40,6 @@ type MovieDetailResponse = {
   posterUrl?: string | null;
   trailerUrl?: string | null;
   movieStatus: string;
-  director?: string | null;
 };
 
 type SeatMapResponse = {
@@ -61,7 +60,6 @@ type MovieInfo = {
   releaseDate?: string;
   description?: string;
   trailerUrl?: string;
-  director?: string;
 };
 
 type SeatAvailability = {
@@ -214,7 +212,6 @@ const mapMovieDetailToInfo = (
   title: movie?.title || showtime?.movieTitle || "Phim hệ thống",
   durationMinutes: movie?.durationMinutes,
   ageRating: movie?.ageRating || "P",
-  director: movie?.director || "Đang cập nhật",
   genre: movie?.genre || "Đang cập nhật",
   posterUrl: movie?.posterUrl || FALLBACK_POSTER,
   language: movie?.language || "Tiếng Việt",
@@ -1005,10 +1002,6 @@ export default function MovieShowtimes() {
 
                 {/* Metadata List */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#0F172A]/50 border border-gray-800/80 rounded-2xl p-4 text-xs text-gray-300">
-                  <div className="flex items-center gap-2.5">
-                    <FiUser className="h-4 w-4 text-[#FFD166] shrink-0" />
-                    <span><b>Đạo diễn:</b> {movieInfo.director || "Đang cập nhật"}</span>
-                  </div>
                   <div className="flex items-center gap-2.5">
                     <FiFilm className="h-4 w-4 text-[#FFD166] shrink-0" />
                     <span><b>Thể loại:</b> {movieInfo.genre || "Đang cập nhật"}</span>
