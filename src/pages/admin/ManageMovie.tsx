@@ -593,9 +593,9 @@ export default function ManageMovie() {
               {totalCount === 0
                 ? TEXT.MOVIE.PAGINATION_NO_DATA
                 : TEXT.MOVIE.PAGINATION_INFO
-                    .replace("{0}", String((pageIndex - 1) * pageSize + 1))
-                    .replace("{1}", String(Math.min(pageIndex * pageSize, totalCount)))
-                    .replace("{2}", String(totalCount))}
+                  .replace("{0}", String((pageIndex - 1) * pageSize + 1))
+                  .replace("{1}", String(Math.min(pageIndex * pageSize, totalCount)))
+                  .replace("{2}", String(totalCount))}
             </span>
             {totalPages > 1 && (
               <div className="flex gap-2">
@@ -712,9 +712,8 @@ export default function ManageMovie() {
                             setSelectedGenreIds([]);
                             setIsGenreDropdownOpen(false);
                           }}
-                          className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${
-                            selectedGenreIds.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
-                          }`}
+                          className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${selectedGenreIds.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
+                            }`}
                         >
                           {TEXT.MOVIE.PLACEHOLDER_GENRE}
                         </div>
@@ -727,9 +726,8 @@ export default function ManageMovie() {
                                 setSelectedGenreIds([g.genreId]);
                                 setIsGenreDropdownOpen(false);
                               }}
-                              className={`px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between transition-colors duration-150 ${
-                                isSelected ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
-                              }`}
+                              className={`px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between transition-colors duration-150 ${isSelected ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
+                                }`}
                             >
                               <span>{g.name}</span>
                               {isSelected && (
