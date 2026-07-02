@@ -9,6 +9,7 @@ type OtpStepActionsProps = {
   backLabel: string;
 };
 
+// Cụm action dùng chung cho các màn hình OTP: quay lại, gửi lại và hiển thị cooldown.
 export const OtpStepActions = ({
   attemptsRemaining,
   cooldownSeconds,

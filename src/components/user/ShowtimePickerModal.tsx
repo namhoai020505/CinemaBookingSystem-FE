@@ -69,8 +69,33 @@ const weekdays = [
   "Thứ Bảy",
 ];
 
+const SHOWTIME_VISIBILITY_REFRESH_MS = 30_000;
+
+const getShowtimeTimestamp = (value: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const normalizedValue = value.includes("T") ? value : value.replace(" ", "T");
+  const timestamp = Date.parse(normalizedValue);
+
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
+const isShowtimeVisibleToCustomer = (
+  showtime: Pick<ShowtimeResponse, "startTime" | "status">,
+  nowMs: number,
+) => {
+  const status = showtime.status?.toUpperCase();
+  const startTimestamp = getShowtimeTimestamp(showtime.startTime);
+
+  return status === "OPEN" && (startTimestamp === null || startTimestamp > nowMs);
+};
+
+// Lấy phần yyyy-MM-dd từ startTime ISO để group/filter theo ngày.
 const getDateKey = (value: string) => value.split("T")[0] || "";
 
+// Tạo key ngày hôm nay theo timezone trình duyệt.
 const getTodayKey = () => {
   const today = new Date();
   const year = today.getFullYear();
@@ -79,6 +104,7 @@ const getTodayKey = () => {
   return `${year}-${month}-${date}`;
 };
 
+// Tạo dữ liệu cho một nút tab ngày từ chuỗi yyyy-MM-dd.
 const buildDayTab = (dateValue: string): DayTab => {
   const [, month, date] = dateValue.split("-");
   const dateObject = new Date(`${dateValue}T00:00:00`);
@@ -94,6 +120,7 @@ const buildDayTab = (dateValue: string): DayTab => {
   };
 };
 
+// Format ngày thành dd/mm/yyyy để hiển thị trong phần tóm tắt suất chiếu.
 const formatDate = (dateValue: string) => {
   if (!dateValue) {
     return "";
@@ -103,6 +130,7 @@ const formatDate = (dateValue: string) => {
   return `${date}/${month}/${year}`;
 };
 
+// Rút gọn ISO datetime thành HH:mm cho button suất chiếu.
 const formatISOToShortTime = (value: string) => {
   if (!value) {
     return "";
@@ -115,9 +143,11 @@ const formatISOToShortTime = (value: string) => {
   return timePart?.substring(0, 5) || "";
 };
 
+// Format số tiền theo chuẩn vi-VN.
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("vi-VN").format(value);
 
+// Gom suất chiếu theo cụm rạp/phòng để render modal dễ đọc.
 const groupShowtimesByCinema = (
   showtimes: ShowtimeSlot[],
   selectedDate: string,
@@ -172,6 +202,7 @@ const groupShowtimesByCinema = (
   }));
 };
 
+// Modal chọn ngày và suất chiếu trước khi vào trang chọn ghế.
 export default function ShowtimePickerModal({ movie, onClose }: Props) {
   const navigate = useNavigate();
   const [showtimes, setShowtimes] = useState<ShowtimeSlot[]>([]);
@@ -179,7 +210,9 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
   const [selectedSlot, setSelectedSlot] = useState<ShowtimeSlot | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
 
+  // Khóa scroll body khi modal mở để nền phía sau không bị cuộn.
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -189,6 +222,17 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
     };
   }, []);
 
+  // Tự refresh điều kiện hiển thị để suất chiếu vừa quá giờ sẽ biến mất khỏi UI.
+  useEffect(() => {
+    const timerId = window.setInterval(
+      () => setCurrentTimeMs(Date.now()),
+      SHOWTIME_VISIBILITY_REFRESH_MS,
+    );
+
+    return () => window.clearInterval(timerId);
+  }, []);
+
+  // Cho phép đóng modal bằng Escape.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -205,6 +249,7 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose, selectedSlot]);
 
+  // Tải lịch chiếu của phim và kiểm tra số ghế còn trống cho từng suất.
   useEffect(() => {
     let isMounted = true;
 
@@ -267,8 +312,12 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
         */
 
         setShowtimes(nextShowtimes);
+        const visibleNextShowtimes = nextShowtimes.filter((showtime) =>
+          isShowtimeVisibleToCustomer(showtime, Date.now()),
+        );
+
         setSelectedDate(
-          Array.from(new Set(nextShowtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean))).sort()[0] ||
+          Array.from(new Set(visibleNextShowtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean))).sort()[0] ||
             "",
         );
       } catch (error) {
@@ -291,17 +340,48 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
     };
   }, [movie.movieId]);
 
+  const visibleShowtimes = useMemo(
+    () =>
+      showtimes.filter((showtime) =>
+        isShowtimeVisibleToCustomer(showtime, currentTimeMs),
+      ),
+    [currentTimeMs, showtimes],
+  );
+
+  // Tạo danh sách tab ngày từ các suất chiếu còn khả dụng với customer.
   const daysFilter = useMemo(() => {
     const dateValues = Array.from(
-      new Set(showtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean)),
+      new Set(visibleShowtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean)),
     ).sort();
 
     return dateValues.map(buildDayTab);
-  }, [showtimes]);
+  }, [visibleShowtimes]);
 
+  useEffect(() => {
+    const firstAvailableDate = daysFilter[0]?.dateValue || "";
+
+    if (!firstAvailableDate) {
+      if (selectedDate) {
+        setSelectedDate("");
+      }
+      return;
+    }
+
+    if (!daysFilter.some((day) => day.dateValue === selectedDate)) {
+      setSelectedDate(firstAvailableDate);
+    }
+  }, [daysFilter, selectedDate]);
+
+  useEffect(() => {
+    if (selectedSlot && !isShowtimeVisibleToCustomer(selectedSlot, currentTimeMs)) {
+      setSelectedSlot(null);
+    }
+  }, [currentTimeMs, selectedSlot]);
+
+  // Group các suất chiếu sau khi đã lọc ngày đang chọn.
   const groupedCinemas = useMemo(
-    () => groupShowtimesByCinema(showtimes, selectedDate),
-    [selectedDate, showtimes],
+    () => groupShowtimesByCinema(visibleShowtimes, selectedDate),
+    [selectedDate, visibleShowtimes],
   );
 
   const selectedSlotCinema =
@@ -309,8 +389,15 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
   const selectedSlotDate = selectedSlot ? formatDate(getDateKey(selectedSlot.startTime)) : "";
   const selectedSlotTime = selectedSlot ? formatISOToShortTime(selectedSlot.startTime) : "";
 
+  // Đi tới trang chọn ghế với showtime đã chọn và truyền kèm thông tin phim.
   const handleConfirm = () => {
     if (!selectedSlot) {
+      return;
+    }
+
+    if (!isShowtimeVisibleToCustomer(selectedSlot, Date.now())) {
+      setSelectedSlot(null);
+      setErrorMessage("Suất chiếu này đã quá giờ. Vui lòng chọn suất chiếu khác.");
       return;
     }
 

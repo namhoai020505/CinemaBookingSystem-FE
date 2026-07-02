@@ -1,8 +1,9 @@
 export default function Footer() {
   return (
+    // Footer user hiển thị chính sách, cụm rạp và thông tin liên hệ.
     <footer className="bg-[#0F172A] text-gray-300 py-10 text-sm border-t border-gray-800">
       <div className="container mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8">
-        {/* Cột 1 */}
+        {/* Cột chính sách của rạp. */}
         <div>
           <h4 className="font-bold text-white mb-4 uppercase">Chính sách</h4>
           <ul className="space-y-2">
@@ -13,7 +14,7 @@ export default function Footer() {
           </ul>
         </div>
 
-        {/* Cột 2 & 3: Cụm rạp (Chiếm 2 cột) */}
+        {/* Cột cụm rạp, chiếm 2 cột trên desktop. */}
         <div className="md:col-span-2">
           <h4 className="font-bold text-white mb-4 uppercase">Cụm rạp</h4>
           <div className="grid grid-cols-2 gap-2">
@@ -24,7 +25,7 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Cột 4: Liên hệ */}
+        {/* Cột liên hệ và social placeholder. */}
         <div>
           <h4 className="font-bold text-white mb-4 uppercase">Liên hệ</h4>
           <p className="mb-2"><strong>Hotline:</strong> 1900 1234</p>

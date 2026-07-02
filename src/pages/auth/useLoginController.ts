@@ -11,6 +11,7 @@ import {
   unwrapApiResponse,
 } from './authUtils';
 
+// Hook gom toàn bộ state và handler của màn Login/Register/Forgot Password.
 export const useLoginController = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -54,6 +55,7 @@ export const useLoginController = () => {
   const hasActiveOtpTimer =
     resendCooldownSeconds > 0 || (otpValidSeconds !== null && otpValidSeconds > 0);
 
+  // Đồng hồ đếm ngược OTP và thời gian chờ gửi lại OTP.
   useEffect(() => {
     if (!hasActiveOtpTimer) {
       return;
@@ -81,16 +83,19 @@ export const useLoginController = () => {
     // Nếu không có state, giữ nguyên mode hiện tại (user định tần có thể tự switch tab)
   }, [location.state]);
 
+  // Tạo captcha mới và xóa input captcha cũ.
   const generateCaptcha = () => {
     setCaptchaText(createCaptcha());
     setCaptchaInput('');
   };
 
+  // Xóa message lỗi/thành công trước khi chạy thao tác mới.
   const resetFeedback = () => {
     setError('');
     setSuccessMessage('');
   };
 
+  // Reset toàn bộ trạng thái OTP khi đổi flow hoặc xác thực xong.
   const resetOtpState = () => {
     setOtp('');
     setResendCooldownSeconds(0);
@@ -98,6 +103,7 @@ export const useLoginController = () => {
     setOtpAttemptsRemaining(null);
   };
 
+  // Bắt đầu cửa sổ OTP dựa trên expiresAt và attemptsRemaining backend trả về.
   const startOtpWindow = (data?: RegisterResponseData | null) => {
     const validSeconds = getOtpValidSeconds(data?.expiresAt);
     setOtpValidSeconds(validSeconds);
@@ -105,6 +111,7 @@ export const useLoginController = () => {
     setOtpAttemptsRemaining(data?.attemptsRemaining ?? null);
   };
 
+  // Áp dụng lỗi OTP vào UI, đặc biệt là cooldown retryAfterSeconds.
   const applyOtpApiError = (apiError: ReturnType<typeof parseApiError>) => {
     setError(apiError.message);
 
@@ -113,6 +120,7 @@ export const useLoginController = () => {
     }
   };
 
+  // Chuyển giữa login/register/forgot và dọn state không còn liên quan.
   const switchMode = (nextMode: AuthMode) => {
     setAuthMode(nextMode);
     setRegisterStep('form');
@@ -128,6 +136,7 @@ export const useLoginController = () => {
     generateCaptcha();
   };
 
+  // Kiểm tra captcha trước khi gọi API login/register/forgot.
   const validateCaptcha = () => {
     if (captchaInput === captchaText) {
       return true;
@@ -138,6 +147,7 @@ export const useLoginController = () => {
     return false;
   };
 
+  // Đăng nhập bằng email/password, lưu token và điều hướng theo role trong JWT.
   const handleLogin = async () => {
     setIsLoading(true);
 
@@ -183,6 +193,7 @@ export const useLoginController = () => {
     }
   };
 
+  // Đăng nhập bằng Google idToken; cần backend hỗ trợ endpoint google-login.
   const handleGoogleLogin = async (idToken: string) => {
     resetFeedback();
     setIsLoading(true);
@@ -215,6 +226,7 @@ export const useLoginController = () => {
     }
   };
 
+  // Đăng ký tài khoản customer và chuyển sang bước nhập OTP xác thực email.
   const handleRegister = async () => {
     const trimmedName = fullName.trim();
     const trimmedPhoneNumber = phoneNumber.trim();
@@ -256,6 +268,7 @@ export const useLoginController = () => {
     }
   };
 
+  // Xác thực OTP sau đăng ký để active email.
   const handleVerifyEmail = async () => {
     if (!/^\d{6}$/.test(otp)) {
       setError('OTP phải gồm đúng 6 chữ số.');
@@ -295,6 +308,7 @@ export const useLoginController = () => {
     }
   };
 
+  // Gửi lại OTP xác thực email khi hết cooldown.
   const handleResendOtp = async () => {
     if (resendCooldownSeconds > 0) {
       return;
@@ -320,6 +334,7 @@ export const useLoginController = () => {
     }
   };
 
+  // Gửi OTP quên mật khẩu tới email đã đăng ký.
   const handleForgotPassword = async () => {
     setIsLoading(true);
 
@@ -347,6 +362,7 @@ export const useLoginController = () => {
     }
   };
 
+  // Đặt lại mật khẩu bằng email + OTP + mật khẩu mới.
   const handleResetPassword = async () => {
     if (!/^\d{6}$/.test(otp)) {
       setError('OTP phải gồm đúng 6 chữ số.');
@@ -395,6 +411,7 @@ export const useLoginController = () => {
     }
   };
 
+  // Gửi lại OTP cho flow quên mật khẩu.
   const handleResendPasswordResetOtp = async () => {
     if (resendCooldownSeconds > 0) {
       return;
@@ -420,6 +437,7 @@ export const useLoginController = () => {
     }
   };
 
+  // Handler submit trung tâm: quyết định gọi login/register/verify/reset theo flow hiện tại.
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     resetFeedback();

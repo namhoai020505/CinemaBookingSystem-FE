@@ -6,6 +6,7 @@ type ForgotPasswordStepProps = {
   controller: LoginController;
 };
 
+// Bước đầu của quên mật khẩu: nhập email đã đăng ký để backend gửi OTP reset.
 export const ForgotPasswordStep = ({ controller }: ForgotPasswordStepProps) => (
   <>
     <div className="rounded-md border border-[#FFD166]/40 bg-[#FFD166]/10 px-4 py-3 text-sm text-[#FFEBA4]">

@@ -26,6 +26,7 @@ const FILTERS: { id: BookingFilter; label: string }[] = [
   { id: "PAID", label: "Đã thanh toán" },
 ];
 
+// Chuẩn hóa datetime backend để parse ổn định cả khi thiếu Z.
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";
@@ -34,14 +35,35 @@ const normalizeBackendDate = (value?: string | null) => {
   return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
 };
 
+// Parse datetime backend thành timestamp, trả 0 nếu không hợp lệ.
 const parseBackendDate = (value?: string | null) => {
   const timestamp = Date.parse(normalizeBackendDate(value));
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+// Suất chiếu là lịch local của rạp, không parse như UTC để tránh bị lệch ngày.
+const getShowtimeDateTimeParts = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, date, hour, minute] = match;
+  return { year, month, date, hour, minute };
+};
+
+// Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
+// Format đầy đủ ngày giờ cho thông tin booking.
 const formatDateTime = (value?: string | null) => {
   const timestamp = parseBackendDate(value);
 
@@ -55,44 +77,57 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-const formatShortDate = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
+// Format đầy đủ suất chiếu, giữ đúng ngày/giờ local backend trả về.
+const formatShowtimeDateTime = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
 
-  if (timestamp === 0) {
+  if (!parts) {
+    return "Đang cập nhật";
+  }
+
+  return `${parts.date}/${parts.month}/${parts.year}, ${parts.hour}:${parts.minute}`;
+};
+
+// Format ngày chiếu ngắn dùng trong card vé.
+const formatShowtimeShortDate = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
+
+  if (!parts) {
     return "--/--";
   }
 
-  return new Date(timestamp).toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-  });
+  return `${parts.date}/${parts.month}`;
 };
 
-const formatWeekday = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
+// Lấy thứ trong tuần của suất chiếu.
+const formatShowtimeWeekday = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
 
-  if (timestamp === 0) {
+  if (!parts) {
     return "Ngày chiếu";
   }
 
-  return new Date(timestamp).toLocaleDateString("vi-VN", {
+  return new Date(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.date),
+  ).toLocaleDateString("vi-VN", {
     weekday: "short",
   });
 };
 
-const formatShortTime = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
+// Lấy giờ chiếu ngắn HH:mm.
+const formatShowtimeShortTime = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
 
-  if (timestamp === 0) {
+  if (!parts) {
     return "--:--";
   }
 
-  return new Date(timestamp).toLocaleTimeString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return `${parts.hour}:${parts.minute}`;
 };
 
+// Rút gọn mã booking dài để card dễ nhìn hơn.
 const getShortBookingId = (bookingId: string) => {
   if (bookingId.length <= 18) {
     return bookingId;
@@ -101,6 +136,7 @@ const getShortBookingId = (bookingId: string) => {
   return `${bookingId.slice(0, 10)}...${bookingId.slice(-6)}`;
 };
 
+// Trả metadata hiển thị badge theo trạng thái booking.
 const getStatusMeta = (status: string) => {
   const normalizedStatus = status.toUpperCase();
 
@@ -149,6 +185,7 @@ const getStatusMeta = (status: string) => {
   };
 };
 
+// Hiển thị thời gian còn lại để thanh toán booking pending.
 const getPaymentDeadlineLabel = (expiredAt?: string | null) => {
   const expiredTimestamp = parseBackendDate(expiredAt);
 
@@ -173,18 +210,22 @@ const getPaymentDeadlineLabel = (expiredAt?: string | null) => {
   return `Còn ${minutes} phút để thanh toán`;
 };
 
+// Booking còn chờ thanh toán thì hiện nút tiếp tục thanh toán.
 const isPendingPayment = (booking: BookingSummary) =>
   booking.status.toUpperCase() === "PENDING_PAYMENT";
 
+// Booking đã thanh toán thì được tính vào thống kê đã mua/tổng chi.
 const isPaid = (booking: BookingSummary) =>
   booking.status.toUpperCase() === "PAID";
 
+// Trang "Vé của tôi": hiển thị lịch sử booking, filter trạng thái và nút thanh toán tiếp.
 export default function MyBookings() {
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [activeFilter, setActiveFilter] = useState<BookingFilter>("ALL");
 
+  // Lấy danh sách booking của user hiện tại từ backend.
   useEffect(() => {
     const fetchMyBookings = async () => {
       try {
@@ -209,6 +250,7 @@ export default function MyBookings() {
     void fetchMyBookings();
   }, []);
 
+  // Sắp xếp booking mới nhất lên trước.
   const sortedBookings = useMemo(
     () =>
       [...bookings].sort(
@@ -218,6 +260,7 @@ export default function MyBookings() {
     [bookings],
   );
 
+  // Ẩn các booking pending đã hết hạn theo rule trong bookingService.
   const visibleBookings = useMemo(
     () =>
       sortedBookings.filter(
@@ -226,6 +269,7 @@ export default function MyBookings() {
     [sortedBookings],
   );
 
+  // Lọc danh sách theo tab user đang chọn.
   const filteredBookings = useMemo(() => {
     if (activeFilter === "ALL") {
       return visibleBookings;
@@ -236,6 +280,7 @@ export default function MyBookings() {
     );
   }, [activeFilter, visibleBookings]);
 
+  // Tính các số tổng ở đầu trang: tổng vé, vé chờ thanh toán, tổng chi.
   const stats = useMemo(() => {
     const paidBookings = visibleBookings.filter(isPaid);
     const pendingBookings = visibleBookings.filter(isPendingPayment);
@@ -443,13 +488,13 @@ export default function MyBookings() {
                       <div className="flex items-center gap-4 lg:block">
                         <div className="rounded-lg border border-white/10 bg-[#17264a] p-4 text-center">
                           <p className="text-xs font-black uppercase text-slate-400">
-                            {formatWeekday(booking.startTime)}
+                            {formatShowtimeWeekday(booking.startTime)}
                           </p>
                           <p className="mt-2 text-2xl font-black text-white">
-                            {formatShortDate(booking.startTime)}
+                            {formatShowtimeShortDate(booking.startTime)}
                           </p>
                           <p className="mt-1 text-sm font-black text-[#FFD166]">
-                            {formatShortTime(booking.startTime)}
+                            {formatShowtimeShortTime(booking.startTime)}
                           </p>
                         </div>
                         <span
@@ -489,7 +534,7 @@ export default function MyBookings() {
                               Suất chiếu
                             </p>
                             <p className="mt-2 text-sm font-bold">
-                              {formatDateTime(booking.startTime)}
+                              {formatShowtimeDateTime(booking.startTime)}
                             </p>
                           </div>
 

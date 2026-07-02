@@ -38,6 +38,7 @@ type CaptchaFieldProps = {
   onRefreshCaptcha: () => void;
 };
 
+// Field text dùng chung cho email, họ tên, số điện thoại để form auth đồng nhất style.
 export const TextField = ({
   label,
   value,
@@ -69,6 +70,7 @@ export const TextField = ({
   </div>
 );
 
+// Field mật khẩu có thể bật icon mắt nếu truyền onTogglePassword vào.
 export const PasswordField = ({
   label,
   value,
@@ -114,6 +116,7 @@ export const PasswordField = ({
   );
 };
 
+// Field OTP chỉ nhận số, giới hạn 6 ký tự và hiển thị thời gian còn hiệu lực.
 export const OtpField = ({ value, onChange, otpValidSeconds }: OtpFieldProps) => (
   <div>
     <label className="mb-1 block text-sm text-gray-300">Mã OTP</label>
@@ -142,6 +145,7 @@ export const OtpField = ({ value, onChange, otpValidSeconds }: OtpFieldProps) =>
   </div>
 );
 
+// Captcha phía FE dùng để chặn submit nhầm/spam nhẹ trước khi gọi API backend.
 export const CaptchaField = ({
   captchaText,
   captchaInput,

@@ -8,34 +8,40 @@ import {
   type BookingSeatDetail,
 } from "../../services/bookingService";
 
-const normalizeBackendDate = (value?: string | null) => {
+// Suất chiếu là lịch local của rạp, không parse như UTC để tránh bị lệch sang ngày hôm sau.
+const getShowtimeDateTimeParts = (value?: string | null) => {
   if (!value) {
-    return "";
+    return null;
   }
 
-  return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, date, hour, minute] = match;
+  return { year, month, date, hour, minute };
 };
 
-const parseBackendTime = (value?: string | null) => {
-  const timestamp = Date.parse(normalizeBackendDate(value));
-  return Number.isNaN(timestamp) ? 0 : timestamp;
-};
-
+// Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
-const formatDateTime = (value?: string | null) => {
-  const timestamp = parseBackendTime(value);
-  if (!timestamp) {
+// Format thời gian chiếu cho trang vé, giữ đúng ngày/giờ backend trả về.
+const formatShowtimeDateTime = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
+
+  if (!parts) {
     return "Đang cập nhật";
   }
 
-  return new Date(timestamp).toLocaleString("vi-VN", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  return `${parts.date}/${parts.month}/${parts.year}, ${parts.hour}:${parts.minute}`;
 };
 
+// Tạo ảnh QR vé từ chuỗi ticketQrCode backend trả về.
 const getTicketQrImage = (qrCode?: string | null) => {
   if (!qrCode) {
     return "";
@@ -49,20 +55,24 @@ const getTicketQrImage = (qrCode?: string | null) => {
   return `https://api.qrserver.com/v1/create-qr-code/?${query.toString()}`;
 };
 
+// Tạo key payment session để dọn localStorage sau khi booking đã paid.
 const getPaymentStorageKey = (showtimeId: string) => {
   const profile = getCurrentUserProfile();
   const userKey = profile?.userId || profile?.email || "anonymous";
   return `g2c-payment:${userKey}:${showtimeId}`;
 };
 
+// Lấy label ghế ưu tiên seatCode, fallback về row/seatNumber.
 const getSeatLabel = (seat: BookingSeatDetail) =>
   `${seat.rowLabel}${seat.seatNumber}`;
 
+// Trang chi tiết vé sau khi thanh toán thành công hoặc mở từ "Vé của tôi".
 export default function BookingSuccess() {
   const { bookingId } = useParams();
   const [bookingInfo, setBookingInfo] = useState<BookingDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Lấy chi tiết booking và xóa session payment local nếu vé đã thanh toán.
   useEffect(() => {
     const fetchBooking = async () => {
       try {
@@ -177,7 +187,7 @@ export default function BookingSuccess() {
                   Suất chiếu
                 </p>
                 <p className="mt-1 font-bold">
-                  {formatDateTime(bookingInfo.startTime)}
+                  {formatShowtimeDateTime(bookingInfo.startTime)}
                 </p>
               </div>
             </div>
