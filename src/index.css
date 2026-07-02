@@ -220,3 +220,30 @@ body:not(.g2c-light-mode) .text-slate-900,
 body:not(.g2c-light-mode) .text-gray-900 {
   color: #FFFFFF !important;
 }
+
+/* Global Custom Scrollbar for all elements */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1E293B #0F172A;
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0F172A;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1E293B;
+  border-radius: 4px;
+  border: 2px solid #0F172A;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+

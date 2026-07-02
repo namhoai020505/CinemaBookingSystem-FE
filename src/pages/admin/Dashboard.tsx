@@ -1,3 +1,4 @@
+import { TEXT } from '../../constants/vi';
 import { Link, useOutletContext } from 'react-router-dom';
 import {
   FaArrowRight,
