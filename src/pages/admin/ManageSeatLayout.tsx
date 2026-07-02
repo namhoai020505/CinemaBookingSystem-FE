@@ -525,13 +525,25 @@ export default function ManageSeatLayout() {
     }
 
     let capacityDiff = 0;
+    const processedForCap = new Set<string>();
+
     for (const seatId of Array.from(selectedSeatIds)) {
+      if (processedForCap.has(seatId)) continue;
       const seat = seats.find((s) => s.seatId === seatId);
       if (!seat || !seat.isActive) continue;
-      const oldCap = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-      const newCap = batchType === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-      capacityDiff += (newCap - oldCap);
+
+      if (seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' && batchType !== 'SEAT_TYPE_SWEETBOX') {
+        const adjacentSeat = seats.find(s => s.rowLabel === seat.rowLabel && s.seatNumber === seat.seatNumber + 1);
+        if (adjacentSeat && adjacentSeat.isActive) capacityDiff -= 1;
+        if (adjacentSeat) processedForCap.add(adjacentSeat.seatId);
+      } else if (seat.seatTypeId !== 'SEAT_TYPE_SWEETBOX' && batchType === 'SEAT_TYPE_SWEETBOX') {
+        const adjacentSeat = seats.find(s => s.rowLabel === seat.rowLabel && s.seatNumber === seat.seatNumber + 1);
+        if (!adjacentSeat || !adjacentSeat.isActive) capacityDiff += 1;
+        if (adjacentSeat) processedForCap.add(adjacentSeat.seatId);
+      }
+      processedForCap.add(seatId);
     }
+
     const newCapacity = seatStats.totalCapacity + capacityDiff;
     if (newCapacity > (room?.capacity ?? 0)) {
       toast.error(TEXT.SEAT_LAYOUT.ERR_CHANGE_TYPE_CAPACITY.replace('{0}', String(newCapacity)).replace('{1}', String(room?.capacity)));
@@ -540,16 +552,36 @@ export default function ManageSeatLayout() {
 
     try {
       setActionLoading(true);
-      const promises = Array.from(selectedSeatIds).map((seatId) => {
+      const promises: Promise<any>[] = [];
+      const processedSeats = new Set<string>();
+
+      for (const seatId of Array.from(selectedSeatIds)) {
+        if (processedSeats.has(seatId)) continue;
         const seat = seats.find((s) => s.seatId === seatId);
-        if (!seat) return Promise.resolve();
-        return roomService.updateSeat(seatId, {
-          rowLabel: seat.rowLabel,
-          seatNumber: seat.seatNumber,
-          seatTypeId: batchType,
-          isActive: seat.isActive,
-        });
-      });
+        if (!seat) continue;
+
+        if (seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' && batchType !== 'SEAT_TYPE_SWEETBOX') {
+          promises.push(roomService.updateSeat(seatId, { ...seat, seatTypeId: batchType }));
+          const adjacentSeat = seats.find(s => s.rowLabel === seat.rowLabel && s.seatNumber === seat.seatNumber + 1);
+          if (adjacentSeat) {
+            promises.push(roomService.updateSeat(adjacentSeat.seatId, { ...adjacentSeat, seatTypeId: batchType, isActive: true }));
+            processedSeats.add(adjacentSeat.seatId);
+          } else if (roomId) {
+            promises.push(roomService.createSeat({ roomId, rowLabel: seat.rowLabel, seatNumber: seat.seatNumber + 1, seatTypeId: batchType }));
+          }
+        } else if (seat.seatTypeId !== 'SEAT_TYPE_SWEETBOX' && batchType === 'SEAT_TYPE_SWEETBOX') {
+          promises.push(roomService.updateSeat(seatId, { ...seat, seatTypeId: batchType }));
+          const adjacentSeat = seats.find(s => s.rowLabel === seat.rowLabel && s.seatNumber === seat.seatNumber + 1);
+          if (adjacentSeat && adjacentSeat.isActive) {
+            promises.push(roomService.deleteSeat(adjacentSeat.seatId));
+            processedSeats.add(adjacentSeat.seatId);
+          }
+        } else {
+          promises.push(roomService.updateSeat(seatId, { ...seat, seatTypeId: batchType }));
+        }
+        processedSeats.add(seatId);
+      }
+
       await Promise.all(promises);
       toast.success(TEXT.SEAT_LAYOUT.MSG_CHANGE_TYPE_SUCCESS.replace('{0}', String(selectedSeatIds.size)));
       setSelectedSeatIds(new Set());
