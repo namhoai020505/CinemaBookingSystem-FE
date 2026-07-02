@@ -210,5 +210,11 @@ export const bookingService = {
   getMyBookings: async () => {
     const response = await axiosInstance.get('/api/bookings/my-bookings') as unknown as ApiResponse<BookingSummary[]>;
     return response;
+  },
+
+  // POST /api/bookings/{bookingId}/cancel: huy booking pending va tra ghe ve trang thai co the dat lai.
+  cancelPendingBooking: async (bookingId: string | number) => {
+    const response = await axiosInstance.post(`/api/bookings/${bookingId}/cancel`) as unknown as ApiResponse<boolean>;
+    return response;
   }
 };

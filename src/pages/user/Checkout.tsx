@@ -128,6 +128,8 @@ type PaymentSession = {
   payment: CreatePaymentResponse;
   expiresAt: string;
   createdAt: string;
+  selectedSeatIds?: string[];
+  seatSignature?: string;
 };
 
 // Chuẩn hóa datetime backend trả về để Date.parse hiểu được cả khi thiếu hậu tố Z.
@@ -296,6 +298,20 @@ const removePaymentSession = (showtimeId: string, userKey: string) => {
   localStorage.removeItem(getPaymentStorageKey(showtimeId, userKey));
 };
 
+// Signature nay gan payment session voi dung danh sach ghe dang thanh toan.
+const getSeatIdentity = (
+  seat: Pick<CheckoutSeat, "seatId" | "showtimeSeatId">,
+) => seat.showtimeSeatId || seat.seatId;
+
+const getSeatSessionSignature = (
+  seats: Pick<CheckoutSeat, "seatId" | "showtimeSeatId">[],
+) =>
+  seats
+    .map(getSeatIdentity)
+    .filter(Boolean)
+    .sort()
+    .join("|");
+
 // Tính số giây từ hiện tại tới một datetime hết hạn.
 const getSecondsUntil = (value?: string | null, fallback = 0) => {
   const timestamp = parseBackendTime(value);
@@ -405,9 +421,27 @@ export default function Checkout() {
   const resumeBooking = routeState?.resumeBooking ?? null;
   const [userKey] = useState(() => getUserKey());
   const [userProfile] = useState(() => getCurrentUserProfile());
-  const [storedPaymentSession] = useState(() =>
-    readPaymentSession(showtimeId, userKey),
+  const routeSeatSignature = getSeatSessionSignature(
+    routeState?.selectedSeats || [],
   );
+  const [storedPaymentSession] = useState(() => {
+    const session = readPaymentSession(showtimeId, userKey);
+    const sessionSignature =
+      session?.seatSignature ||
+      getSeatSessionSignature(
+        (session?.selectedSeatIds || []).map((seatId) => ({
+          seatId,
+          showtimeSeatId: seatId,
+        })),
+      );
+
+    if (session && routeSeatSignature && sessionSignature !== routeSeatSignature) {
+      removePaymentSession(showtimeId, userKey);
+      return null;
+    }
+
+    return session;
+  });
   const [selectedSeats] = useState<CheckoutSeat[]>(() =>
     routeState?.selectedSeats?.length
       ? routeState.selectedSeats
@@ -454,6 +488,7 @@ export default function Checkout() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [paymentConfigRefreshTried, setPaymentConfigRefreshTried] = useState(false);
   const [paymentExpiredDialogOpen, setPaymentExpiredDialogOpen] =
     useState(false);
@@ -466,10 +501,8 @@ export default function Checkout() {
 
   // Tổng tiền ghế từ danh sách đã chọn.
   const seatsTotalAmount = useMemo(
-    () =>
-      routeState?.totalAmount ??
-      selectedSeats.reduce((sum, seat) => sum + (seat.price || 0), 0),
-    [routeState?.totalAmount, selectedSeats],
+    () => selectedSeats.reduce((sum, seat) => sum + (seat.price || 0), 0),
+    [selectedSeats],
   );
 
   // Tổng tiền F&B dựa trên số lượng combo user chọn.
@@ -515,6 +548,70 @@ export default function Checkout() {
   const selectedSeatLabels = selectedSeats.map(
     (seat) => seat.seatCode || `${seat.row}${seat.column}`,
   );
+  const selectedSeatSignature = useMemo(
+    () => getSeatSessionSignature(selectedSeats),
+    [selectedSeats],
+  );
+  const selectedSeatIdsForSession = useMemo(
+    () => selectedSeats.map(getSeatIdentity).filter(Boolean),
+    [selectedSeats],
+  );
+
+  // Release local lock va goi backend unlock cho cac ghe dang giu truoc khi user roi checkout.
+  const releaseSelectedSeatLocks = useCallback(async (strictBookingCancel = false) => {
+    const hasPendingBooking =
+      Boolean(booking?.bookingId) &&
+      booking?.status?.toUpperCase() !== "PAID" &&
+      booking?.status?.toUpperCase() !== "COMPLETED";
+    let bookingCancelSucceeded = false;
+    let bookingCancelFailed = false;
+
+    if (hasPendingBooking && booking?.bookingId) {
+      try {
+        const response = await bookingService.cancelPendingBooking(booking.bookingId);
+        if (!response.success) {
+          throw new Error(response.message || "Khong the huy booking pending.");
+        }
+        bookingCancelSucceeded = true;
+      } catch (error) {
+        bookingCancelFailed = true;
+        console.warn("Khong the huy booking pending ngay lap tuc:", error);
+
+        if (strictBookingCancel) {
+          throw error;
+        }
+      }
+    }
+
+    const seatsToRelease = selectedSeats.filter((seat) => Boolean(seat.seatId));
+
+    if (!bookingCancelSucceeded && seatsToRelease.length > 0) {
+      const results = await Promise.allSettled(
+        seatsToRelease.map((seat) =>
+          api.post("/api/seats/unlock", {
+            showtimeId,
+            seatId: seat.seatId,
+          }),
+        ),
+      );
+
+      const failedUnlocks = results.filter(
+        (result) => result.status === "rejected",
+      );
+      if (failedUnlocks.length > 0) {
+        console.warn(
+          "Mot so ghe khong the unlock ngay lap tuc. Backend se cleanup khi pending payment het han.",
+          failedUnlocks,
+        );
+      }
+    }
+
+    if (!bookingCancelFailed || !strictBookingCancel) {
+      removeSeatLockSession(showtimeId, userKey);
+      removePaymentSession(showtimeId, userKey);
+    }
+  }, [booking?.bookingId, booking?.status, selectedSeats, showtimeId, userKey]);
+
   // Khi quá hạn thanh toán, dọn session local và đưa user về trang chủ.
   const redirectHomeAfterPaymentExpired = useCallback(() => {
     hideExpiredBookingFromHistory(booking?.bookingId);
@@ -523,8 +620,55 @@ export default function Checkout() {
       removePaymentSession(showtimeId, userKey);
     }
 
+    void releaseSelectedSeatLocks();
     navigate("/", { replace: true });
-  }, [booking?.bookingId, navigate, showtimeId, userKey]);
+  }, [
+    booking?.bookingId,
+    navigate,
+    releaseSelectedSeatLocks,
+    showtimeId,
+    userKey,
+  ]);
+
+  const cancelTransaction = useCallback(
+    async (redirectTo = "/", askConfirm = true) => {
+      if (askConfirm) {
+        const confirmed = window.confirm(
+          "Ban co chac muon huy giao dich nay? Ghe da giu se duoc tra ve neu chua thanh toan.",
+        );
+
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      try {
+        setIsCancelling(true);
+        setErrorMessage("");
+        await releaseSelectedSeatLocks(true);
+        hideExpiredBookingFromHistory(booking?.bookingId);
+        navigate(redirectTo, { replace: true });
+      } catch (error) {
+        setErrorMessage(
+          getApiErrorMessage(error, "Khong the huy giao dich. Vui long thu lai."),
+        );
+      } finally {
+        setIsCancelling(false);
+      }
+    },
+    [booking?.bookingId, navigate, releaseSelectedSeatLocks],
+  );
+
+  // Browser Back cung duoc xem nhu roi checkout nen can clear lock/session local.
+  useEffect(() => {
+    const handlePopState = () => {
+      void releaseSelectedSeatLocks();
+      hideExpiredBookingFromHistory(booking?.bookingId);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [booking?.bookingId, releaseSelectedSeatLocks]);
 
   // Tải lại thông tin phim/suất chiếu để sidebar không phụ thuộc hoàn toàn vào route state.
   useEffect(() => {
@@ -722,6 +866,10 @@ export default function Checkout() {
           payment: refreshedPayment,
           expiresAt,
           createdAt: new Date().toISOString(),
+          selectedSeatIds:
+            storedPaymentSession?.selectedSeatIds || selectedSeatIdsForSession,
+          seatSignature:
+            storedPaymentSession?.seatSignature || selectedSeatSignature,
         });
       } catch (error) {
         if (!cancelled) {
@@ -743,8 +891,12 @@ export default function Checkout() {
     payment,
     paymentConfigRefreshTried,
     paymentExpiresAt,
+    selectedSeatIdsForSession,
+    selectedSeatSignature,
     showtimeId,
     step,
+    storedPaymentSession?.seatSignature,
+    storedPaymentSession?.selectedSeatIds,
     userKey,
   ]);
 
@@ -894,6 +1046,8 @@ export default function Checkout() {
     try {
       setSubmitting(true);
       setErrorMessage("");
+      setPaymentStatusMessage("");
+      removePaymentSession(showtimeId, userKey);
 
       const foodAndBeverages = Object.entries(fnbCart)
         .filter(([, quantity]) => quantity > 0)
@@ -946,6 +1100,8 @@ export default function Checkout() {
         payment: paymentResponse.data,
         expiresAt,
         createdAt: new Date().toISOString(),
+        selectedSeatIds: selectedSeatIdsForSession,
+        seatSignature: selectedSeatSignature,
       };
 
       writePaymentSession(nextSession);
@@ -1157,6 +1313,14 @@ export default function Checkout() {
                 >
                   Vé của tôi
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => void cancelTransaction("/", true)}
+                  disabled={isCancelling}
+                  className="rounded-md border border-rose-400/40 bg-rose-500/10 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isCancelling ? "Đang hủy..." : "Hủy giao dịch"}
+                </button>
               </div>
             </section>
 
@@ -1509,10 +1673,13 @@ export default function Checkout() {
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => navigate(`/booking/seats/${showtimeId}`)}
-                className="rounded-md bg-slate-600 py-3 text-xs font-black uppercase text-white transition hover:bg-slate-500"
+                onClick={() =>
+                  void cancelTransaction(`/booking/seats/${showtimeId}`, false)
+                }
+                disabled={isCancelling}
+                className="rounded-md bg-slate-600 py-3 text-xs font-black uppercase text-white transition hover:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Quay lại
+                {isCancelling ? "Đang hủy..." : "Quay lại"}
               </button>
               <button
                 type="button"
@@ -1525,6 +1692,14 @@ export default function Checkout() {
                 }`}
               >
                 {submitting ? "Đang tạo..." : "Tiếp tục"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void cancelTransaction("/", true)}
+                disabled={isCancelling}
+                className="col-span-2 rounded-md border border-rose-400/40 bg-rose-500/10 py-3 text-xs font-black uppercase text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isCancelling ? "Đang hủy..." : "Hủy giao dịch"}
               </button>
             </div>
           </aside>
