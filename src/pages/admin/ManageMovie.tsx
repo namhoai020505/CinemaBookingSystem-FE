@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { movieService } from "../../services/movieService";
-import type { MovieResponse } from "../../services/movieService";
-import { getMediaUrl } from "../../lib/media";
-import { TEXT } from "../../constants/vi";
+import type { MovieData } from "../../services/movieService";
 
 // Trang quản trị danh sách phim: tải dữ liệu, mở modal thêm/sửa và gọi API lưu phim.
 export default function ManageMovie() {
@@ -26,13 +24,8 @@ export default function ManageMovie() {
 
   const [errors, setErrors] = useState<{ movieNameVn?: string }>({});
 
-  // States for DB-backed Genre Selection
-  const [genres, setGenres] = useState<{ genreId: number; name: string }[]>([]);
-  const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
-  const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
-  const genreDropdownRef = useRef<HTMLDivElement>(null);
-
-  // 1. Hàm lấy danh sách phim (Fetch tất cả để xử lý client-side)
+  // 1. Hàm lấy danh sách phim
+  // Lấy danh sách phim từ backend để render bảng quản lý.
   const fetchMovies = async () => {
     try {
       setLoading(true);
@@ -41,57 +34,20 @@ export default function ManageMovie() {
         setMovies(response.data);
       }
     } catch (error) {
-      toast.error(TEXT.MOVIE.ERR_FETCH_MOVIES);
+      console.error("Lỗi kết nối API lấy danh sách phim:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredMovies = React.useMemo(() => {
-    return allMovies.filter(movie => {
-      if (selectedStatus && movie.movieStatus !== selectedStatus) return false;
-      if (searchGenre && (!movie.genres || !movie.genres.includes(searchGenre))) return false;
-      if (searchTerm && !movie.movieNameVn.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-      return true;
-    });
-  }, [allMovies, selectedStatus, searchGenre, searchTerm]);
-
-  const totalCount = filteredMovies.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const movies = filteredMovies.slice((pageIndex - 1) * pageSize, pageIndex * pageSize);
-
-  const fetchGenres = async () => {
-    try {
-      const data = await movieService.getGenres();
-      setGenres(data || []);
-    } catch (error) {
-      toast.error(TEXT.MOVIE.ERR_FETCH_GENRES);
-    }
-  };
-
+  // Khối useEffect lấy data ban đầu - Cố định mảng rỗng [] không thay đổi size (Sửa lỗi 4)
+  // Tải dữ liệu lần đầu khi admin mở trang quản lý phim.
   useEffect(() => {
     const loadTimer = window.setTimeout(() => {
       void fetchMovies();
     }, 0);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        genreDropdownRef.current &&
-        !genreDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsGenreDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  useEffect(() => {
-    void fetchMovies();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => window.clearTimeout(loadTimer);
   }, []);
 
   // Khối useEffect lắng nghe phím Esc - Cố định mảng phụ thuộc (Sửa lỗi 3, 4)
@@ -149,83 +105,24 @@ export default function ManageMovie() {
     setIsModalOpen(true);
   };
 
-        setPosterFile(null);
-        setPosterPreview(getMediaUrl(detail.posterUrl) || "");
-        setOriginalPosterUrl(detail.posterUrl || "");
-        setErrors({});
-        setIsModalOpen(true);
-      }
-    } catch (error) {
-      toast.error(TEXT.MOVIE.ERR_FETCH_DETAIL_EDIT);
-    } finally {
-      setLoading(false);
+  // Xác nhận rồi gọi API xóa phim khỏi hệ thống.
+  const handleDeleteMovie = async (movie: MovieData) => {
+    if (!movie.id) {
+      return;
     }
 
-  const handleDeleteMovie = async (movie: MovieResponse) => {
-    const confirmDelete = window.confirm(TEXT.MOVIE.CONFIRM_HIDE.replace("{0}", movie.movieNameVn));
+    const confirmDelete = window.confirm(
+      `⚠️ Bạn có chắc chắn muốn xóa bộ phim "${movie.movieNameVn}" khỏi hệ thống không?`,
+    );
     if (confirmDelete) {
       try {
         setLoading(true);
         await movieService.deleteMovie(movie.id);
-        toast.success(TEXT.MOVIE.SUCCESS_HIDE);
-        await handleReloadAfterSave();
+        toast.success("Thêm phim mới thành công!");
+        await fetchMovies();
       } catch (error) {
-        toast.error(TEXT.MOVIE.ERR_HIDE);
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleReactivateMovie = async (movie: MovieResponse) => {
-    const confirmReactivate = window.confirm(TEXT.MOVIE.CONFIRM_REACTIVATE.replace("{0}", movie.movieNameVn));
-    if (confirmReactivate) {
-      try {
-        setLoading(true);
-        // Tải chi tiết phim để xây dựng FormData đầy đủ
-        const detail = await movieService.getMovieById(movie.id);
-        if (!detail) {
-          toast.error(TEXT.MOVIE.ERR_FETCH_DETAIL_ACTIVATE);
-          return;
-        }
-
-        const submitData = new FormData();
-        submitData.append("Title", detail.title);
-        submitData.append("DurationMinutes", String(detail.durationMinutes));
-
-        // Ánh xạ các thể loại hiện tại thành IDs
-        const matchedIds = (detail.genres ?? [])
-          .map(name => genres.find(g => g.name.toLowerCase() === name.toLowerCase())?.genreId)
-          .filter((id): id is number => id !== undefined);
-
-        if (matchedIds.length > 0) {
-          matchedIds.forEach(id => {
-            submitData.append("GenreIds", String(id));
-          });
-        }
-
-        if (detail.language) submitData.append("Language", detail.language);
-        if (detail.releaseDate) submitData.append("ReleaseDate", detail.releaseDate);
-        if (detail.ageRating) submitData.append("AgeRating", detail.ageRating);
-        if (detail.description) submitData.append("Description", detail.description);
-        if (detail.trailerUrl) submitData.append("TrailerUrl", detail.trailerUrl);
-        if (detail.highlight) submitData.append("Highlight", detail.highlight);
-        if (detail.director) submitData.append("Director", detail.director);
-
-        // Thiết lập trạng thái mới là COMING_SOON để kích hoạt lại phim
-        submitData.append("MovieStatus", "COMING_SOON");
-
-        // Gửi URL ảnh hiện có
-        if (detail.posterUrl) {
-          submitData.append("PosterUrl", detail.posterUrl);
-        }
-
-        await movieService.updateMovie(detail.movieId, submitData);
-        toast.success(TEXT.MOVIE.SUCCESS_REACTIVATE);
-        await handleReloadAfterSave();
-      } catch (error: any) {
-        const errorMsg = error?.response?.data?.message || TEXT.MOVIE.ERR_REACTIVATE;
-        toast.error(errorMsg);
+        console.error("Lỗi xóa phim:", error);
+        toast.error("Đã xóa phim thành công!");
       } finally {
         setLoading(false);
       }
@@ -238,54 +135,36 @@ export default function ManageMovie() {
   ) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-    if (name === "title" && value.trim() !== "") {
-      setErrors({ ...errors, title: undefined });
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error(TEXT.MOVIE.ERR_POSTER_SIZE);
-        e.target.value = "";
-        return;
-      }
-      setPosterFile(file);
-      setPosterPreview(URL.createObjectURL(file));
+    if (name === "movieNameVn" && value.trim() !== "") {
+      setErrors({ ...errors, movieNameVn: undefined });
     }
   };
 
   // Validate form và quyết định gọi API create hay update tùy trạng thái editingMovieId.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title.trim()) {
-      setErrors({ title: TEXT.MOVIE.ERR_TITLE_EMPTY });
-      return;
-    }
-    if (formData.durationMinutes <= 0) {
-      setErrors({ durationMinutes: TEXT.MOVIE.ERR_DURATION_INVALID });
+    if (!formData.movieNameVn.trim()) {
+      setErrors({ movieNameVn: "Tên phim tiếng Việt không được để trống!" });
       return;
     }
 
     try {
       setLoading(true);
       if (editingMovieId) {
-        await movieService.updateMovie(editingMovieId, submitData);
-        toast.success(TEXT.MOVIE.SUCCESS_UPDATE);
+        await movieService.updateMovie(editingMovieId, formData);
+        toast.success("Cập nhật thông tin phim thành công!");
       } else {
-        await movieService.createMovie(submitData);
-        toast.success(TEXT.MOVIE.SUCCESS_CREATE);
+        await movieService.createMovie(formData);
+        toast.success("Thêm phim mới thành công!");
       }
       setIsModalOpen(false);
       setEditingMovieId(null);
-      setPosterFile(null);
-      setPosterPreview("");
-      setOriginalPosterUrl("");
-      await handleReloadAfterSave();
-    } catch (error: any) {
-      const errorMsg = error?.response?.data?.message || TEXT.MOVIE.ERR_SAVE;
-      toast.error(errorMsg);
+      await fetchMovies();
+    } catch (error) {
+      console.error("Lỗi lưu thông tin phim:", error);
+      toast.error(
+        "Lưu thông tin thất bại. Do Backend đang IN REVIEW chưa mở cổng API nhận dữ liệu.",
+      );
     } finally {
       setLoading(false);
     }
@@ -297,261 +176,100 @@ export default function ManageMovie() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold uppercase tracking-wider">
-            {TEXT.MOVIE.TITLE}
+            Quản Lý Phim
           </h1>
-          <p className="text-xs text-gray-400 mt-1">{TEXT.MOVIE.SUBTITLE}</p>
+          
         </div>
         <button
           onClick={handleOpenAddModal}
           className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 rounded-xl text-sm font-semibold transition"
         >
-          <span>+</span> {TEXT.MOVIE.ADD_MOVIE}
+          + Thêm Phim Mới
         </button>
-      </div>
-
-      {/* BỘ LỌC VÀ TÌM KIẾM */}
-      <div className="flex flex-col lg:flex-row justify-between gap-4 mb-6">
-        {/* BỘ LỌC PHÂN LOẠI TRẠNG THÁI */}
-        <div className="flex gap-2 bg-[#111C44] p-3 rounded-2xl border border-gray-800 shadow-xl overflow-x-auto scrollbar-none">
-          {[
-            { key: "", label: TEXT.MOVIE.STATUS_ALL },
-            { key: "NOW_SHOWING", label: TEXT.MOVIE.STATUS_NOW_SHOWING },
-            { key: "COMING_SOON", label: TEXT.MOVIE.STATUS_COMING_SOON },
-            { key: "ENDED", label: TEXT.MOVIE.STATUS_ENDED },
-            { key: "INACTIVE", label: TEXT.MOVIE.STATUS_INACTIVE },
-            { key: "ARCHIVED", label: TEXT.MOVIE.STATUS_ARCHIVED },
-          ].map((tab) => {
-            const isActive = selectedStatus === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => handleStatusFilterChange(tab.key)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 shrink-0 ${isActive
-                  ? "bg-[#4318FF] text-white shadow-lg shadow-[#4318FF]/20"
-                  : "bg-[#0F172A] hover:bg-[#1E293B] text-gray-400 hover:text-white"
-                  }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* SEARCH BAR */}
-        <div className="flex gap-2 bg-[#111C44] p-3 rounded-2xl border border-gray-800 shadow-xl">
-          <input
-            type="text"
-            placeholder={TEXT.MOVIE.SEARCH_PLACEHOLDER}
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                setSearchTerm(searchInput);
-                setPageIndex(1);
-              }
-            }}
-            className="w-full lg:w-48 bg-[#0F172A] border border-gray-700 text-sm text-white px-4 py-2 rounded-xl focus:outline-none focus:border-[#4318FF] transition"
-          />
-          <select
-            value={searchGenre}
-            onChange={(e) => {
-              setSearchGenre(e.target.value);
-              setPageIndex(1);
-            }}
-            className="bg-[#0F172A] border border-gray-700 text-sm text-white px-4 py-2 rounded-xl focus:outline-none focus:border-[#4318FF] transition"
-          >
-            <option value="">{TEXT.MOVIE.ALL_GENRES}</option>
-            {genres.map(g => (
-              <option key={g.genreId} value={g.name}>{g.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => {
-              setSearchTerm(searchInput);
-              setPageIndex(1);
-            }}
-            className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 rounded-xl text-sm font-semibold transition text-white shadow-lg"
-          >
-            {TEXT.MOVIE.BTN_SEARCH}
-          </button>
-        </div>
       </div>
 
       {/* DANH SÁCH BẢNG */}
       {loading && movies.length === 0 ? (
-        <div className="p-12 text-center text-gray-400 bg-[#111C44] border border-gray-800 rounded-2xl">
-          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          {TEXT.MOVIE.SYNCING}
+        <div className="p-6 text-center text-gray-400">
+          Đang đồng bộ dữ liệu...
         </div>
       ) : (
-        // Fix #8: wrapped in relative container for loading overlay
-        <div className="space-y-4">
-          {/* Fix #8: Loading overlay khi fetch dữ liệu */}
-          <div className="relative">
-            {loading && movies.length > 0 && (
-              <div className="absolute inset-0 bg-[#0A0A0C]/60 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-2xl">
-                <div className="flex items-center gap-2 text-blue-400 text-sm font-medium">
-                  <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                  {TEXT.MOVIE.LOADING}
-                </div>
-              </div>
-            )}
-            <div className="bg-[#111C44] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[700px]">
-                  <thead>
-                    <tr className="border-b border-gray-800 bg-blue-950/20 text-xs uppercase text-gray-400 tracking-wider">
-                      <th className="p-4 w-24">{TEXT.MOVIE.TH_POSTER}</th>
-                      <th className="p-4">{TEXT.MOVIE.TH_TITLE}</th>
-                      <th className="p-4">{TEXT.MOVIE.TH_DIRECTOR}</th>
-                      <th className="p-4">{TEXT.MOVIE.TH_GENRE}</th>
-                      <th className="p-4">{TEXT.MOVIE.TH_DURATION}</th>
-                      <th className="p-4">{TEXT.MOVIE.TH_AGE}</th>
-                      <th className="p-4">{TEXT.MOVIE.TH_STATUS}</th>
-                      <th className="p-4 text-center">{TEXT.MOVIE.TH_ACTION}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800/50 text-sm">
-                    {movies.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-gray-500">
-                          {TEXT.MOVIE.NO_MOVIES}
-                        </td>
-                      </tr>
-                    ) : (
-                      movies.map((movie) => (
-                        <tr key={movie.id} className="hover:bg-blue-950/10 transition">
-                          <td className="p-4">
-                            <img
-                              src={
-                                getMediaUrl(movie.imagePoster) ||
-                                "https://images2.thanhnien.vn/528068263637281792/2024/4/16/poster-lat-mat-17132371970258197775.jpg"
-                              }
-                              alt=""
-                              className="w-12 h-16 object-cover rounded-lg border border-gray-700 shadow-sm"
-                            />
-                          </td>
-                          <td className="p-4">
-                            <div className="font-semibold text-white text-base">
-                              {movie.movieNameVn}
-                            </div>
-                            {movie.highlight && (
-                              <span className="inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase">
-                                🔥 {movie.highlight}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-4 text-gray-300">
-                            {movie.director || <span className="text-gray-500 italic">{TEXT.MOVIE.NOT_UPDATED}</span>}
-                          </td>
-                          <td className="p-4 text-gray-300 font-medium">
-                            {movie.genres?.join(", ") || TEXT.MOVIE.NOT_UPDATED}
-                          </td>
-                          <td className="p-4">
-                            <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-xs font-semibold">
-                              {movie.duration} {TEXT.MOVIE.MINUTES}
-                            </span>
-                          </td>
-                          <td className="p-4">
-                            <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-xs font-bold">
-                              {movie.ageRating || "P"}
-                            </span>
-                          </td>
-                          <td className="p-4">
-                            {(() => {
-                              const status = movie.movieStatus || "NOW_SHOWING";
-                              let dotColor = "bg-emerald-500";
-                              let text = TEXT.MOVIE.STATUS_NOW_SHOWING_TEXT;
+        <div className="bg-[#111C44] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-gray-800 bg-blue-950/20 text-xs uppercase text-gray-400 tracking-wider">
+                <th className="p-4 w-24">Poster</th>
+                <th className="p-4">Tên Phim</th>
+                <th className="p-4">Đạo Diễn</th>
+                <th className="p-4">Thời Lượng</th>
+                <th className="p-4 text-center">Hành Động</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800/50 text-sm">
+              {movies.map((movie) => (
+                <tr key={movie.id} className="hover:bg-blue-950/10 transition">
+                  <td className="p-4">
+                    <img
+                      src={
+                        movie.imagePoster ||
+                        "https://images2.thanhnien.vn/528068263637281792/2024/4/16/poster-lat-mat-17132371970258197775.jpg"
+                      }
+                      alt=""
+                      className="w-12 h-16 object-cover rounded-lg border border-gray-700 shadow-sm"
+                    />
+                  </td>
 
-                              if (status === "COMING_SOON") {
-                                dotColor = "bg-blue-500";
-                                text = TEXT.MOVIE.STATUS_COMING_SOON_TEXT;
-                              } else if (status === "ENDED") {
-                                dotColor = "bg-amber-500";
-                                text = TEXT.MOVIE.STATUS_ENDED_TEXT;
-                              } else if (status === "INACTIVE") {
-                                dotColor = "bg-rose-500";
-                                text = TEXT.MOVIE.STATUS_INACTIVE_TEXT;
-                              } else if (status === "ARCHIVED") {
-                                dotColor = "bg-purple-500";
-                                text = TEXT.MOVIE.STATUS_ARCHIVED_TEXT;
-                              }
+                  {/* CỘT TÊN PHIM: ĐÃ TÍCH HỢP BADGE TRAILER THEO CÁCH 2 */}
+                  <td className="p-4">
+                    <div className="font-semibold text-white text-base">
+                      {movie.movieNameVn}
+                    </div>
+                    <div className="text-xs text-gray-400 italic mt-1 flex items-center gap-2 flex-wrap">
+                      <span>{movie.movieNameEng || "N/A"}</span>
 
-                              return (
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`w-2 h-2 rounded-full ${dotColor}`}></span>
-                                  <span className="text-xs text-gray-300 font-medium">{text}</span>
-                                </div>
-                              );
-                            })()}
-                          </td>
-                          <td className="p-4">
-                            <div className="flex justify-center gap-2">
-                              <button
-                                onClick={() => handleOpenEditModal(movie)}
-                                className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 text-xs font-semibold rounded-lg transition"
-                              >
-                                {TEXT.MOVIE.BTN_EDIT}
-                              </button>
-                              {/* Fix #5: Ẩn nút Xóa nếu phim đã ở trạng thái INACTIVE (soft-deleted) */}
-                              {movie.movieStatus !== "INACTIVE" ? (
-                                <button
-                                  onClick={() => handleDeleteMovie(movie)}
-                                  className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 text-xs font-semibold rounded-lg transition"
-                                >
-                                  {TEXT.MOVIE.BTN_HIDE}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleReactivateMovie(movie)}
-                                  className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 text-xs font-semibold rounded-lg transition"
-                                >
-                                  {TEXT.MOVIE.BTN_SHOW}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div> {/* end relative loading wrapper */}
+                      {/* Chỉ hiển thị nút khi bộ phim có dữ liệu trailerUrl */}
+                      {movie.trailerUrl && (
+                        <a
+                          href={movie.trailerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[#FF0000] bg-[#FF0000]/10 hover:bg-[#FF0000]/20 border border-[#FF0000]/20 px-2 py-0.5 rounded-md font-['Urbanist'] font-bold text-[10px] tracking-wider uppercase normal-case not-italic transition-all duration-200"
+                          title="Bấm để xem nhanh Trailer trên Youtube"
+                        >
+                          <span className="text-[8px]">▶</span> Trailer
+                        </a>
+                      )}
+                    </div>
+                  </td>
 
-          {/* Fix #9: Thông tin đếm phim luôn hiển thị, pagination chỉ hiện khi > 1 trang */}
-          <div className="flex justify-between items-center bg-[#111C44] p-4 rounded-2xl border border-gray-800 shadow-xl">
-            <span className="text-xs text-gray-400">
-              {totalCount === 0
-                ? TEXT.MOVIE.PAGINATION_NO_DATA
-                : TEXT.MOVIE.PAGINATION_INFO
-                    .replace("{0}", String((pageIndex - 1) * pageSize + 1))
-                    .replace("{1}", String(Math.min(pageIndex * pageSize, totalCount)))
-                    .replace("{2}", String(totalCount))}
-            </span>
-            {totalPages > 1 && (
-              <div className="flex gap-2">
-                <button
-                  disabled={pageIndex === 1 || loading}
-                  onClick={() => setPageIndex((prev) => prev - 1)}
-                  className="px-3 py-1.5 bg-[#0F172A] border border-gray-800 rounded-lg text-xs font-semibold text-gray-300 hover:bg-[#1E293B] disabled:opacity-40 transition"
-                >
-                  {TEXT.MOVIE.BTN_PREV}
-                </button>
-                <span className="px-3 py-1.5 text-xs font-semibold bg-[#4318FF]/20 text-blue-400 rounded-lg border border-blue-500/30">
-                  {TEXT.MOVIE.PAGE} {pageIndex} / {totalPages}
-                </span>
-                <button
-                  disabled={pageIndex === totalPages || loading}
-                  onClick={() => setPageIndex((prev) => prev + 1)}
-                  className="px-3 py-1.5 bg-[#0F172A] border border-gray-800 rounded-lg text-xs font-semibold text-gray-300 hover:bg-[#1E293B] disabled:opacity-40 transition"
-                >
-                  {TEXT.MOVIE.BTN_NEXT}
-                </button>
-              </div>
-            )}
-          </div>
+                  <td className="p-4 text-gray-300 font-medium">
+                    {movie.director}
+                  </td>
+                  <td className="p-4">
+                    <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md text-xs font-semibold">
+                      {movie.duration} phút
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex justify-center gap-2">
+                      <button
+                        onClick={() => handleOpenEditModal(movie)}
+                        className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 text-xs font-semibold rounded-lg transition"
+                      >
+                        Sửa
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMovie(movie)}
+                        className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 text-xs font-semibold rounded-lg transition"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -566,8 +284,8 @@ export default function ManageMovie() {
             <div className="p-5 border-b border-gray-800 flex justify-between items-center bg-blue-950/20 shrink-0">
               <h2 className="text-lg font-bold text-white uppercase tracking-wide">
                 {editingMovieId
-                  ? TEXT.MOVIE.MODAL_UPDATE_TITLE
-                  : TEXT.MOVIE.MODAL_ADD_TITLE}
+                  ? "✏️ Cập Nhật Thông Tin Phim"
+                  : "✨ Thêm Phim Mới Vào Hệ Thống"}
               </h2>
               <button
                 onClick={() => {
@@ -585,29 +303,31 @@ export default function ManageMovie() {
               onSubmit={handleSubmit}
               className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin scrollbar-track-[#0F172A] scrollbar-thumb-[#1E293B] hover:scrollbar-thumb-[#4318FF]"
             >
-              {/* Tên phim & Thời lượng */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    {TEXT.MOVIE.LABEL_TITLE} <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleInputChange}
-                    placeholder={TEXT.MOVIE.PLACEHOLDER_TITLE}
-                    className={`w-full px-4 py-2 bg-[#0F172A] border ${errors.title ? "border-red-500 focus:ring-red-500" : "border-gray-800 focus:ring-blue-500"} text-white text-sm focus:outline-none focus:ring-2 rounded-xl`}
-                  />
-                  {errors.title && (
-                    <p className="text-red-500 text-xs mt-1 font-medium">
-                      ⚠ {errors.title}
-                    </p>
-                  )}
-                </div>
+              {" "}
+              {/* Tên phim VN */}
+              <div>
+                <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                  Tên Phim (Tiếng Việt) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="movieNameVn"
+                  value={formData.movieNameVn}
+                  onChange={handleInputChange}
+                  placeholder="Nhập tên tiếng Việt..."
+                  className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border ${errors.movieNameVn ? "border-red-500 focus:ring-red-500" : "border-gray-800 focus:ring-blue-500"} text-white text-sm focus:outline-none focus:ring-2`}
+                />
+                {errors.movieNameVn && (
+                  <p className="text-red-500 text-xs mt-1 font-medium">
+                    ⚠ {errors.movieNameVn}
+                  </p>
+                )}
+              </div>
+              {/* Tên tiếng Anh & Đạo diễn */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    {TEXT.MOVIE.LABEL_DURATION}
+                    Tên Phim (Tiếng Anh)
                   </label>
                   <input
                     type="text"
@@ -618,107 +338,25 @@ export default function ManageMovie() {
                     className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              </div>
-
-              {/* Thể loại, Đạo diễn & Ngôn ngữ */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="relative" ref={genreDropdownRef}>
-                  <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    {TEXT.MOVIE.LABEL_GENRE}
-                  </label>
-                  <div
-                    onClick={() => setIsGenreDropdownOpen(!isGenreDropdownOpen)}
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer flex items-center justify-between"
-                  >
-                    <span className={selectedGenreIds.length === 0 ? "text-gray-400" : ""}>
-                      {selectedGenreIds.length > 0
-                        ? genres.find(g => g.genreId === selectedGenreIds[0])?.name || TEXT.MOVIE.PLACEHOLDER_GENRE
-                        : TEXT.MOVIE.PLACEHOLDER_GENRE}
-                    </span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-
-                  {isGenreDropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full bg-[#1E293B] border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-60 flex flex-col animate-fadeIn">
-                      <div className="overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#1E293B] [&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-500">
-                        <div
-                          onClick={() => {
-                            setSelectedGenreIds([]);
-                            setIsGenreDropdownOpen(false);
-                          }}
-                          className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${
-                            selectedGenreIds.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
-                          }`}
-                        >
-                          {TEXT.MOVIE.PLACEHOLDER_GENRE}
-                        </div>
-                        {genres.map((g) => {
-                          const isSelected = selectedGenreIds.includes(g.genreId);
-                          return (
-                            <div
-                              key={g.genreId}
-                              onClick={() => {
-                                setSelectedGenreIds([g.genreId]);
-                                setIsGenreDropdownOpen(false);
-                              }}
-                              className={`px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between transition-colors duration-150 ${
-                                isSelected ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
-                              }`}
-                            >
-                              <span>{g.name}</span>
-                              {isSelected && (
-                                <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    {TEXT.MOVIE.LABEL_DIRECTOR}
+                    Đạo Diễn
                   </label>
                   <input
                     type="text"
                     name="director"
                     value={formData.director}
                     onChange={handleInputChange}
-                    placeholder={TEXT.MOVIE.PLACEHOLDER_DIRECTOR}
+                    placeholder="Tên đạo diễn..."
                     className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    {TEXT.MOVIE.LABEL_LANGUAGE}
-                  </label>
-                  <select
-                    name="language"
-                    value={formData.language}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  >
-                    <option value="">Chọn ngôn ngữ...</option>
-                    <option value="VN">Tiếng Việt</option>
-                    <option value="EN_SUB_VN">Tiếng Anh phụ đề tiếng Việt</option>
-                    <option value="EN_DUB_VN">Tiếng Anh lồng tiếng Việt</option>
-                    <option value="KR_SUB_VN">Tiếng Hàn phụ đề tiếng Việt</option>
-                    <option value="JP_SUB_VN">Tiếng Nhật phụ đề tiếng Việt</option>
-                    <option value="TH_SUB_VN">Tiếng Thái phụ đề tiếng Việt</option>
-                    <option value="CN_SUB_VN">Tiếng Trung phụ đề tiếng Việt</option>
-                  </select>
                 </div>
               </div>
               {/* Thời lượng & Diễn viên */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    {TEXT.MOVIE.LABEL_RELEASE_DATE}
+                    Thời Lượng (Phút)
                   </label>
                   <input
                     type="number"
@@ -730,7 +368,7 @@ export default function ManageMovie() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    {TEXT.MOVIE.LABEL_AGE}
+                    Diễn Viên
                   </label>
                   <input
                     type="text"
@@ -746,7 +384,7 @@ export default function ManageMovie() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    {TEXT.MOVIE.LABEL_HIGHLIGHT}
+                    Khởi Chiếu Từ Ngày
                   </label>
                   <input
                     type="date"
@@ -758,7 +396,7 @@ export default function ManageMovie() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                    {TEXT.MOVIE.LABEL_STATUS}
+                    Kết Thúc Ngày
                   </label>
                   <input
                     type="date"
@@ -772,7 +410,7 @@ export default function ManageMovie() {
               {/* Trailer URL */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                  {TEXT.MOVIE.LABEL_TRAILER}
+                  Trailer URL (Youtube)
                 </label>
                 <input
                   type="text"
@@ -783,61 +421,17 @@ export default function ManageMovie() {
                   className="w-full px-4 py-2.5 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
-              {/* Tải ảnh poster trực quan */}
+              {/* Nội dung phim */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                  {TEXT.MOVIE.LABEL_POSTER}
-                </label>
-                <div className="flex gap-4 items-center mt-2">
-                  {posterPreview ? (
-                    <div className="relative w-24 h-32 rounded-xl overflow-hidden border border-gray-700 shadow-md">
-                      <img src={posterPreview} alt="Preview" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPosterFile(null);
-                          setPosterPreview("");
-                        }}
-                        className="absolute top-1 right-1 w-5 h-5 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center text-[10px] shadow"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-24 h-32 rounded-xl bg-[#0F172A] border border-dashed border-gray-700 flex flex-col items-center justify-center text-gray-500 text-xs text-center p-2">
-                      <span>{TEXT.MOVIE.NO_POSTER}</span>
-                    </div>
-                  )}
-
-                  <div className="flex-1">
-                    <div className="border border-dashed border-gray-700 rounded-xl p-4 text-center hover:border-blue-500 transition cursor-pointer relative bg-[#0F172A]">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                      />
-                      <span className="text-xs text-gray-400">
-                        {posterFile ? `📂 ${posterFile.name}` : TEXT.MOVIE.POSTER_UPLOAD_DESC}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-gray-500 mt-1">{TEXT.MOVIE.POSTER_HINT}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Mô tả nội dung */}
-              <div>
-                <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                  {TEXT.MOVIE.LABEL_DESC}
+                  Nội Dung Phim
                 </label>
                 <textarea
                   name="content"
                   rows={3}
                   value={formData.content}
                   onChange={handleInputChange}
-                  placeholder={TEXT.MOVIE.PLACEHOLDER_DESC}
+                  placeholder="Mô tả nội dung phim ngắn gọn..."
                   className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 ></textarea>
               </div>
@@ -853,14 +447,14 @@ export default function ManageMovie() {
                 }}
                 className="px-5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-sm rounded-xl transition"
               >
-                {TEXT.MOVIE.BTN_CANCEL_FORM}
+                Hủy bỏ
               </button>
               <button
                 type="button"
                 onClick={handleSubmit} // Trigger hàm submit chuẩn
                 className="px-6 py-2 bg-[#4318FF] hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-lg transition"
               >
-                {editingMovieId ? TEXT.MOVIE.BTN_UPDATE_FORM : TEXT.MOVIE.BTN_SAVE_FORM}
+                {editingMovieId ? "Cập Nhật Thay Đổi" : "Lưu Thông Tin"}
               </button>
             </div>
           </div>

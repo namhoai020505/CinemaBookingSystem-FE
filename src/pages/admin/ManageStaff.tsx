@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { toast } from 'react-toastify';
 import { staffService, type ApiResponse, type StaffInvitationData } from '../../services/staffService';
-import { TEXT } from '../../constants/vi';
 
 type ParsedApiError = {
   message: string;
@@ -10,11 +9,11 @@ type ParsedApiError = {
 
 // Map mã lỗi backend sang thông báo dễ hiểu cho admin khi mời staff.
 const staffErrorMessages: Record<string, string> = {
-  DUPLICATE_EMAIL: TEXT.STAFF.ERR_DUPLICATE_EMAIL,
-  CINEMA_NOT_FOUND: TEXT.STAFF.ERR_CINEMA_NOT_FOUND,
-  ROLE_NOT_FOUND: TEXT.STAFF.ERR_ROLE_NOT_FOUND,
-  EMAIL_SEND_FAILED: TEXT.STAFF.ERR_EMAIL_SEND_FAILED,
-  VALIDATION_ERROR: TEXT.STAFF.ERR_VALIDATION,
+  DUPLICATE_EMAIL: 'Email này đã tồn tại trong hệ thống.',
+  CINEMA_NOT_FOUND: 'Chưa có rạp trong hệ thống. Vui lòng seed dữ liệu rạp trước.',
+  ROLE_NOT_FOUND: 'Chưa có role Staff trong hệ thống.',
+  EMAIL_SEND_FAILED: 'Không gửi được email mời staff. Vui lòng kiểm tra SMTP backend.',
+  VALIDATION_ERROR: 'Email hoặc tên nhân viên chưa hợp lệ.',
 };
 
 // Type guard giúp đọc object lỗi từ Axios mà vẫn giữ type-safe.
@@ -24,7 +23,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 // Chuẩn hóa lỗi từ API create staff thành message để hiển thị và toast.
 const parseApiError = (error: unknown): ParsedApiError => {
   if (!isRecord(error)) {
-    return { message: TEXT.STAFF.ERR_UNKNOWN_OBJ };
+    return { message: 'Đã xảy ra lỗi không xác định.' };
   }
 
   if (isRecord(error.response)) {
@@ -45,10 +44,10 @@ const parseApiError = (error: unknown): ParsedApiError => {
   }
 
   if ('request' in error) {
-    return { message: TEXT.STAFF.ERR_CONNECTION };
+    return { message: 'Không thể kết nối backend. Hãy kiểm tra API đã chạy chưa.' };
   }
 
-  return { message: TEXT.STAFF.ERR_UNKNOWN };
+  return { message: 'Đã xảy ra lỗi không xác định.' };
 };
 
 // Trang admin mời user trở thành staff qua email.
@@ -78,7 +77,7 @@ export default function ManageStaff() {
       });
 
       setInvitation(response.data || { email: email.trim().toLowerCase() });
-      toast.success(response.message || TEXT.STAFF.SUCCESS_INVITE);
+      toast.success(response.message || 'Đã gửi email mời staff.');
       setEmail('');
       setFullName('');
     } catch (err: unknown) {
@@ -93,9 +92,9 @@ export default function ManageStaff() {
   return (
     <div className="min-h-screen bg-[#0A0A0C] p-6 text-white font-['Urbanist']">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold uppercase tracking-wider">{TEXT.STAFF.TITLE}</h1>
+        <h1 className="text-2xl font-bold uppercase tracking-wider">Quản Lý Staff</h1>
         <p className="mt-1 text-xs text-gray-400">
-          {TEXT.STAFF.SUBTITLE}
+          Tạo tài khoản staff và gửi OTP đặt mật khẩu tới email nhân viên.
         </p>
       </div>
 
@@ -105,7 +104,7 @@ export default function ManageStaff() {
           className="rounded-2xl border border-gray-800 bg-[#111C44] p-6 shadow-2xl"
         >
           <div className="mb-5 border-b border-gray-800 pb-4">
-            <h2 className="text-lg font-bold uppercase tracking-wide">{TEXT.STAFF.FORM_TITLE}</h2>
+            <h2 className="text-lg font-bold uppercase tracking-wide">Mời Staff Mới</h2>
           </div>
 
           {error ? (
@@ -117,27 +116,27 @@ export default function ManageStaff() {
           <div className="space-y-4">
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase text-gray-400">
-                {TEXT.STAFF.LABEL_EMAIL} <span className="text-red-500">*</span>
+                Email Staff <span className="text-red-500">*</span>
               </label>
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder={TEXT.STAFF.PLACEHOLDER_EMAIL}
+                placeholder="staff@example.com"
                 className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-sm text-white outline-none transition focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase text-gray-400">
-                {TEXT.STAFF.LABEL_NAME}
+                Họ Tên
               </label>
               <input
                 type="text"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                placeholder={TEXT.STAFF.PLACEHOLDER_NAME}
+                placeholder="Không bắt buộc"
                 className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-sm text-white outline-none transition focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -150,22 +149,22 @@ export default function ManageStaff() {
               isSubmitting ? 'cursor-not-allowed opacity-70' : 'hover:bg-blue-700'
             }`}
           >
-            {isSubmitting ? TEXT.STAFF.BTN_SUBMITTING : TEXT.STAFF.BTN_SUBMIT}
+            {isSubmitting ? 'Đang gửi lời mời...' : 'Gửi Lời Mời Staff'}
           </button>
         </form>
 
         <div className="rounded-2xl border border-gray-800 bg-[#111C44] p-6 shadow-2xl">
-          <h2 className="mb-4 text-lg font-bold uppercase tracking-wide">{TEXT.STAFF.STATUS_TITLE}</h2>
+          <h2 className="mb-4 text-lg font-bold uppercase tracking-wide">Trạng Thái</h2>
 
           {invitation ? (
             <div className="space-y-4">
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
-                {TEXT.STAFF.STATUS_SUCCESS} <span className="font-bold">{invitation.email}</span>.
+                Đã tạo tài khoản staff cho <span className="font-bold">{invitation.email}</span>.
               </div>
 
               {invitation.expiresAt ? (
                 <div className="rounded-xl border border-gray-800 bg-[#0F172A] p-4 text-sm text-gray-300">
-                  {TEXT.STAFF.STATUS_OTP_EXPIRE}{' '}
+                  OTP hết hạn lúc{' '}
                   <span className="font-semibold text-white">
                     {new Date(invitation.expiresAt).toLocaleString('vi-VN')}
                   </span>
@@ -174,14 +173,14 @@ export default function ManageStaff() {
 
               <div className="rounded-xl border border-gray-800 bg-[#0F172A] p-4">
                 <p className="mb-2 text-xs font-semibold uppercase text-gray-400">
-                  {TEXT.STAFF.STATUS_LINK_LABEL}
+                  Trang đặt mật khẩu
                 </p>
                 <code className="break-all text-sm text-[#FFD166]">{staffSetPasswordPath}</code>
               </div>
             </div>
           ) : (
-            <div className="rounded-xl border border-gray-800 bg-[#0F172A] p-4 text-sm text-gray-400">
-              {TEXT.STAFF.STATUS_EMPTY}
+            <div className="rounded-xl border border-gray-800 bg-[#0F172A] p-5 text-sm text-gray-400">
+              Sau khi gửi lời mời thành công, thông tin invitation sẽ hiển thị tại đây.
             </div>
           )}
         </div>

@@ -64,7 +64,6 @@ export interface MovieResponse {
   imagePoster?: string;
   ageRating?: string;
   highlight?: string;
-  movieStatus?: string;
 }
 
 // Wrapper ApiResponse chuẩn backend; interceptor đã unwrap response.data một lớp.
@@ -115,10 +114,8 @@ export const showtimeService = {
   // GET /api/movies?status=NOW_SHOWING: lấy phim đang chiếu để tạo lịch.
   getMoviesForScheduling: async (): Promise<MovieResponse[]> => {
     const envelope = await axiosInstance.get('/api/movies', {
-      params: { pageSize: 200 }  // Lấy đủ phim, không bị cắt trang
-    }) as unknown as ApiEnvelope<PagedListEnvelope<MovieResponse>>;
-    // BE trả về { data: { items: [...], pageIndex, pageSize, totalCount } }
-    const allMovies = envelope?.data?.items ?? [];
-    return allMovies.filter(m => m.movieStatus === 'NOW_SHOWING' || m.movieStatus === 'COMING_SOON');
+      params: { status: 'NOW_SHOWING' },
+    }) as unknown as ApiEnvelope<MovieResponse[]>;
+    return envelope?.data ?? [];
   },
 };
