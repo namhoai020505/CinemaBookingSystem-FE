@@ -18,7 +18,6 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import fallbackPoster from "../../assets/movie1.jpg";
 import api from "../../lib/api";
 import { getCurrentUserProfile } from "../../lib/auth";
-import { getMediaUrl } from "../../lib/media";
 import {
   bookingService,
   hideExpiredBookingFromHistory,
@@ -33,7 +32,7 @@ const PAYMENT_PROVIDER_ID = "PP_SEPAY";
 const PAYMENT_WINDOW_SECONDS = 600;
 const DEFAULT_LOCK_SECONDS = 600;
 const PAYMENT_STATUS_POLL_MS = 5000;
-
+const API_ORIGIN = String(api.defaults.baseURL || "").replace(/\/$/, "");
 
 const FNB_ITEMS = [
   {
@@ -129,8 +128,11 @@ type PaymentSession = {
   payment: CreatePaymentResponse;
   expiresAt: string;
   createdAt: string;
+  selectedSeatIds?: string[];
+  seatSignature?: string;
 };
 
+// Chuẩn hóa datetime backend trả về để Date.parse hiểu được cả khi thiếu hậu tố Z.
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";
@@ -139,6 +141,7 @@ const normalizeBackendDate = (value?: string | null) => {
   return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
 };
 
+// Parse datetime backend thành timestamp, trả 0 nếu dữ liệu không hợp lệ.
 const parseBackendTime = (value?: string | null) => {
   const normalized = normalizeBackendDate(value);
   if (!normalized) {
@@ -149,9 +152,11 @@ const parseBackendTime = (value?: string | null) => {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+// Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
+// Format giây thành mm:ss cho bộ đếm giữ ghế/thanh toán.
 const formatTimer = (seconds: number) => {
   const safeSeconds = Math.max(0, seconds);
   const mins = Math.floor(safeSeconds / 60);
@@ -161,6 +166,7 @@ const formatTimer = (seconds: number) => {
     .padStart(2, "0")}`;
 };
 
+// Format thời gian chiếu thành chuỗi dễ đọc cho sidebar.
 const formatDateTime = (value?: string | null) => {
   const timestamp = parseBackendTime(value);
   if (!timestamp) {
@@ -173,19 +179,39 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
+// Chuyển poster path tương đối thành URL đầy đủ.
+const resolvePosterUrl = (value?: string | null) => {
+  const posterUrl = value?.trim();
+  if (!posterUrl) {
+    return "";
+  }
 
+  if (/^(https?:|data:|blob:)/i.test(posterUrl)) {
+    return posterUrl;
+  }
 
+  if (posterUrl.startsWith("/")) {
+    return `${API_ORIGIN}${posterUrl}`;
+  }
+
+  return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
+};
+
+// Lấy định danh user hiện tại để tách session theo tài khoản.
 const getUserKey = () => {
   const profile = getCurrentUserProfile();
   return profile?.userId || profile?.email || "anonymous";
 };
 
+// Key localStorage lưu ghế đang giữ của user cho suất chiếu.
 const getSeatLockStorageKey = (showtimeId: string, userKey: string) =>
   `g2c-seat-locks:${userKey}:${showtimeId}`;
 
+// Key localStorage lưu payment đang pending để user quay lại vẫn tiếp tục được.
 const getPaymentStorageKey = (showtimeId: string, userKey: string) =>
   `g2c-payment:${userKey}:${showtimeId}`;
 
+// Đọc lock session ghế và tự loại các lock đã hết hạn.
 const readSeatLockSession = (
   showtimeId: string,
   userKey: string,
@@ -229,10 +255,12 @@ const readSeatLockSession = (
   }
 };
 
+// Xóa session giữ ghế sau khi thanh toán xong/hết hạn.
 const removeSeatLockSession = (showtimeId: string, userKey: string) => {
   localStorage.removeItem(getSeatLockStorageKey(showtimeId, userKey));
 };
 
+// Đọc payment session còn hạn từ localStorage.
 const readPaymentSession = (
   showtimeId: string,
   userKey: string,
@@ -257,6 +285,7 @@ const readPaymentSession = (
   }
 };
 
+// Ghi payment session để refresh trang không mất QR/booking đang pending.
 const writePaymentSession = (session: PaymentSession) => {
   localStorage.setItem(
     getPaymentStorageKey(session.showtimeId, session.userKey),
@@ -264,10 +293,26 @@ const writePaymentSession = (session: PaymentSession) => {
   );
 };
 
+// Xóa payment session khi thanh toán xong hoặc hết hạn.
 const removePaymentSession = (showtimeId: string, userKey: string) => {
   localStorage.removeItem(getPaymentStorageKey(showtimeId, userKey));
 };
 
+// Signature nay gan payment session voi dung danh sach ghe dang thanh toan.
+const getSeatIdentity = (
+  seat: Pick<CheckoutSeat, "seatId" | "showtimeSeatId">,
+) => seat.showtimeSeatId || seat.seatId;
+
+const getSeatSessionSignature = (
+  seats: Pick<CheckoutSeat, "seatId" | "showtimeSeatId">[],
+) =>
+  seats
+    .map(getSeatIdentity)
+    .filter(Boolean)
+    .sort()
+    .join("|");
+
+// Tính số giây từ hiện tại tới một datetime hết hạn.
 const getSecondsUntil = (value?: string | null, fallback = 0) => {
   const timestamp = parseBackendTime(value);
 
@@ -278,6 +323,7 @@ const getSecondsUntil = (value?: string | null, fallback = 0) => {
   return Math.max(0, Math.ceil((timestamp - Date.now()) / 1000));
 };
 
+// Lấy thời gian giữ ghế còn lại dựa trên lockedUntil sớm nhất.
 const getSeatHoldRemainingSeconds = (
   showtimeId: string,
   userKey: string,
@@ -302,6 +348,7 @@ const getSeatHoldRemainingSeconds = (
   return Math.max(0, Math.ceil((earliestExpiry - Date.now()) / 1000));
 };
 
+// Map tên ngân hàng backend trả về sang mã bank mà SePay QR API cần.
 const getSepayBankCode = (bankName: string) => {
   const normalized = bankName.toLowerCase().replace(/[\s._-]/g, "");
   const bankCodes: Record<string, string> = {
@@ -314,6 +361,7 @@ const getSepayBankCode = (bankName: string) => {
   return bankCodes[normalized] || bankName;
 };
 
+// Lấy danh sách ghế đang giữ từ session khi user vào checkout trực tiếp/refresh.
 const getSeatsFromSession = (showtimeId: string, userKey: string) => {
   const session = readSeatLockSession(showtimeId, userKey);
 
@@ -326,6 +374,7 @@ const getSeatsFromSession = (showtimeId: string, userKey: string) => {
     .filter(Boolean);
 };
 
+// Tạo URL ảnh QR SePay từ thông tin payment backend trả về.
 const getSepayQrUrl = (payment: CreatePaymentResponse | null) => {
   if (payment?.qrUrl) {
     return payment.qrUrl;
@@ -350,6 +399,7 @@ const getSepayQrUrl = (payment: CreatePaymentResponse | null) => {
   return `https://qr.sepay.vn/img?${query.toString()}`;
 };
 
+// Chuẩn hóa message lỗi API để hiển thị cho user.
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   if (typeof error === "object" && error && "response" in error) {
     const response = (error as { response?: { data?: { message?: string } } })
@@ -362,6 +412,7 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
+// Trang checkout: chọn F&B, tạo booking, tạo QR SePay và theo dõi thanh toán.
 export default function Checkout() {
   const { showtimeId = "" } = useParams();
   const location = useLocation();
@@ -370,9 +421,27 @@ export default function Checkout() {
   const resumeBooking = routeState?.resumeBooking ?? null;
   const [userKey] = useState(() => getUserKey());
   const [userProfile] = useState(() => getCurrentUserProfile());
-  const [storedPaymentSession] = useState(() =>
-    readPaymentSession(showtimeId, userKey),
+  const routeSeatSignature = getSeatSessionSignature(
+    routeState?.selectedSeats || [],
   );
+  const [storedPaymentSession] = useState(() => {
+    const session = readPaymentSession(showtimeId, userKey);
+    const sessionSignature =
+      session?.seatSignature ||
+      getSeatSessionSignature(
+        (session?.selectedSeatIds || []).map((seatId) => ({
+          seatId,
+          showtimeSeatId: seatId,
+        })),
+      );
+
+    if (session && routeSeatSignature && sessionSignature !== routeSeatSignature) {
+      removePaymentSession(showtimeId, userKey);
+      return null;
+    }
+
+    return session;
+  });
   const [selectedSeats] = useState<CheckoutSeat[]>(() =>
     routeState?.selectedSeats?.length
       ? routeState.selectedSeats
@@ -419,6 +488,7 @@ export default function Checkout() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [paymentConfigRefreshTried, setPaymentConfigRefreshTried] = useState(false);
   const [paymentExpiredDialogOpen, setPaymentExpiredDialogOpen] =
     useState(false);
@@ -429,13 +499,13 @@ export default function Checkout() {
   const [displayDetails, setDisplayDetails] =
     useState<CheckoutDisplayDetails | null>(null);
 
+  // Tổng tiền ghế từ danh sách đã chọn.
   const seatsTotalAmount = useMemo(
-    () =>
-      routeState?.totalAmount ??
-      selectedSeats.reduce((sum, seat) => sum + (seat.price || 0), 0),
-    [routeState?.totalAmount, selectedSeats],
+    () => selectedSeats.reduce((sum, seat) => sum + (seat.price || 0), 0),
+    [selectedSeats],
   );
 
+  // Tổng tiền F&B dựa trên số lượng combo user chọn.
   const fnbTotalAmount = useMemo(
     () =>
       FNB_ITEMS.reduce(
@@ -478,6 +548,71 @@ export default function Checkout() {
   const selectedSeatLabels = selectedSeats.map(
     (seat) => seat.seatCode || `${seat.row}${seat.column}`,
   );
+  const selectedSeatSignature = useMemo(
+    () => getSeatSessionSignature(selectedSeats),
+    [selectedSeats],
+  );
+  const selectedSeatIdsForSession = useMemo(
+    () => selectedSeats.map(getSeatIdentity).filter(Boolean),
+    [selectedSeats],
+  );
+
+  // Release local lock va goi backend unlock cho cac ghe dang giu truoc khi user roi checkout.
+  const releaseSelectedSeatLocks = useCallback(async (strictBookingCancel = false) => {
+    const hasPendingBooking =
+      Boolean(booking?.bookingId) &&
+      booking?.status?.toUpperCase() !== "PAID" &&
+      booking?.status?.toUpperCase() !== "COMPLETED";
+    let bookingCancelSucceeded = false;
+    let bookingCancelFailed = false;
+
+    if (hasPendingBooking && booking?.bookingId) {
+      try {
+        const response = await bookingService.cancelPendingBooking(booking.bookingId);
+        if (!response.success) {
+          throw new Error(response.message || "Khong the huy booking pending.");
+        }
+        bookingCancelSucceeded = true;
+      } catch (error) {
+        bookingCancelFailed = true;
+        console.warn("Khong the huy booking pending ngay lap tuc:", error);
+
+        if (strictBookingCancel) {
+          throw error;
+        }
+      }
+    }
+
+    const seatsToRelease = selectedSeats.filter((seat) => Boolean(seat.seatId));
+
+    if (!bookingCancelSucceeded && seatsToRelease.length > 0) {
+      const results = await Promise.allSettled(
+        seatsToRelease.map((seat) =>
+          api.post("/api/seats/unlock", {
+            showtimeId,
+            seatId: seat.seatId,
+          }),
+        ),
+      );
+
+      const failedUnlocks = results.filter(
+        (result) => result.status === "rejected",
+      );
+      if (failedUnlocks.length > 0) {
+        console.warn(
+          "Mot so ghe khong the unlock ngay lap tuc. Backend se cleanup khi pending payment het han.",
+          failedUnlocks,
+        );
+      }
+    }
+
+    if (!bookingCancelFailed || !strictBookingCancel) {
+      removeSeatLockSession(showtimeId, userKey);
+      removePaymentSession(showtimeId, userKey);
+    }
+  }, [booking?.bookingId, booking?.status, selectedSeats, showtimeId, userKey]);
+
+  // Khi quá hạn thanh toán, dọn session local và đưa user về trang chủ.
   const redirectHomeAfterPaymentExpired = useCallback(() => {
     hideExpiredBookingFromHistory(booking?.bookingId);
 
@@ -485,9 +620,57 @@ export default function Checkout() {
       removePaymentSession(showtimeId, userKey);
     }
 
+    void releaseSelectedSeatLocks();
     navigate("/", { replace: true });
-  }, [booking?.bookingId, navigate, showtimeId, userKey]);
+  }, [
+    booking?.bookingId,
+    navigate,
+    releaseSelectedSeatLocks,
+    showtimeId,
+    userKey,
+  ]);
 
+  const cancelTransaction = useCallback(
+    async (redirectTo = "/", askConfirm = true) => {
+      if (askConfirm) {
+        const confirmed = window.confirm(
+          "Ban co chac muon huy giao dich nay? Ghe da giu se duoc tra ve neu chua thanh toan.",
+        );
+
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      try {
+        setIsCancelling(true);
+        setErrorMessage("");
+        await releaseSelectedSeatLocks(true);
+        hideExpiredBookingFromHistory(booking?.bookingId);
+        navigate(redirectTo, { replace: true });
+      } catch (error) {
+        setErrorMessage(
+          getApiErrorMessage(error, "Khong the huy giao dich. Vui long thu lai."),
+        );
+      } finally {
+        setIsCancelling(false);
+      }
+    },
+    [booking?.bookingId, navigate, releaseSelectedSeatLocks],
+  );
+
+  // Browser Back cung duoc xem nhu roi checkout nen can clear lock/session local.
+  useEffect(() => {
+    const handlePopState = () => {
+      void releaseSelectedSeatLocks();
+      hideExpiredBookingFromHistory(booking?.bookingId);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [booking?.bookingId, releaseSelectedSeatLocks]);
+
+  // Tải lại thông tin phim/suất chiếu để sidebar không phụ thuộc hoàn toàn vào route state.
   useEffect(() => {
     let isMounted = true;
 
@@ -546,7 +729,7 @@ export default function Checkout() {
             ? `${movie.durationMinutes} phút`
             : undefined,
           ageRating: movie?.ageRating || undefined,
-          posterUrl: getMediaUrl(movie?.posterUrl),
+          posterUrl: resolvePosterUrl(movie?.posterUrl),
           cinemaName: showtime.cinemaName,
           roomName: showtime.roomName,
           startTime: showtime.startTime,
@@ -566,6 +749,7 @@ export default function Checkout() {
     };
   }, [showtimeId]);
 
+  // Đồng bộ bộ đếm giữ ghế trước khi tạo booking/payment.
   useEffect(() => {
     if (step === "payment") {
       return undefined;
@@ -587,6 +771,7 @@ export default function Checkout() {
     return () => window.clearInterval(timer);
   }, [selectedSeats, showtimeId, step, userKey]);
 
+  // Đồng bộ bộ đếm thanh toán theo expiresAt của payment.
   useEffect(() => {
     if (step !== "payment" || !paymentExpiresAt) {
       return undefined;
@@ -601,6 +786,7 @@ export default function Checkout() {
     return () => window.clearInterval(timer);
   }, [paymentExpiresAt, step]);
 
+  // Khi QR hết hạn, mở popup báo hết thời gian và tự chuyển về trang chủ.
   useEffect(() => {
     if (
       step !== "payment" ||
@@ -631,6 +817,7 @@ export default function Checkout() {
     step,
   ]);
 
+  // Nếu payment session thiếu thông tin QR/ngân hàng thì gọi lại createPayment để refresh cấu hình.
   useEffect(() => {
     if (
       step !== "payment" ||
@@ -679,6 +866,10 @@ export default function Checkout() {
           payment: refreshedPayment,
           expiresAt,
           createdAt: new Date().toISOString(),
+          selectedSeatIds:
+            storedPaymentSession?.selectedSeatIds || selectedSeatIdsForSession,
+          seatSignature:
+            storedPaymentSession?.seatSignature || selectedSeatSignature,
         });
       } catch (error) {
         if (!cancelled) {
@@ -700,11 +891,16 @@ export default function Checkout() {
     payment,
     paymentConfigRefreshTried,
     paymentExpiresAt,
+    selectedSeatIdsForSession,
+    selectedSeatSignature,
     showtimeId,
     step,
+    storedPaymentSession?.seatSignature,
+    storedPaymentSession?.selectedSeatIds,
     userKey,
   ]);
 
+  // Poll trạng thái booking để tự chuyển sang trang vé khi webhook xác nhận Paid.
   useEffect(() => {
     if (step !== "payment" || !booking?.bookingId) {
       return undefined;
@@ -756,6 +952,7 @@ export default function Checkout() {
     };
   }, [booking?.bookingId, navigate, showtimeId, step, userKey]);
 
+  // Tăng/giảm số lượng combo F&B trong giỏ.
   const handleQuantityChange = (itemId: string, delta: number) => {
     setFnbCart((current) => ({
       ...current,
@@ -763,6 +960,7 @@ export default function Checkout() {
     }));
   };
 
+  // Copy số tài khoản/nội dung chuyển khoản vào clipboard.
   const handleCopy = async (value: string, field: string) => {
     if (!value) {
       return;
@@ -777,6 +975,7 @@ export default function Checkout() {
     }
   };
 
+  // User bấm "Tôi đã thanh toán" để kiểm tra lại trạng thái booking ngay lập tức.
   const handleCheckPaymentStatus = async () => {
     if (!booking?.bookingId) {
       return;
@@ -823,6 +1022,7 @@ export default function Checkout() {
     }
   };
 
+  // Tạo booking Pending rồi khởi tạo payment QR cho đơn đó.
   const handleCreatePayment = async () => {
     if (!showtimeId || selectedSeats.length === 0) {
       setErrorMessage("Không tìm thấy thông tin ghế đã chọn.");
@@ -846,15 +1046,17 @@ export default function Checkout() {
     try {
       setSubmitting(true);
       setErrorMessage("");
+      setPaymentStatusMessage("");
+      removePaymentSession(showtimeId, userKey);
 
-      const foodItems = Object.entries(fnbCart)
+      const foodAndBeverages = Object.entries(fnbCart)
         .filter(([, quantity]) => quantity > 0)
         .map(([fbItemId, quantity]) => ({ fbItemId, quantity }));
 
       const checkoutResponse = await bookingService.checkout({
         showtimeId,
         showtimeSeatIds,
-        foodItems: foodItems.length > 0 ? foodItems : undefined,
+        foodAndBeverages: foodAndBeverages.length > 0 ? foodAndBeverages : undefined,
       });
 
       if (!checkoutResponse.success || !checkoutResponse.data?.bookingId) {
@@ -864,14 +1066,14 @@ export default function Checkout() {
       const checkout = checkoutResponse.data;
       const nextBooking: BookingSummary = {
         bookingId: checkout.bookingId,
-        showtimeId: checkout.showtimeId,
-        movieTitle: seatMap?.movieName,
-        cinemaName: seatMap?.cinemaName,
-        roomName: seatMap?.roomName,
-        startTime: seatMap?.startTime || null,
+        showtimeId: checkout.showtimeId || showtimeId,
+        movieTitle: checkout.movieTitle || seatMap?.movieName,
+        cinemaName: checkout.cinemaName || seatMap?.cinemaName,
+        roomName: checkout.roomName || seatMap?.roomName,
+        startTime: checkout.startTime || seatMap?.startTime || null,
         totalAmount: checkout.totalAmount,
-        status: checkout.bookingStatus,
-        createdAt: new Date().toISOString(),
+        status: checkout.bookingStatus || checkout.status || "PENDING_PAYMENT",
+        createdAt: checkout.createdAt || new Date().toISOString(),
         expiredAt: checkout.expiredAt,
       };
 
@@ -898,6 +1100,8 @@ export default function Checkout() {
         payment: paymentResponse.data,
         expiresAt,
         createdAt: new Date().toISOString(),
+        selectedSeatIds: selectedSeatIdsForSession,
+        seatSignature: selectedSeatSignature,
       };
 
       writePaymentSession(nextSession);
@@ -1109,6 +1313,14 @@ export default function Checkout() {
                 >
                   Vé của tôi
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => void cancelTransaction("/", true)}
+                  disabled={isCancelling}
+                  className="rounded-md border border-rose-400/40 bg-rose-500/10 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isCancelling ? "Đang hủy..." : "Hủy giao dịch"}
+                </button>
               </div>
             </section>
 
@@ -1461,10 +1673,13 @@ export default function Checkout() {
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => navigate(`/booking/seats/${showtimeId}`)}
-                className="rounded-md bg-slate-600 py-3 text-xs font-black uppercase text-white transition hover:bg-slate-500"
+                onClick={() =>
+                  void cancelTransaction(`/booking/seats/${showtimeId}`, false)
+                }
+                disabled={isCancelling}
+                className="rounded-md bg-slate-600 py-3 text-xs font-black uppercase text-white transition hover:bg-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Quay lại
+                {isCancelling ? "Đang hủy..." : "Quay lại"}
               </button>
               <button
                 type="button"
@@ -1477,6 +1692,14 @@ export default function Checkout() {
                 }`}
               >
                 {submitting ? "Đang tạo..." : "Tiếp tục"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void cancelTransaction("/", true)}
+                disabled={isCancelling}
+                className="col-span-2 rounded-md border border-rose-400/40 bg-rose-500/10 py-3 text-xs font-black uppercase text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isCancelling ? "Đang hủy..." : "Hủy giao dịch"}
               </button>
             </div>
           </aside>

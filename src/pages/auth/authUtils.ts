@@ -1,5 +1,6 @@
 import type { ApiResponse, ParsedApiError } from './authTypes';
 
+// Map errorCode từ backend sang message tiếng Việt dễ hiểu cho người dùng.
 const apiErrorMessages: Record<string, string> = {
   DUPLICATE_EMAIL: 'Email này đã được sử dụng.',
   PENDING_REGISTRATION_EXISTS:
@@ -19,13 +20,17 @@ const apiErrorMessages: Record<string, string> = {
   OTP_SEND_LIMIT_REACHED: 'Bạn đã gửi OTP đủ 5 lần. Vui lòng thử lại sau 2 giờ.',
 };
 
+// Type guard để xử lý unknown error an toàn.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
+// Chuẩn hóa email trước khi gửi backend để tránh lỗi do khoảng trắng/chữ hoa.
 export const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
+// Tạo captcha số đơn giản cho form login/register hiện tại.
 export const createCaptcha = () => Math.floor(10000 + Math.random() * 90000).toString();
 
+// Đọc retryAfterSeconds từ lỗi backend để khóa nút gửi lại OTP đúng thời gian.
 const getRetryAfterSeconds = (errors: unknown) => {
   if (!isRecord(errors)) {
     return undefined;
@@ -40,6 +45,7 @@ const getRetryAfterSeconds = (errors: unknown) => {
   return Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined;
 };
 
+// Tính số giây còn hiệu lực của OTP dựa trên expiresAt backend trả về.
 export const getOtpValidSeconds = (expiresAt?: string) => {
   if (!expiresAt) {
     return 60;
@@ -53,6 +59,7 @@ export const getOtpValidSeconds = (expiresAt?: string) => {
   return Math.max(0, Math.ceil((expiryTime - Date.now()) / 1000));
 };
 
+// Format countdown OTP/cooldown thành chuỗi dễ đọc cho UI.
 export const formatCountdown = (totalSeconds: number) => {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -65,6 +72,7 @@ export const formatCountdown = (totalSeconds: number) => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
+// Gom response backend về ApiResponse<T>, kể cả khi interceptor/endpoint trả data trực tiếp.
 export const unwrapApiResponse = <T,>(response: unknown): ApiResponse<T> => {
   if (isRecord(response)) {
     if (typeof response.success === 'boolean') {
@@ -83,6 +91,7 @@ export const unwrapApiResponse = <T,>(response: unknown): ApiResponse<T> => {
   };
 };
 
+// Parse lỗi axios/backend thành message thống nhất để form auth dùng chung.
 export const parseApiError = (error: unknown): ParsedApiError => {
   if (!isRecord(error)) {
     return { message: 'Đã xảy ra lỗi không xác định.' };

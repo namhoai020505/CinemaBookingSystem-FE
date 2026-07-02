@@ -6,10 +6,13 @@ type CredentialsStepProps = {
   controller: LoginController;
 };
 
+// Bước nhập thông tin chính cho cả đăng nhập và đăng ký.
+// Component chỉ render UI, còn validate/call API nằm trong useLoginController.
 export const CredentialsStep = ({ controller }: CredentialsStepProps) => (
   <>
     {controller.isRegisterMode ? (
       <>
+        {/* Hai field này chỉ xuất hiện khi người dùng đăng ký tài khoản mới. */}
         <TextField
           label="Họ và Tên"
           value={controller.fullName}
@@ -57,6 +60,7 @@ export const CredentialsStep = ({ controller }: CredentialsStepProps) => (
       />
     ) : (
       <div className="text-right">
+        {/* Chuyển sang flow quên mật khẩu nhưng vẫn giữ cùng màn hình auth. */}
         <button
           type="button"
           onClick={() => controller.switchMode('forgot')}
