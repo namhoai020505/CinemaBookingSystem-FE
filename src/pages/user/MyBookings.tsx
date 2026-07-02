@@ -41,6 +41,24 @@ const parseBackendDate = (value?: string | null) => {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+// Suất chiếu là lịch local của rạp, không parse như UTC để tránh bị lệch ngày.
+const getShowtimeDateTimeParts = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, date, hour, minute] = match;
+  return { year, month, date, hour, minute };
+};
+
 // Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
@@ -59,45 +77,54 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-// Format ngày ngắn dùng trong card vé.
-const formatShortDate = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
+// Format đầy đủ suất chiếu, giữ đúng ngày/giờ local backend trả về.
+const formatShowtimeDateTime = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
 
-  if (timestamp === 0) {
+  if (!parts) {
+    return "Đang cập nhật";
+  }
+
+  return `${parts.date}/${parts.month}/${parts.year}, ${parts.hour}:${parts.minute}`;
+};
+
+// Format ngày chiếu ngắn dùng trong card vé.
+const formatShowtimeShortDate = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
+
+  if (!parts) {
     return "--/--";
   }
 
-  return new Date(timestamp).toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-  });
+  return `${parts.date}/${parts.month}`;
 };
 
 // Lấy thứ trong tuần của suất chiếu.
-const formatWeekday = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
+const formatShowtimeWeekday = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
 
-  if (timestamp === 0) {
+  if (!parts) {
     return "Ngày chiếu";
   }
 
-  return new Date(timestamp).toLocaleDateString("vi-VN", {
+  return new Date(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.date),
+  ).toLocaleDateString("vi-VN", {
     weekday: "short",
   });
 };
 
 // Lấy giờ chiếu ngắn HH:mm.
-const formatShortTime = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
+const formatShowtimeShortTime = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
 
-  if (timestamp === 0) {
+  if (!parts) {
     return "--:--";
   }
 
-  return new Date(timestamp).toLocaleTimeString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return `${parts.hour}:${parts.minute}`;
 };
 
 // Rút gọn mã booking dài để card dễ nhìn hơn.
@@ -461,13 +488,13 @@ export default function MyBookings() {
                       <div className="flex items-center gap-4 lg:block">
                         <div className="rounded-lg border border-white/10 bg-[#17264a] p-4 text-center">
                           <p className="text-xs font-black uppercase text-slate-400">
-                            {formatWeekday(booking.startTime)}
+                            {formatShowtimeWeekday(booking.startTime)}
                           </p>
                           <p className="mt-2 text-2xl font-black text-white">
-                            {formatShortDate(booking.startTime)}
+                            {formatShowtimeShortDate(booking.startTime)}
                           </p>
                           <p className="mt-1 text-sm font-black text-[#FFD166]">
-                            {formatShortTime(booking.startTime)}
+                            {formatShowtimeShortTime(booking.startTime)}
                           </p>
                         </div>
                         <span
@@ -507,7 +534,7 @@ export default function MyBookings() {
                               Suất chiếu
                             </p>
                             <p className="mt-2 text-sm font-bold">
-                              {formatDateTime(booking.startTime)}
+                              {formatShowtimeDateTime(booking.startTime)}
                             </p>
                           </div>
 

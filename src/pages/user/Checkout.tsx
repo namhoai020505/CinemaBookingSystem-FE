@@ -152,6 +152,24 @@ const parseBackendTime = (value?: string | null) => {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+// Suất chiếu là lịch local của rạp, không parse như UTC để tránh bị lệch ngày.
+const getShowtimeDateTimeParts = (value?: string | null) => {
+  if (!value) {
+    return null;
+  }
+
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, date, hour, minute] = match;
+  return { year, month, date, hour, minute };
+};
+
 // Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
@@ -168,6 +186,12 @@ const formatTimer = (seconds: number) => {
 
 // Format thời gian chiếu thành chuỗi dễ đọc cho sidebar.
 const formatDateTime = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
+
+  if (parts) {
+    return `${parts.date}/${parts.month}/${parts.year}, ${parts.hour}:${parts.minute}`;
+  }
+
   const timestamp = parseBackendTime(value);
   if (!timestamp) {
     return "Đang cập nhật";

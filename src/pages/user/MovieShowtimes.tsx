@@ -204,6 +204,24 @@ const formatDisplayDateTime = (value?: string | null) => {
   });
 };
 
+// Suất chiếu là lịch local của rạp, không parse như UTC để tránh bị lệch ngày.
+const formatShowtimeDateTime = (value?: string | null) => {
+  if (!value) {
+    return "Đang cập nhật";
+  }
+
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+
+  if (!match) {
+    return formatDisplayDateTime(value);
+  }
+
+  const [, year, month, date, hour, minute] = match;
+  return `${date}/${month}/${year}, ${hour}:${minute}`;
+};
+
 // Chỉ cho phép chọn booking đã thanh toán khi gửi review cho phim.
 const isPaidBooking = (booking: BookingSummary) =>
   booking.status?.toUpperCase() === "PAID" || booking.status?.toUpperCase() === "COMPLETED";
@@ -513,7 +531,7 @@ const ReviewSection = ({
                 >
                   {eligibleReviewBookings.map((booking) => (
                     <option key={booking.bookingId} value={booking.bookingId}>
-                      {formatDisplayDateTime(booking.startTime)} - {booking.roomName || "Phòng chiếu"}
+                      {formatShowtimeDateTime(booking.startTime)} - {booking.roomName || "Phòng chiếu"}
                     </option>
                   ))}
                 </select>

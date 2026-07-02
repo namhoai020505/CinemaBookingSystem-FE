@@ -8,36 +8,37 @@ import {
   type BookingSeatDetail,
 } from "../../services/bookingService";
 
-// Chuẩn hóa datetime backend để parse ổn định cả khi thiếu hậu tố timezone.
-const normalizeBackendDate = (value?: string | null) => {
+// Suất chiếu là lịch local của rạp, không parse như UTC để tránh bị lệch sang ngày hôm sau.
+const getShowtimeDateTimeParts = (value?: string | null) => {
   if (!value) {
-    return "";
+    return null;
   }
 
-  return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
-};
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
 
-// Parse datetime backend thành timestamp.
-const parseBackendTime = (value?: string | null) => {
-  const timestamp = Date.parse(normalizeBackendDate(value));
-  return Number.isNaN(timestamp) ? 0 : timestamp;
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, date, hour, minute] = match;
+  return { year, month, date, hour, minute };
 };
 
 // Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
-// Format thời gian chiếu/booking cho trang vé.
-const formatDateTime = (value?: string | null) => {
-  const timestamp = parseBackendTime(value);
-  if (!timestamp) {
+// Format thời gian chiếu cho trang vé, giữ đúng ngày/giờ backend trả về.
+const formatShowtimeDateTime = (value?: string | null) => {
+  const parts = getShowtimeDateTimeParts(value);
+
+  if (!parts) {
     return "Đang cập nhật";
   }
 
-  return new Date(timestamp).toLocaleString("vi-VN", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  return `${parts.date}/${parts.month}/${parts.year}, ${parts.hour}:${parts.minute}`;
 };
 
 // Tạo ảnh QR vé từ chuỗi ticketQrCode backend trả về.
@@ -186,7 +187,7 @@ export default function BookingSuccess() {
                   Suất chiếu
                 </p>
                 <p className="mt-1 font-bold">
-                  {formatDateTime(bookingInfo.startTime)}
+                  {formatShowtimeDateTime(bookingInfo.startTime)}
                 </p>
               </div>
             </div>
