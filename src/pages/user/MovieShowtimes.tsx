@@ -145,20 +145,7 @@ const formatMoney = (value: number) =>
 
 const normalizeMovieId = (value: string | undefined) => String(value || "");
 
-const mapLanguage = (lang?: string | null) => {
-  if (!lang) return "Tiếng Việt";
-  const map: Record<string, string> = {
-    "VN": "Tiếng Việt",
-    "EN_SUB_VN": "Tiếng Anh phụ đề tiếng Việt",
-    "EN_DUB_VN": "Tiếng Anh lồng tiếng Việt",
-    "KR_SUB_VN": "Tiếng Hàn phụ đề tiếng Việt",
-    "JP_SUB_VN": "Tiếng Nhật phụ đề tiếng Việt",
-    "TH_SUB_VN": "Tiếng Thái phụ đề tiếng Việt",
-    "CN_SUB_VN": "Tiếng Trung phụ đề tiếng Việt",
-  };
-  return map[lang] || lang;
-};
-
+// Tính số ghế available/locked/sold từ seat map của một suất chiếu.
 const getAvailability = (seatMap: SeatMapResponse): SeatAvailability => {
   const available = seatMap.availableSeats?.length ?? 0;
   const locked = seatMap.lockedSeats?.length ?? 0;
@@ -184,7 +171,7 @@ const mapMovieDetailToInfo = (
   director: movie?.director || "Đang cập nhật",
   genre: movie?.genre || "Đang cập nhật",
   posterUrl: movie?.posterUrl || FALLBACK_POSTER,
-  language: mapLanguage(movie?.language),
+  language: movie?.language || "Tiếng Việt",
   releaseDate: movie?.releaseDate || undefined,
   description: movie?.description || undefined,
   trailerUrl: movie?.trailerUrl || undefined,

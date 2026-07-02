@@ -68,7 +68,6 @@ export interface MovieResponse {
   imagePoster?: string;
   ageRating?: string;
   highlight?: string;
-  movieStatus?: string;
 }
 
 // ============================================================
@@ -137,10 +136,8 @@ export const showtimeService = {
   /** GET /api/movies – BE trả về PagedList<MovieResponse> */
   getMoviesForScheduling: async (): Promise<MovieResponse[]> => {
     const envelope = await axiosInstance.get('/api/movies', {
-      params: { pageSize: 200 }  // Lấy đủ phim, không bị cắt trang
-    }) as unknown as ApiEnvelope<PagedListEnvelope<MovieResponse>>;
-    // BE trả về { data: { items: [...], pageIndex, pageSize, totalCount } }
-    const allMovies = envelope?.data?.items ?? [];
-    return allMovies.filter(m => m.movieStatus === 'NOW_SHOWING' || m.movieStatus === 'COMING_SOON');
+      params: { status: 'NOW_SHOWING' },
+    }) as unknown as ApiEnvelope<MovieResponse[]>;
+    return envelope?.data ?? [];
   },
 };
