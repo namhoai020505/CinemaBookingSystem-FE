@@ -105,6 +105,29 @@ const weekdays = [
   "Thứ Bảy",
 ];
 
+const SHOWTIME_VISIBILITY_REFRESH_MS = 30_000;
+
+const getShowtimeTimestamp = (value: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const normalizedValue = value.includes("T") ? value : value.replace(" ", "T");
+  const timestamp = Date.parse(normalizedValue);
+
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
+const isShowtimeVisibleToCustomer = (
+  showtime: Pick<ShowtimeResponse, "startTime" | "status">,
+  nowMs: number,
+) => {
+  const status = showtime.status?.toUpperCase();
+  const startTimestamp = getShowtimeTimestamp(showtime.startTime);
+
+  return status === "OPEN" && (startTimestamp === null || startTimestamp > nowMs);
+};
+
 // Lấy yyyy-MM-dd từ startTime ISO để gom suất chiếu theo ngày.
 const getDateKey = (value: string) => value.split("T")[0] || "";
 
@@ -571,6 +594,7 @@ export default function MovieShowtimes() {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewError, setReviewError] = useState("");
   const [reviewSuccess, setReviewSuccess] = useState("");
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
 
   const currentAccessToken = getAccessToken();
   const isAuthenticated = Boolean(currentAccessToken) && !isAccessTokenExpired(currentAccessToken);
@@ -579,6 +603,16 @@ export default function MovieShowtimes() {
   // Khi đổi phim trên URL, reset trạng thái để tránh hiển thị data phim cũ.
   useEffect(() => {
     window.scrollTo(0, 0);
+  }, []);
+
+  // Tự refresh điều kiện hiển thị để giờ chiếu vừa quá hạn sẽ bị ẩn khỏi customer UI.
+  useEffect(() => {
+    const timerId = window.setInterval(
+      () => setCurrentTimeMs(Date.now()),
+      SHOWTIME_VISIBILITY_REFRESH_MS,
+    );
+
+    return () => window.clearInterval(timerId);
   }, []);
 
   // Tải movie detail, danh sách showtimes và số ghế còn lại cho từng suất.
@@ -775,14 +809,22 @@ export default function MovieShowtimes() {
     };
   }, [isCustomerAccount, movieId]);
 
-  // Tạo danh sách ngày có suất chiếu, nếu chưa có thì vẫn có ngày hôm nay.
+  const visibleShowtimes = useMemo(
+    () =>
+      showtimes.filter((showtime) =>
+        isShowtimeVisibleToCustomer(showtime, currentTimeMs),
+      ),
+    [currentTimeMs, showtimes],
+  );
+
+  // Tạo danh sách ngày có suất chiếu còn khả dụng với customer.
   const daysFilter = useMemo(() => {
     const dateValues = Array.from(
-      new Set(showtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean)),
+      new Set(visibleShowtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean)),
     ).sort();
 
     return dateValues.map(buildDayTab);
-  }, [showtimes]);
+  }, [visibleShowtimes]);
 
   const selectedDateFromUrl = searchParams.get("date") || "";
   const currentSelectedDate = daysFilter.some(
@@ -800,8 +842,8 @@ export default function MovieShowtimes() {
 
   // Lọc showtimes theo ngày đang chọn rồi group theo rạp/phòng.
   const groupedCinemas = useMemo(
-    () => groupShowtimesByCinema(showtimes, currentSelectedDate),
-    [currentSelectedDate, showtimes],
+    () => groupShowtimesByCinema(visibleShowtimes, currentSelectedDate),
+    [currentSelectedDate, visibleShowtimes],
   );
 
   const currentMovieShowtimeIds = useMemo(
@@ -843,6 +885,11 @@ export default function MovieShowtimes() {
 
   // Điều hướng sang trang chọn ghế, truyền kèm movie/showtime để tránh màn loading thiếu dữ liệu.
   const handleSelectShowtime = (slot: ShowtimeSlot) => {
+    if (!isShowtimeVisibleToCustomer(slot, Date.now())) {
+      setErrorMessage("Suất chiếu này đã quá giờ. Vui lòng chọn suất chiếu khác.");
+      return;
+    }
+
     navigate(`/booking/seats/${slot.showtimeId}`, {
       state: {
         movie: movieInfo,
