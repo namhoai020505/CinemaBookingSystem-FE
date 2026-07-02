@@ -73,37 +73,31 @@ for (let i = TIMELINE_START_HOUR; i <= TIMELINE_END_HOUR; i++) {
 // 💡 HELPERS
 // =================================================================
 
-/** Parse giờ và phút từ chuỗi ISO mà không bị lệch múi giờ (timezone conversion) */
-const parseTimeFromISO = (isoString: string): { hours: number; minutes: number } => {
-  if (!isoString) return { hours: 0, minutes: 0 };
-  const timePart = isoString.includes("T") ? isoString.split("T")[1] : isoString.split(" ")[1];
-  if (!timePart) return { hours: 0, minutes: 0 };
-  const [hStr, mStr] = timePart.split(":");
-  return {
-    hours: parseInt(hStr, 10) || 0,
-    minutes: parseInt(mStr, 10) || 0,
-  };
-};
-
 /** Tính số phút tính từ 08:00 dựa trên ISO string */
+// Quy đổi startTime ISO thành vị trí phút trên timeline bắt đầu từ 08:00.
 const isoToMinutesFrom8AM = (isoString: string): number => {
-  const { hours, minutes } = parseTimeFromISO(isoString);
+  const date = new Date(isoString);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
   return (hours - TIMELINE_START_HOUR) * 60 + minutes;
 };
 
 /** Lấy "HH:mm" ngắn từ ISO string */
+// Rút gọn ISO datetime thành HH:mm để hiển thị trong slot và thông báo lỗi.
 const getShortTimeFromISO = (isoString: string): string => {
   if (!isoString) return "";
-  const { hours, minutes } = parseTimeFromISO(isoString);
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  const date = new Date(isoString);
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 };
 
 /** Tính số phút chênh lệch giữa 2 ISO datetime */
+// Tính thời lượng suất chiếu theo phút từ start/end ISO.
 const diffMinutes = (startISO: string, endISO: string): number => {
   return Math.round((new Date(endISO).getTime() - new Date(startISO).getTime()) / 60000);
 };
 
 /** Format ngày "yyyy-MM-dd" */
+// Format Date thành yyyy-MM-dd để dùng cho input type="date" và filter theo ngày.
 const formatDateToYMD = (date: Date): string => {
   const y = date.getFullYear();
   const m = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -112,6 +106,7 @@ const formatDateToYMD = (date: Date): string => {
 };
 
 /** Tạo ISO datetime từ ngày đã chọn + số phút tính từ 08:00 */
+// Quy đổi vị trí kéo-thả trên timeline thành startTime ISO gửi về backend.
 const minutesFrom8AMToISO = (selectedDate: string, minutesFrom8AM: number): string => {
   const totalMinutes = TIMELINE_START_HOUR * 60 + minutesFrom8AM;
   const hours = Math.floor(totalMinutes / 60);
@@ -122,6 +117,7 @@ const minutesFrom8AMToISO = (selectedDate: string, minutesFrom8AM: number): stri
 /** Map màu sắc cho phim dựa trên movieId → stable color */
 const movieColorMap = new Map<string, string>();
 let colorIndex = 0;
+// Gán màu ổn định cho từng phim để cùng một phim luôn có màu giống nhau trên timeline.
 const getMovieColor = (movieId: string): string => {
   if (!movieColorMap.has(movieId)) {
     movieColorMap.set(movieId, MOVIE_COLORS[colorIndex % MOVIE_COLORS.length]);
@@ -133,6 +129,7 @@ const getMovieColor = (movieId: string): string => {
 // =================================================================
 // 💡 COMPONENT CHÍNH
 // =================================================================
+// Trang xếp lịch chiếu bằng thao tác kéo phim vào timeline phòng chiếu.
 export default function ManageShowtime() {
   // ---------- State: Data từ API ----------
   const [cinemas, setCinemas] = useState<CinemaResponse[]>([]);
@@ -143,9 +140,6 @@ export default function ManageShowtime() {
   // ---------- State: Bộ lọc ----------
   const [selectedCinemaId, setSelectedCinemaId] = useState("");
   const [selectedDate, setSelectedDate] = useState(formatDateToYMD(new Date()));
-
-  // ---------- Computed: ngày quá khứ (để cảnh báo và khóa chỉnh sửa) ----------
-  const isPastDate = selectedDate < formatDateToYMD(new Date());
 
   // ---------- State: UI ----------
   const [schedule, setSchedule] = useState<Schedule>({});
@@ -199,11 +193,13 @@ export default function ManageShowtime() {
   }, [isDirty]);
 
   // ---------- Computed: Phòng chiếu lọc theo rạp đã chọn ----------
+  // Chỉ hiển thị phòng đang ACTIVE thuộc rạp được chọn.
   const filteredRooms = rooms.filter(
     (r) => r.cinemaId === selectedCinemaId && r.roomStatus === "ACTIVE"
   );
 
   // ---------- Computed: Danh sách phim chờ (sidebar) ----------
+  // Chuẩn hóa danh sách phim sang dạng card ở sidebar để kéo vào timeline.
   const unscheduledMovies: UnscheduledMovie[] = movies.map((m) => ({
     movieId: m.id,
     movieNameVn: m.movieNameVn,
@@ -216,6 +212,7 @@ export default function ManageShowtime() {
   // 💡 FETCH DATA TỪ API
   // =================================================================
 
+  // Tải danh sách rạp active và tự chọn rạp đầu tiên nếu chưa có filter.
   const fetchCinemas = useCallback(async () => {
     try {
       const data = await showtimeService.getCinemas();
@@ -229,6 +226,7 @@ export default function ManageShowtime() {
     }
   }, [selectedCinemaId]);
 
+  // Tải danh sách phòng để lọc theo rạp và render từng dòng timeline.
   const fetchRooms = useCallback(async () => {
     try {
       const data = await showtimeService.getRooms();
@@ -238,6 +236,7 @@ export default function ManageShowtime() {
     }
   }, []);
 
+  // Tải danh sách phim có thể xếp lịch.
   const fetchMovies = useCallback(async () => {
     try {
       const data = await showtimeService.getMoviesForScheduling();
@@ -247,6 +246,7 @@ export default function ManageShowtime() {
     }
   }, []);
 
+  // Tải toàn bộ suất chiếu rồi filter client-side theo rạp/ngày.
   const fetchShowtimes = useCallback(async () => {
     try {
       const data = await showtimeService.getShowtimes();
@@ -257,6 +257,7 @@ export default function ManageShowtime() {
   }, []);
 
   /** Fetch toàn bộ data ban đầu */
+  // Load dữ liệu nền khi mở trang để timeline có đủ rạp, phòng, phim và lịch chiếu.
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -275,9 +276,8 @@ export default function ManageShowtime() {
   // =================================================================
   // 💡 BUILD SCHEDULE TỪ SHOWTIMES + FILTERS
   // =================================================================
+  // Build lại schedule mỗi khi danh sách suất chiếu hoặc bộ lọc thay đổi.
   useEffect(() => {
-    if (isDirty) return;
-
     if (filteredRooms.length === 0) {
       setSchedule({});
       return;
@@ -297,8 +297,9 @@ export default function ManageShowtime() {
       // Chỉ hiển thị OPEN/CLOSED (bỏ CANCELLED)
       if (st.status === "CANCELLED") continue;
 
-      // Lọc theo ngày đã chọn (tách chuỗi trực tiếp để tránh lệch múi giờ)
-      const stDateStr = st.startTime.split("T")[0];
+      // Lọc theo ngày đã chọn
+      const stDate = new Date(st.startTime);
+      const stDateStr = formatDateToYMD(stDate);
       if (stDateStr !== selectedDate) continue;
 
       // Chỉ thêm nếu phòng thuộc cinema đang chọn
@@ -324,24 +325,27 @@ export default function ManageShowtime() {
 
     setSchedule(newSchedule);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allShowtimes, selectedCinemaId, selectedDate, filteredRooms.length, isDirty]);
+  }, [allShowtimes, selectedCinemaId, selectedDate, filteredRooms.length]);
 
   // =================================================================
   // 💡 DRAG & DROP HANDLERS
   // =================================================================
 
+  // Bắt đầu kéo một phim chưa xếp lịch từ sidebar.
   const handleDragStartFromSidebar = (movie: UnscheduledMovie) => {
     isToastActive.current = false;
     setDraggingMovie({ ...movie, isNew: true });
   };
 
+  // Bắt đầu kéo một slot đã có để di chuyển sang thời gian/phòng khác.
   const handleDragStartFromTimeline = (roomShowtime: ShowtimeSlot, roomId: string) => {
     isToastActive.current = false;
     setDraggingMovie({ ...roomShowtime, isNew: false, originalRoomId: roomId });
   };
 
-  // --- HÀM THẢ CHUỘT CHUẨN HÓA LOCAL ---
-  const handleDropOnRow = (e: React.DragEvent<HTMLDivElement>, roomId: string) => {
+  // --- HÀM THẢ CHUỘT CHUẨN HÓA + GỌI API ---
+  // Thả phim/slot vào một dòng phòng, tính giờ bắt đầu, check overlap rồi gọi API lưu.
+  const handleDropOnRow = async (e: React.DragEvent<HTMLDivElement>, roomId: string) => {
     e.preventDefault();
     if (!draggingMovie) return;
 
@@ -395,51 +399,62 @@ export default function ManageShowtime() {
     }
 
     const startTimeISO = minutesFrom8AMToISO(selectedDate, startMinutes);
-    const endTimeISO = minutesFrom8AMToISO(selectedDate, endMinutes);
 
-    setSchedule((prev) => {
-      const next = { ...prev };
-      if (!next[roomId]) next[roomId] = [];
-
+    // ---------- GỌI API ----------
+    try {
       if (draggingMovie.isNew === true) {
-        // Tạo slot tạm mới
-        const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        const newSlot: ShowtimeSlot = {
-          id: tempId,
+        // Tạo showtime mới
+        await showtimeService.createShowtime({
           movieId: draggingMovie.movieId,
           roomId: roomId,
-          movieNameVn: draggingMovie.movieNameVn,
-          startMinutesFrom8AM: startMinutes,
-          duration: durationMinutes,
-          color: draggingMovie.color,
           startTime: startTimeISO,
-          endTime: endTimeISO,
           basePrice: DEFAULT_BASE_PRICE,
           status: "OPEN",
-        };
-        next[roomId] = [...next[roomId], newSlot];
+        });
+        toast.success("✅ Đã tạo suất chiếu mới thành công!");
       } else {
-        // Di chuyển slot hiện tại
-        const origRoomId = draggingMovie.originalRoomId;
-        if (next[origRoomId]) {
-          next[origRoomId] = next[origRoomId].filter((s) => s.id !== draggingMovie.id);
-        }
-        const updatedSlot: ShowtimeSlot = {
-          ...draggingMovie,
+        // Di chuyển showtime (update)
+        await showtimeService.updateShowtime(draggingMovie.id, {
+          movieId: draggingMovie.movieId,
           roomId: roomId,
-          startMinutesFrom8AM: startMinutes,
           startTime: startTimeISO,
-          endTime: endTimeISO,
-        };
-        next[roomId] = [...next[roomId], updatedSlot];
+          basePrice: draggingMovie.basePrice,
+          status: draggingMovie.status,
+        });
+        toast.success("✅ Đã cập nhật vị trí suất chiếu!");
       }
-      return next;
-    });
 
-    setIsDirty(true);
+      // Refetch để đồng bộ data
+      await fetchShowtimes();
+    } catch (err: unknown) {
+      console.error("Lỗi khi lưu showtime:", err);
+
+      // Trích xuất thông báo lỗi từ BE
+      let errorMsg = "Lưu suất chiếu thất bại.";
+      if (err && typeof err === "object" && "response" in err) {
+        const axiosErr = err as { response?: { data?: { message?: string; errorCode?: string } } };
+        const beMessage = axiosErr.response?.data?.message;
+        const beCode = axiosErr.response?.data?.errorCode;
+        if (beMessage) errorMsg = beMessage;
+        if (beCode === "SHOWTIME_OVERLAP") {
+          errorMsg = "❌ Suất chiếu bị trùng thời gian với suất chiếu khác trong cùng phòng!";
+        } else if (beCode === "MOVIE_NOT_SELLABLE") {
+          errorMsg = "❌ Phim này chưa sẵn sàng để xếp lịch chiếu.";
+        } else if (beCode === "ROOM_NOT_AVAILABLE") {
+          errorMsg = "❌ Phòng chiếu hoặc rạp không hoạt động.";
+        } else if (beCode === "ROOM_HAS_NO_SEATS") {
+          errorMsg = "❌ Phòng chiếu chưa có ghế nào được kích hoạt.";
+        } else if (beCode === "RESOURCE_HAS_BOOKINGS") {
+          errorMsg = "❌ Suất chiếu đã có người đặt vé, không thể di chuyển.";
+        }
+      }
+      toast.error(errorMsg);
+    }
+
     setDraggingMovie(null);
   };
 
+  // Mở modal xác nhận xóa cho một suất chiếu cụ thể.
   const handleDeleteShowtime = (roomId: string, slotId: string) => {
     const slot = schedule[roomId]?.find((s) => s.id === slotId);
     if (!slot) return;
@@ -459,9 +474,10 @@ export default function ManageShowtime() {
     });
   };
 
-  const confirmDeleteShowtime = () => {
+  // Gọi API xóa suất chiếu sau khi admin xác nhận trong modal.
+  const confirmDeleteShowtime = async () => {
     if (!deleteConfirm) return;
-    const { roomId, slotId } = deleteConfirm;
+    const { slotId } = deleteConfirm;
     setDeleteConfirm(null);
 
     setSchedule((prev) => {
@@ -540,59 +556,9 @@ export default function ManageShowtime() {
     setActionLoading(true);
 
     try {
-      // 1. Thực hiện xóa các suất chiếu nằm trong deletedShowtimeIds
-      for (const id of Array.from(deletedShowtimeIds)) {
-        await showtimeService.deleteShowtime(id);
-      }
-
-      // 2. Thực hiện tạo mới và cập nhật
-      let createdCount = 0;
-      let updatedCount = 0;
-
-      // Duyệt qua tất cả các slot trong schedule hiện tại
-      for (const roomId in schedule) {
-        const slots = schedule[roomId] || [];
-        for (const slot of slots) {
-          if (slot.id.startsWith("temp_")) {
-            // Tạo mới
-            await showtimeService.createShowtime({
-              movieId: slot.movieId,
-              roomId: slot.roomId,
-              startTime: slot.startTime,
-              basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
-              status: slot.status,
-            });
-            createdCount++;
-          } else {
-            // Kiểm tra xem có thay đổi so với dữ liệu gốc không
-            const original = allShowtimes.find((st) => st.showtimeId === slot.id);
-            if (original) {
-              const hasRoomChanged = original.roomId !== slot.roomId;
-              const hasTimeChanged = original.startTime !== slot.startTime;
-
-              if (hasRoomChanged || hasTimeChanged) {
-                // Có thay đổi thực sự -> Cập nhật
-                await showtimeService.updateShowtime(slot.id, {
-                  movieId: slot.movieId,
-                  roomId: slot.roomId,
-                  startTime: slot.startTime,
-                  basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
-                  status: slot.status,
-                });
-                updatedCount++;
-              }
-            }
-          }
-        }
-      }
-
-      toast.success(
-        `💾 Đã lưu lịch chiếu thành công! (Tạo: ${createdCount}, Cập nhật: ${updatedCount}, Xóa: ${deletedShowtimeIds.size})`
-      );
-
-      setIsDirty(false);
-      setDeletedShowtimeIds(new Set());
-      await fetchShowtimes(); // Reload database
+      await showtimeService.deleteShowtime(slotId);
+      toast.success("✅ Đã xóa suất chiếu thành công!");
+      await fetchShowtimes();
     } catch (err: unknown) {
 
       // Map BE errorCode → thông báo tiếng Việt rõ ràng
@@ -601,19 +567,16 @@ export default function ManageShowtime() {
       let errorMsg = TEXT.SHOWTIME.ERR_GENERIC_SAVE;
       if (err && typeof err === "object" && "response" in err) {
         const axiosErr = err as { response?: { data?: { message?: string; errorCode?: string } } };
-        const beMessage = axiosErr.response?.data?.message;
-        const beCode = axiosErr.response?.data?.errorCode ?? "";
-        const mapped = ERROR_MESSAGES[beCode];
-        errorMsg = mapped ?? beMessage ?? errorMsg;
+        const beCode = axiosErr.response?.data?.errorCode;
+        if (beCode === "RESOURCE_HAS_BOOKINGS") {
+          errorMsg = "❌ Không thể xóa suất chiếu đã có người đặt vé.";
+        } else if (beCode === "RESOURCE_HAS_REFUNDS") {
+          errorMsg = "❌ Không thể xóa suất chiếu đã có lịch sử hoàn tiền.";
+        } else if (axiosErr.response?.data?.message) {
+          errorMsg = axiosErr.response.data.message;
+        }
       }
-      toast.error(errorMsg, { autoClose: 7000 });
-
-      // Nạp lại dữ liệu cũ để tránh hiển thị sai lệch
-      setIsDirty(false);
-      setDeletedShowtimeIds(new Set());
-      await fetchShowtimes();
-    } finally {
-      setActionLoading(false);
+      toast.error(errorMsg);
     }
   };
 
@@ -621,6 +584,7 @@ export default function ManageShowtime() {
   // 💡 EVENT HANDLERS CHO BỘ LỌC
   // =================================================================
 
+  // Đổi rạp đang xem, schedule sẽ tự build lại theo selectedCinemaId.
   const handleCinemaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nextVal = e.target.value;
     if (isDirty) {
@@ -632,6 +596,7 @@ export default function ManageShowtime() {
     setDeletedShowtimeIds(new Set());
   };
 
+  // Đổi ngày đang xem lịch chiếu.
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const nextVal = e.target.value;
     if (isDirty) {
@@ -804,15 +769,6 @@ export default function ManageShowtime() {
                       onDragOver={(e) => { if (!isPastDate) e.preventDefault(); }}
                       onDrop={(e) => { if (!isPastDate) void handleDropOnRow(e, room.roomId); }}
                     >
-                      {/* Lớp phủ khóa khi xem ngày quá khứ */}
-                      {isPastDate && (
-                        <div className="absolute inset-0 z-10 pointer-events-none bg-gray-900/20 flex items-center justify-center">
-                          <span className="text-[10px] text-gray-600 font-semibold tracking-widest uppercase select-none opacity-60">
-                            🔒 Chỉ xem
-                          </span>
-                        </div>
-                      )}
-
 
                       {/* Vạch kẻ dọc chia khung giờ mờ làm nền */}
                       {Array.from({ length: TOTAL_HOURS }).map((_, i) => (
@@ -848,15 +804,12 @@ export default function ManageShowtime() {
                                 <div className="text-xs font-bold truncate text-white max-w-[82%]">
                                   {slot.movieNameVn}
                                 </div>
-                                {/* Ẩn nút xóa khi xem ngày quá khứ */}
-                                {!isPastDate && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); void handleDeleteShowtime(room.roomId, slot.id); }}
-                                    className="text-white/60 hover:text-white bg-black/40 hover:bg-red-600 w-4 h-4 rounded-full flex items-center justify-center text-[10px] transition-all shrink-0 z-50 shadow-md"
-                                  >
-                                    &times;
-                                  </button>
-                                )}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); void handleDeleteShowtime(room.roomId, slot.id); }}
+                                  className="text-white/60 hover:text-white bg-black/40 hover:bg-red-600 w-4 h-4 rounded-full flex items-center justify-center text-[10px] transition-all shrink-0 z-50 shadow-md"
+                                >
+                                  &times;
+                                </button>
                               </div>
                               <div className="text-[9px] text-white/90 font-medium tracking-wide">
                                 {startShort && endShort ? `🕒 ${startShort} - ${endShort}` : "N/A"}

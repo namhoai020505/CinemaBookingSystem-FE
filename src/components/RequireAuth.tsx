@@ -15,6 +15,7 @@ type RequireAuthProps = {
   verifyAdmin?: boolean;
 };
 
+// Guard route: kiểm tra token, role trong JWT và tùy chọn xác minh admin với backend.
 const RequireAuth = ({ allowedRoles = [], verifyAdmin = false }: RequireAuthProps) => {
   const [authState, setAuthState] = useState<AuthCheckState>('checking');
 
@@ -22,6 +23,7 @@ const RequireAuth = ({ allowedRoles = [], verifyAdmin = false }: RequireAuthProp
     let isMounted = true;
     const token = getAccessToken();
 
+    // Set state an toàn để tránh cập nhật state sau khi component unmount.
     const setSafeAuthState = (nextState: AuthCheckState) => {
       if (isMounted) {
         setAuthState(nextState);
@@ -39,6 +41,7 @@ const RequireAuth = ({ allowedRoles = [], verifyAdmin = false }: RequireAuthProp
 
     const normalizedRole = normalizeRole(getRoleFromAccessToken(token));
     const normalizedAllowedRoles = allowedRoles.map((role) => normalizeRole(role));
+    // Chỉ cho qua nếu JWT có role nằm trong danh sách allowedRoles.
     const hasAllowedRole =
       normalizedAllowedRoles.length === 0 ||
       normalizedAllowedRoles.includes(normalizedRole);
@@ -59,6 +62,7 @@ const RequireAuth = ({ allowedRoles = [], verifyAdmin = false }: RequireAuthProp
       };
     }
 
+    // Với route admin, gọi backend để tránh user tự sửa localStorage role.
     verifyAdminSession()
       .then(() => setSafeAuthState('allowed'))
       .catch((error: unknown) => {

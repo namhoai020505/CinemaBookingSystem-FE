@@ -1,10 +1,6 @@
 import axiosInstance from '../lib/api';
 
-// ============================================================
-// Types khớp chuẩn Backend Contracts
-// ============================================================
-
-/** Khớp CinemaSystem.Contracts.Showtimes.ShowtimeResponse */
+// Kiểu dữ liệu khớp CinemaSystem.Contracts.Showtimes.ShowtimeResponse.
 export interface ShowtimeResponse {
   showtimeId: string;
   movieId: string;
@@ -13,32 +9,32 @@ export interface ShowtimeResponse {
   roomName: string;
   cinemaId: string;
   cinemaName: string;
-  startTime: string;   // ISO 8601
-  endTime: string;      // ISO 8601
+  startTime: string;
+  endTime: string;
   basePrice: number;
-  status: string;       // OPEN | CLOSED | CANCELLED | COMPLETED
+  status: string;
   showtimeSeatCount: number;
 }
 
-/** Khớp CinemaSystem.Contracts.Showtimes.CreateShowtimeRequest */
+// Payload tạo suất chiếu mới từ trang admin.
 export interface CreateShowtimePayload {
   movieId: string;
   roomId: string;
-  startTime: string;    // ISO 8601
+  startTime: string;
   basePrice: number;
-  status?: string;      // default "OPEN"
+  status?: string;
 }
 
-/** Khớp CinemaSystem.Contracts.Showtimes.UpdateShowtimeRequest */
+// Payload cập nhật suất chiếu hiện có.
 export interface UpdateShowtimePayload {
   movieId: string;
   roomId: string;
-  startTime: string;    // ISO 8601
+  startTime: string;
   basePrice: number;
-  status?: string;      // default "OPEN"
+  status?: string;
 }
 
-/** Khớp CinemaSystem.Contracts.Cinemas.CinemaResponse */
+// Kiểu dữ liệu rạp dùng để lọc phòng khi xếp lịch chiếu.
 export interface CinemaResponse {
   cinemaId: string;
   cinemaName: string;
@@ -48,7 +44,7 @@ export interface CinemaResponse {
   cinemaStatus: string;
 }
 
-/** Khớp CinemaSystem.Contracts.Rooms.RoomResponse */
+// Kiểu dữ liệu phòng chiếu dùng trong màn kéo thả lịch chiếu.
 export interface RoomResponse {
   roomId: string;
   cinemaId: string;
@@ -59,11 +55,11 @@ export interface RoomResponse {
   seatCount: number;
 }
 
-/** Khớp CinemaSystem.Contracts.Movies.MovieResponse */
+// Kiểu dữ liệu phim rút gọn dùng để chọn phim khi tạo suất chiếu.
 export interface MovieResponse {
   id: string;
   movieNameVn: string;
-  genres?: string[];
+  genre?: string;
   duration: number;
   imagePoster?: string;
   ageRating?: string;
@@ -71,10 +67,7 @@ export interface MovieResponse {
   movieStatus?: string;
 }
 
-// ============================================================
-// Wrapper giải nén ApiResponse<T> chuẩn BE
-// (api interceptor đã trả response.data nên ta nhận ApiResponse)
-// ============================================================
+// Wrapper ApiResponse chuẩn backend; interceptor đã unwrap response.data một lớp.
 interface ApiEnvelope<T> {
   success: boolean;
   message: string;
@@ -82,59 +75,44 @@ interface ApiEnvelope<T> {
   errorCode?: string;
 }
 
-/** Kớp cấu trúc PagedList<T> từ BE */
-interface PagedListEnvelope<T> {
-  items: T[];
-  pageIndex: number;
-  pageSize: number;
-  totalCount: number;
-}
-
-// ============================================================
-// Service methods
-// ============================================================
+// Gom API quản lý lịch chiếu và dữ liệu phụ trợ cho màn ManageShowtime.
 export const showtimeService = {
-
-  // ---------- Showtimes ----------
-
-  /** GET /api/showtimes – lấy toàn bộ showtimes */
+  // GET /api/showtimes: lấy toàn bộ suất chiếu.
   getShowtimes: async (): Promise<ShowtimeResponse[]> => {
     const envelope = await axiosInstance.get('/api/showtimes') as unknown as ApiEnvelope<ShowtimeResponse[]>;
     return envelope?.data ?? [];
   },
 
-  /** POST /api/showtimes – tạo showtime mới */
+  // POST /api/showtimes: tạo suất chiếu mới.
   createShowtime: async (payload: CreateShowtimePayload): Promise<ShowtimeResponse> => {
     const envelope = await axiosInstance.post('/api/showtimes', payload) as unknown as ApiEnvelope<ShowtimeResponse>;
     return envelope.data;
   },
 
-  /** PUT /api/showtimes/{id} – cập nhật showtime */
+  // PUT /api/showtimes/{id}: cập nhật suất chiếu.
   updateShowtime: async (showtimeId: string, payload: UpdateShowtimePayload): Promise<ShowtimeResponse> => {
     const envelope = await axiosInstance.put(`/api/showtimes/${showtimeId}`, payload) as unknown as ApiEnvelope<ShowtimeResponse>;
     return envelope.data;
   },
 
-  /** DELETE /api/showtimes/{id} – xóa showtime */
+  // DELETE /api/showtimes/{id}: xóa suất chiếu.
   deleteShowtime: async (showtimeId: string): Promise<void> => {
     await axiosInstance.delete(`/api/showtimes/${showtimeId}`);
   },
 
-  // ---------- Helpers (Cinema, Room, Movie) ----------
-
-  /** GET /api/cinemas */
+  // GET /api/cinemas: lấy danh sách rạp để admin chọn rạp.
   getCinemas: async (): Promise<CinemaResponse[]> => {
     const envelope = await axiosInstance.get('/api/cinemas') as unknown as ApiEnvelope<CinemaResponse[]>;
     return envelope?.data ?? [];
   },
 
-  /** GET /api/rooms/rooms */
+  // GET /api/rooms/rooms: lấy danh sách phòng để xếp suất chiếu.
   getRooms: async (): Promise<RoomResponse[]> => {
     const envelope = await axiosInstance.get('/api/rooms/rooms') as unknown as ApiEnvelope<RoomResponse[]>;
     return envelope?.data ?? [];
   },
 
-  /** GET /api/movies – BE trả về PagedList<MovieResponse> */
+  // GET /api/movies?status=NOW_SHOWING: lấy phim đang chiếu để tạo lịch.
   getMoviesForScheduling: async (): Promise<MovieResponse[]> => {
     const envelope = await axiosInstance.get('/api/movies', {
       params: { pageSize: 200 }  // Lấy đủ phim, không bị cắt trang

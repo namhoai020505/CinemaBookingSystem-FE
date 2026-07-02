@@ -8,6 +8,7 @@ type ParsedApiError = {
   errorCode?: string;
 };
 
+// Map mã lỗi backend sang thông báo dễ hiểu cho admin khi mời staff.
 const staffErrorMessages: Record<string, string> = {
   DUPLICATE_EMAIL: TEXT.STAFF.ERR_DUPLICATE_EMAIL,
   CINEMA_NOT_FOUND: TEXT.STAFF.ERR_CINEMA_NOT_FOUND,
@@ -16,9 +17,11 @@ const staffErrorMessages: Record<string, string> = {
   VALIDATION_ERROR: TEXT.STAFF.ERR_VALIDATION,
 };
 
+// Type guard giúp đọc object lỗi từ Axios mà vẫn giữ type-safe.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
+// Chuẩn hóa lỗi từ API create staff thành message để hiển thị và toast.
 const parseApiError = (error: unknown): ParsedApiError => {
   if (!isRecord(error)) {
     return { message: TEXT.STAFF.ERR_UNKNOWN_OBJ };
@@ -48,6 +51,7 @@ const parseApiError = (error: unknown): ParsedApiError => {
   return { message: TEXT.STAFF.ERR_UNKNOWN };
 };
 
+// Trang admin mời user trở thành staff qua email.
 export default function ManageStaff() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
@@ -55,10 +59,12 @@ export default function ManageStaff() {
   const [error, setError] = useState('');
   const [invitation, setInvitation] = useState<StaffInvitationData | null>(null);
 
+  // Link preview để admin có thể kiểm tra trang staff tạo mật khẩu sau khi gửi lời mời.
   const staffSetPasswordPath = invitation?.email
     ? `/staff/set-password?email=${encodeURIComponent(invitation.email)}`
     : '/staff/set-password';
 
+  // Gửi email được nhập lên backend để tạo tài khoản staff và gửi invitation OTP.
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
@@ -170,12 +176,7 @@ export default function ManageStaff() {
                 <p className="mb-2 text-xs font-semibold uppercase text-gray-400">
                   {TEXT.STAFF.STATUS_LINK_LABEL}
                 </p>
-                <a
-                  href={staffSetPasswordPath}
-                  className="break-all text-sm font-semibold text-[#FFD166] transition hover:text-[#FFEBA4]"
-                >
-                  {staffSetPasswordPath}
-                </a>
+                <code className="break-all text-sm text-[#FFD166]">{staffSetPasswordPath}</code>
               </div>
             </div>
           ) : (

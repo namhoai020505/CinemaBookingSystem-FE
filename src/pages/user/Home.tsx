@@ -13,7 +13,6 @@ import {
   getAccessToken,
   isAccessTokenExpired,
 } from "../../lib/auth";
-import { getMediaUrl } from "../../lib/media";
 import { movieService } from "../../services/movieService";
 
 type HeroSlide = {
@@ -27,7 +26,6 @@ type Movie = {
   title: string;
   genre: string;
   duration: string;
-  director?: string;
   posterUrl: string;
   ageRating: string;
   highlight?: string;
@@ -51,17 +49,20 @@ const FIRST_REAL_SLIDE_INDEX = 1;
 const LAST_REAL_SLIDE_INDEX = mockHeroSlides.length;
 const CLONED_FIRST_SLIDE_INDEX = LAST_REAL_SLIDE_INDEX + 1;
 
+// Quy đổi index có slide clone về index thật để active dot luôn đúng.
 const getRealSlideIndex = (index: number) =>
   ((((index - FIRST_REAL_SLIDE_INDEX) % LAST_REAL_SLIDE_INDEX) +
     LAST_REAL_SLIDE_INDEX) %
     LAST_REAL_SLIDE_INDEX) +
   FIRST_REAL_SLIDE_INDEX;
 
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || "http://localhost:5070";
 
-
+// Type guard dùng khi đọc dữ liệu phim có shape chưa cố định từ backend.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
+// Lấy chuỗi đầu tiên tồn tại trong danh sách key backend có thể trả về.
 const getStringValue = (item: MovieApiItem, keys: string[]) => {
   for (const key of keys) {
     const value = item[key];
@@ -77,6 +78,7 @@ const getStringValue = (item: MovieApiItem, keys: string[]) => {
   return "";
 };
 
+// Chuẩn hóa thể loại phim dù backend trả string, object hoặc mảng.
 const getGenreValue = (item: MovieApiItem) => {
   const genre = item.genre ?? item.genres ?? item.genreName ?? item.categoryName;
 
@@ -104,9 +106,25 @@ const getGenreValue = (item: MovieApiItem) => {
   return "Đang cập nhật";
 };
 
-// resolvePosterUrl: đã được thay bằng getMediaUrl từ lib/media
-// để đảm bảo tất cả các trang dùng cùng logic prefix URL của backend.
+// Chuyển đường dẫn poster tương đối từ backend thành URL đầy đủ cho trình duyệt.
+const resolvePosterUrl = (value: string) => {
+  const posterUrl = value.trim();
+  if (!posterUrl) {
+    return "";
+  }
 
+  if (/^(https?:|data:|blob:)/i.test(posterUrl)) {
+    return posterUrl;
+  }
+
+  if (posterUrl.startsWith("/")) {
+    return `${API_ORIGIN}${posterUrl}`;
+  }
+
+  return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
+};
+
+// Bóc danh sách phim từ nhiều kiểu response khác nhau của API.
 const extractMovieList = (response: unknown): MovieApiItem[] => {
   if (Array.isArray(response)) {
     return response.filter(isRecord);
@@ -134,6 +152,7 @@ const extractMovieList = (response: unknown): MovieApiItem[] => {
   return [];
 };
 
+// Map dữ liệu phim backend sang model card mà trang chủ đang render.
 const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
   const movieId = getStringValue(movie, ["movieId", "id", "movieID", "MovieId"]);
   const title =
@@ -144,7 +163,7 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     "durationMinutes",
     "runningTime",
   ]);
-  const posterUrl = getMediaUrl(
+  const posterUrl = resolvePosterUrl(
     getStringValue(movie, ["imagePoster", "posterUrl", "imageUrl", "poster"]),
   );
   const isHot = movie.isHot === true || movie.highlight === true;
@@ -154,13 +173,13 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     title,
     genre: getGenreValue(movie),
     duration: durationValue ? `${durationValue} phút` : "Đang cập nhật",
-    director: getStringValue(movie, ["director", "Director"]) || "Đang cập nhật",
     posterUrl,
     ageRating: getStringValue(movie, ["ageRating", "rating", "rated"]) || "P",
     highlight: isHot ? "HOT" : undefined,
   };
 };
 
+// Trang chủ: hero slider, danh sách phim đang chiếu và modal chọn lịch chiếu.
 export default function Home() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -172,6 +191,7 @@ export default function Home() {
   const [selectedShowtimeMovie, setSelectedShowtimeMovie] =
     useState<Movie | null>(null);
 
+  // Tải danh sách phim đang chiếu từ backend để thay thế dữ liệu mock.
   useEffect(() => {
     const fetchMovies = async () => {
       try {
@@ -192,7 +212,7 @@ export default function Home() {
     fetchMovies();
   }, []);
 
-  // Save scroll position when user scrolls the Home page
+  // Lưu vị trí scroll để khi quay lại từ flow đặt vé vẫn đứng gần card cũ.
   useEffect(() => {
     const handleScroll = () => {
       sessionStorage.setItem("home-scroll-y", String(window.scrollY));
@@ -203,7 +223,7 @@ export default function Home() {
     };
   }, []);
 
-  // Restore scroll position after movie cards have been loaded and rendered
+  // Khôi phục vị trí scroll sau khi danh sách phim đã render xong.
   useEffect(() => {
     if (!loadingMovies) {
       const savedScrollY = sessionStorage.getItem("home-scroll-y");
@@ -219,6 +239,7 @@ export default function Home() {
     }
   }, [loadingMovies]);
 
+  // Thêm slide clone đầu/cuối để slider có hiệu ứng loop mượt.
   const carouselSlides = useMemo(() => {
     const lastSlide = mockHeroSlides[mockHeroSlides.length - 1];
     const firstSlide = mockHeroSlides[0];
@@ -232,6 +253,7 @@ export default function Home() {
       : slideIndex;
   const activeSlideIndex = getRealSlideIndex(slideIndex) - 1;
 
+  // Tự động chuyển slide theo chu kỳ.
   useEffect(() => {
     const timer = window.setInterval(() => {
       setSlideIndex((currentIndex) => getRealSlideIndex(currentIndex) + 1);
@@ -240,6 +262,7 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
 
+  // Nếu index vượt biên do auto-play/click nhanh, reset về slide thật hợp lệ.
   useEffect(() => {
     if (slideIndex >= 0 && slideIndex <= CLONED_FIRST_SLIDE_INDEX) {
       return;
@@ -253,6 +276,7 @@ export default function Home() {
     return () => window.clearTimeout(resetTimer);
   }, [slideIndex]);
 
+  // Fallback chống màn đen nếu transitionend không chạy khi đang ở slide clone.
   useEffect(() => {
     if (slideIndex !== 0 && slideIndex !== CLONED_FIRST_SLIDE_INDEX) {
       return;
@@ -268,6 +292,7 @@ export default function Home() {
     return () => window.clearTimeout(fallbackTimer);
   }, [slideIndex]);
 
+  // Bật lại transition ở frame kế tiếp sau khi nhảy ngầm về slide thật.
   useEffect(() => {
     if (withTransition) {
       return;
@@ -280,18 +305,22 @@ export default function Home() {
     return () => window.cancelAnimationFrame(frameId);
   }, [withTransition]);
 
+  // Điều hướng slider sang slide trước.
   const goToPreviousSlide = () => {
     setSlideIndex((currentIndex) => getRealSlideIndex(currentIndex) - 1);
   };
 
+  // Điều hướng slider sang slide kế tiếp.
   const goToNextSlide = () => {
     setSlideIndex((currentIndex) => getRealSlideIndex(currentIndex) + 1);
   };
 
+  // Chuyển tới slide cụ thể khi bấm dot.
   const goToSlide = (nextSlideIndex: number) => {
     setSlideIndex(nextSlideIndex + 1);
   };
 
+  // Chưa đăng nhập thì chuyển login; đã đăng nhập thì mở modal chọn suất chiếu.
   const handleBuyTicket = (movie: Movie) => {
     const accessToken = getAccessToken();
 
@@ -310,6 +339,7 @@ export default function Home() {
     setSelectedShowtimeMovie(movie);
   };
 
+  // Sau animation, nếu đang ở slide clone thì tắt transition và nhảy về slide thật.
   const handleSlideTransitionEnd = () => {
     if (slideIndex === CLONED_FIRST_SLIDE_INDEX) {
       setWithTransition(false);
@@ -469,9 +499,6 @@ export default function Home() {
                     {movie.title}
                   </h3>
                   <p className="mt-1 text-xs leading-5 text-white">
-                    Đạo diễn: <span className="text-white/80">{movie.director}</span>
-                  </p>
-                  <p className="text-xs leading-5 text-white">
                     Thể loại: <span className="text-white/80">{movie.genre}</span>
                   </p>
                   <p className="text-xs leading-5 text-white">

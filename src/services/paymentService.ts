@@ -18,7 +18,9 @@ export type CreatePaymentResponse = {
   expiresAt?: string | null;
 };
 
+// Gom API thanh toán online; hiện dùng SePay qua endpoint /api/payment.
 export const paymentService = {
+  // POST /api/payment: tạo giao dịch thanh toán QR cho booking pending.
   createPayment: async (payload: CreatePaymentPayload) => {
     const response = await axiosInstance.post('/api/payment', payload) as unknown as ApiResponse<CreatePaymentResponse>;
     return response;
