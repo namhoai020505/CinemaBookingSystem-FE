@@ -1,12 +1,10 @@
 @import "tailwindcss";
 
-/* Chặn tràn ngang toàn app, nhất là các trang booking có grid ghế rộng. */
 html, body {
   max-width: 100%;
   overflow-x: hidden;
 }
 
-/* Bảng màu light mode dùng chung cho các override phía dưới. */
 :root {
   --g2c-light-bg: #F8FAFC;
   --g2c-light-navbar: #E2E8F0;
@@ -18,20 +16,17 @@ html, body {
   --g2c-light-accent-bright: #FFE7A3;
 }
 
-/* Báo browser biết app đang ở light mode để form/native control render đúng màu. */
 html.light,
 body.g2c-light-mode {
   color-scheme: light;
 }
 
-/* Nền và màu chữ mặc định khi bật light mode. */
 body.g2c-light-mode,
 body.g2c-light-mode #root {
   background: var(--g2c-light-bg);
   color: var(--g2c-light-text);
 }
 
-/* Các nền tối cấp page được đổi sang nền sáng chính. */
 body.g2c-light-mode .bg-\[\#182437\],
 body.g2c-light-mode .bg-\[\#162338\],
 body.g2c-light-mode .bg-\[\#0A0A0C\],
@@ -40,7 +35,6 @@ body.g2c-light-mode .bg-gray-50 {
   color: var(--g2c-light-text) !important;
 }
 
-/* Các nền tối cấp navbar/panel được đổi sang màu xám xanh nhẹ. */
 body.g2c-light-mode .bg-\[\#0F172A\],
 body.g2c-light-mode .bg-\[\#1E293B\],
 body.g2c-light-mode .bg-\[\#1C2A3D\],
@@ -53,7 +47,6 @@ body.g2c-light-mode .bg-slate-900\/15 {
   color: var(--g2c-light-text) !important;
 }
 
-/* Các card/panel nội dung chuyển sang nền trắng để đọc rõ trên light mode. */
 body.g2c-light-mode .bg-\[\#111C44\],
 body.g2c-light-mode .bg-\[\#111C44\]\/80,
 body.g2c-light-mode .bg-\[\#101c34\],
@@ -68,7 +61,6 @@ body.g2c-light-mode .bg-white\/10 {
   color: var(--g2c-light-text) !important;
 }
 
-/* Border trong dark theme được làm nhạt lại cho light mode. */
 body.g2c-light-mode .border-white\/10,
 body.g2c-light-mode .border-white\/15,
 body.g2c-light-mode .border-white\/20,
@@ -78,7 +70,6 @@ body.g2c-light-mode .border-\[\#474747\] {
   border-color: var(--g2c-light-border) !important;
 }
 
-/* Những class text sáng của dark mode sẽ chuyển thành text tối khi bật light mode. */
 body.g2c-light-mode .text-white,
 body.g2c-light-mode .text-white\/90,
 body.g2c-light-mode .text-white\/80,
@@ -97,7 +88,6 @@ body.g2c-light-mode .text-gray-500 {
   color: var(--g2c-light-text) !important;
 }
 
-/* Hover text vẫn giữ tương phản tốt trên nền sáng. */
 body.g2c-light-mode .hover\:text-white:hover,
 body.g2c-light-mode .hover\:text-white\/90:hover,
 body.g2c-light-mode .hover\:text-white\/80:hover,
@@ -105,32 +95,27 @@ body.g2c-light-mode .hover\:text-white\/70:hover {
   color: var(--g2c-light-text) !important;
 }
 
-/* Nhóm chữ phụ trong light mode dùng màu muted dịu hơn text chính. */
 body.g2c-light-mode .text-slate-400,
 body.g2c-light-mode .text-slate-500,
 body.g2c-light-mode .text-slate-600 {
   color: var(--g2c-light-muted) !important;
 }
 
-/* Giữ các màu nhấn quan trọng như trạng thái thành công và vàng G2C. */
 body.g2c-light-mode .text-emerald-50 {
   color: #064E3B !important;
 }
 
-/* Màu chữ accent vàng dùng xuyên suốt brand G2C. */
 body.g2c-light-mode .text-\[\#FFD166\],
 body.g2c-light-mode .hover\:text-\[\#FFD166\]:hover {
   color: var(--g2c-light-accent) !important;
 }
 
-/* Button nền vàng trong light mode giữ cùng hệ màu với dark mode. */
 body.g2c-light-mode .bg-\[\#FFD166\],
 body.g2c-light-mode .hover\:bg-\[\#FFE7A3\]:hover {
   background-color: var(--g2c-light-accent) !important;
   background-image: none !important;
 }
 
-/* Gradient vàng của các CTA chính như Mua vé/Tôi đã thanh toán. */
 body.g2c-light-mode .bg-gradient-to-r.from-\[\#FFD166\],
 body.g2c-light-mode .bg-gradient-to-br.from-\[\#FFD166\] {
   background-color: var(--g2c-light-accent) !important;
@@ -138,19 +123,16 @@ body.g2c-light-mode .bg-gradient-to-br.from-\[\#FFD166\] {
   color: #000000 !important;
 }
 
-/* Border vàng mờ được chuyển sang màu mix phù hợp nền sáng. */
 body.g2c-light-mode .border-\[\#FFD166\]\/20,
 body.g2c-light-mode .border-\[\#FFD166\]\/30,
 body.g2c-light-mode .border-\[\#FFD166\]\/40 {
   border-color: color-mix(in srgb, var(--g2c-light-accent) 45%, white) !important;
 }
 
-/* Nền vàng mờ cho alert/notice trong light mode. */
 body.g2c-light-mode .bg-\[\#FFD166\]\/10 {
   background-color: color-mix(in srgb, var(--g2c-light-accent-bright) 18%, white) !important;
 }
 
-/* Card phim, aside và section được đồng bộ sang nền card light mode. */
 body.g2c-light-mode .movie-card,
 body.g2c-light-mode article.overflow-hidden,
 body.g2c-light-mode aside.rounded-lg,
@@ -161,7 +143,6 @@ body.g2c-light-mode section.rounded-lg {
   box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08) !important;
 }
 
-/* Form control trong light mode dùng nền trắng để dễ nhập liệu. */
 body.g2c-light-mode input,
 body.g2c-light-mode textarea,
 body.g2c-light-mode select {
@@ -170,7 +151,6 @@ body.g2c-light-mode select {
   color: var(--g2c-light-text) !important;
 }
 
-/* Các nút màu mạnh vẫn giữ chữ trắng để đảm bảo tương phản. */
 body.g2c-light-mode .bg-blue-600,
 body.g2c-light-mode .bg-\[\#1f6feb\],
 body.g2c-light-mode .bg-red-500,
@@ -184,33 +164,28 @@ body.g2c-light-mode .bg-gray-800 {
   color: #FFFFFF !important;
 }
 
-/* Bóng đổ light mode nhẹ hơn để không tạo cảm giác nặng. */
 body.g2c-light-mode .shadow-black\/20,
 body.g2c-light-mode .shadow-2xl,
 body.g2c-light-mode .shadow-xl {
   box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08) !important;
 }
 
-/* Topbar riêng của header dùng màu xám xanh theo yêu cầu light mode. */
 body.g2c-light-mode .g2c-topbar {
   background-color: #E2E8F0 !important;
   color: #1E293B !important;
 }
 
-/* Link/button trong topbar kế thừa màu chữ để tránh override rời rạc. */
 body.g2c-light-mode .g2c-topbar a,
 body.g2c-light-mode .g2c-topbar button {
   color: inherit;
 }
 
-/* Nút theme trong topbar vẫn nổi bật bằng vàng G2C. */
 body.g2c-light-mode .g2c-topbar button[aria-label] {
   background-color: #FFD166 !important;
   border-color: #FFD166 !important;
   color: #1E293B !important;
 }
 
-/* Ở dark mode, các class text tối ngoài CTA vàng/trắng được ép về trắng để không chìm nền. */
 body:not(.g2c-light-mode) .text-black:not(.bg-\[\#FFD166\]):not(.bg-gradient-to-r):not(.bg-gradient-to-br):not(.bg-white):not(.bg-amber-500):not(.bg-yellow-300),
 body:not(.g2c-light-mode) .text-\[\#0F172A\]:not(.bg-gradient-to-r):not(.bg-gradient-to-br),
 body:not(.g2c-light-mode) .text-\[\#111827\],

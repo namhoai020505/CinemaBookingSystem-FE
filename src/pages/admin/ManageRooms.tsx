@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { roomService } from '../../services/roomService';
@@ -41,7 +41,6 @@ const getStatusBadge = (status: string) => {
 };
 
 
-// Trang quản lý phòng chiếu: lọc theo rạp, thêm/sửa/xóa phòng và đi tới sơ đồ ghế.
 export default function ManageRooms() {
   const navigate = useNavigate();
 
@@ -50,8 +49,9 @@ export default function ManageRooms() {
   const [cinemas, setCinemas] = useState<CinemaResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter
+  // Filters
   const [filterCinemaId, setFilterCinemaId] = useState<string>('ALL');
+  const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -67,8 +67,7 @@ export default function ManageRooms() {
   // ──────────────────────────────────────────
   // Data fetching
   // ──────────────────────────────────────────
-  // Tải đồng thời danh sách phòng và rạp để render bảng và form chọn rạp.
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [roomsData, cinemasData] = await Promise.all([
@@ -82,15 +81,13 @@ export default function ManageRooms() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Lấy dữ liệu lần đầu khi admin mở trang phòng chiếu.
-  useEffect(() => {
-    void fetchData();
   }, []);
 
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
+
   // Esc to close modal
-  // Đóng modal bằng phím Escape để thao tác quản trị nhanh hơn.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isModalOpen) {
@@ -115,7 +112,6 @@ export default function ManageRooms() {
   // ──────────────────────────────────────────
   // Modal handlers
   // ──────────────────────────────────────────
-  // Chuẩn bị form trống khi admin muốn thêm phòng mới.
   const handleOpenAdd = () => {
     setEditingRoom(null);
     setFormCinemaId(cinemas[0]?.cinemaId || '');
@@ -125,7 +121,6 @@ export default function ManageRooms() {
     setIsModalOpen(true);
   };
 
-  // Đổ dữ liệu phòng hiện tại vào form để sửa.
   const handleOpenEdit = (room: RoomResponse) => {
     setEditingRoom(room);
     setFormCinemaId(room.cinemaId);
@@ -135,7 +130,6 @@ export default function ManageRooms() {
     setIsModalOpen(true);
   };
 
-  // Validate form rồi gọi API create/update phòng tùy đang thêm mới hay chỉnh sửa.
   const handleSubmit = async () => {
     if (!formRoomName.trim()) {
       toast.error(TEXT.ROOM.ERR_NAME_EMPTY);
@@ -171,7 +165,6 @@ export default function ManageRooms() {
     }
   };
 
-  // Xác nhận trước khi xóa phòng vì backend có thể xóa kèm sơ đồ ghế của phòng.
   const handleDelete = async (room: RoomResponse) => {
     const confirmed = window.confirm(TEXT.ROOM.CONFIRM_DEACTIVATE.replace("{0}", room.roomName));
     if (!confirmed) return;
@@ -377,9 +370,8 @@ export default function ManageRooms() {
                   value={formCinemaId}
                   onChange={(e) => setFormCinemaId(e.target.value)}
                   disabled={!!editingRoom}
-                  className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${
-                    editingRoom ? 'opacity-60 cursor-not-allowed' : ''
-                  }`}
+                  className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${editingRoom ? 'opacity-60 cursor-not-allowed' : ''
+                    }`}
                 >
                   <option value="" disabled>{TEXT.ROOM.PLACEHOLDER_CINEMA}</option>
                   {cinemas.map((c) => (
@@ -447,11 +439,10 @@ export default function ManageRooms() {
               </button>
               <button
                 type="button"
-                onClick={handleSubmit}
+                onClick={() => void handleSubmit()}
                 disabled={submitting}
-                className={`px-6 py-2 bg-[#4318FF] text-white font-semibold text-sm rounded-xl shadow-lg transition ${
-                  submitting ? 'cursor-not-allowed opacity-70' : 'hover:bg-blue-700'
-                }`}
+                className={`px-6 py-2 bg-[#4318FF] text-white font-semibold text-sm rounded-xl shadow-lg transition ${submitting ? 'cursor-not-allowed opacity-70' : 'hover:bg-blue-700'
+                  }`}
               >
                 {submitting
                   ? TEXT.ROOM.BTN_SUBMITTING

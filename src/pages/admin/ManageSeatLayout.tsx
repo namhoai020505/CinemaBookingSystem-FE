@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { FaChair, FaCouch } from 'react-icons/fa';
 import { roomService } from '../../services/roomService';
 import type { RoomResponse, SeatResponse } from '../../services/roomService';
 import { TEXT } from '../../constants/vi';
@@ -14,7 +15,6 @@ const SEAT_TYPES = [
   { id: 'SEAT_TYPE_SWEETBOX', label: 'Sweetbox', color: '#EC4899', hoverColor: '#F472B6', selectedBorder: '#F9A8D4' },
 ] as const;
 
-// Lấy cấu hình màu/label của từng loại ghế để dùng lại ở grid và legend.
 const getSeatColor = (seatTypeId: string) => {
   const found = SEAT_TYPES.find((t) => t.id === seatTypeId);
   return found ?? SEAT_TYPES[0];
@@ -23,7 +23,6 @@ const getSeatColor = (seatTypeId: string) => {
 // ============================================================
 // Component
 // ============================================================
-// Trang cấu hình sơ đồ ghế cho một phòng chiếu cụ thể.
 export default function ManageSeatLayout() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -37,6 +36,19 @@ export default function ManageSeatLayout() {
   // Selection
   const [selectedSeatIds, setSelectedSeatIds] = useState<Set<string>>(new Set());
 
+  // Brush select states
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawMode, setDrawMode] = useState<'select' | 'deselect' | null>(null);
+
+  // Undo/Redo history for selection
+  const [selectionHistory, setSelectionHistory] = useState<Set<string>[]>([new Set()]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  // Copy Layout states
+  const [otherRooms, setOtherRooms] = useState<RoomResponse[]>([]);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [selectedSourceRoomId, setSelectedSourceRoomId] = useState('');
+
   // Generator form
   const [genRows, setGenRows] = useState(8);
   const [genCols, setGenCols] = useState(12);
@@ -45,10 +57,12 @@ export default function ManageSeatLayout() {
   // Batch edit
   const [batchType, setBatchType] = useState('SEAT_TYPE_VIP');
 
+  // Toggle hiển thị ghế vô hiệu (mặc định ẩn để lưới nhìn chuẩn)
+  const [showInactiveSeats, setShowInactiveSeats] = useState(false);
+
   // ──────────────────────────────────────────
   // Data fetching
   // ──────────────────────────────────────────
-  // Tải thông tin phòng và danh sách ghế hiện tại của phòng.
   const fetchData = useCallback(async () => {
     if (!roomId) return;
     try {
@@ -66,7 +80,6 @@ export default function ManageSeatLayout() {
     }
   }, [roomId]);
 
-  // Gọi fetchData khi roomId thay đổi để luôn hiển thị đúng phòng đang quản lý.
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
@@ -74,65 +87,171 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Seat grid grouping
   // ──────────────────────────────────────────
-  // Gom danh sách ghế phẳng thành từng hàng để render giống sơ đồ phòng chiếu.
+  // Tổng số ghế inactive (dùng để hiển thị badge "X ghế đang ẩn")
+  const totalInactiveCount = seats.filter((s) => !s.isActive).length;
+
   const seatGrid = (() => {
     const rowMap = new Map<string, SeatResponse[]>();
     for (const seat of seats) {
+      // Nếu đang ẩn ghế inactive → bỏ qua ghế không hoạt động
+      if (!showInactiveSeats && !seat.isActive) continue;
       const existing = rowMap.get(seat.rowLabel) || [];
       existing.push(seat);
       rowMap.set(seat.rowLabel, existing);
     }
-    // Sort each row by seatNumber
-    for (const [, rowSeats] of rowMap) {
+    // Sắp xếp và lọc bỏ các cột chẵn bị chiếm dụng bởi ghế Sweetbox
+    for (const [rowLabel, rowSeats] of rowMap) {
       rowSeats.sort((a, b) => a.seatNumber - b.seatNumber);
+
+      const filtered: SeatResponse[] = [];
+      const skipCols = new Set<number>();
+      for (const seat of rowSeats) {
+        if (skipCols.has(seat.seatNumber)) {
+          continue;
+        }
+        filtered.push(seat);
+        if (seat.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+          skipCols.add(seat.seatNumber + 1);
+        }
+      }
+      rowMap.set(rowLabel, filtered);
     }
-    // Sort rows alphabetically
-    const sortedRows = Array.from(rowMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    // Loại bỏ hàng rỗng (có thể xảy ra khi ẩn ghế inactive)
+    const sortedRows = Array.from(rowMap.entries())
+      .filter(([, rowSeats]) => rowSeats.length > 0)
+      .sort((a, b) => a[0].localeCompare(b[0]));
     return sortedRows;
   })();
 
-  // Số cột lớn nhất giúp căn chỉnh header/grid ngay cả khi các hàng không đều nhau.
   const maxCols = seatGrid.reduce((max, [, rowSeats]) => Math.max(max, rowSeats.length), 0);
+  const visibleSeats = seatGrid.flatMap(([, rowSeats]) => rowSeats);
 
   // ──────────────────────────────────────────
   // Selection handlers
   // ──────────────────────────────────────────
-  // Chọn hoặc bỏ chọn một ghế trong grid để thao tác hàng loạt.
-  const toggleSeat = (seatId: string) => {
-    setSelectedSeatIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(seatId)) {
-        next.delete(seatId);
-      } else {
-        next.add(seatId);
-      }
-      return next;
-    });
+  // Helper to update selection and push to history
+  const updateSelection = (newSelection: Set<string>, pushToHistory = true) => {
+    setSelectedSeatIds(newSelection);
+    if (pushToHistory) {
+      const nextHistory = selectionHistory.slice(0, historyIndex + 1);
+      nextHistory.push(new Set(newSelection));
+      setSelectionHistory(nextHistory);
+      setHistoryIndex(nextHistory.length - 1);
+    }
   };
 
-  // Chọn/bỏ chọn toàn bộ ghế trong một hàng.
-  const toggleRow = (rowLabel: string) => {
-    const rowSeats = seats.filter((s) => s.rowLabel === rowLabel);
-    const allSelected = rowSeats.every((s) => selectedSeatIds.has(s.seatId));
-    setSelectedSeatIds((prev) => {
-      const next = new Set(prev);
-      for (const s of rowSeats) {
-        if (allSelected) {
-          next.delete(s.seatId);
-        } else {
-          next.add(s.seatId);
-        }
-      }
-      return next;
-    });
-  };
+  const handleMouseDown = (seatId: string) => {
+    setIsDrawing(true);
+    const currentlySelected = selectedSeatIds.has(seatId);
+    const nextMode = currentlySelected ? 'deselect' : 'select';
+    setDrawMode(nextMode);
 
-  // Toggle chọn toàn bộ ghế trong phòng.
-  const selectAll = () => {
-    if (selectedSeatIds.size === seats.length) {
-      setSelectedSeatIds(new Set());
+    const nextSelection = new Set(selectedSeatIds);
+    if (nextMode === 'select') {
+      nextSelection.add(seatId);
     } else {
-      setSelectedSeatIds(new Set(seats.map((s) => s.seatId)));
+      nextSelection.delete(seatId);
+    }
+    updateSelection(nextSelection, true);
+  };
+
+  const handleMouseEnter = (seatId: string) => {
+    if (!isDrawing || !drawMode) return;
+    const nextSelection = new Set(selectedSeatIds);
+    if (drawMode === 'select') {
+      nextSelection.add(seatId);
+    } else {
+      nextSelection.delete(seatId);
+    }
+    setSelectedSeatIds(nextSelection);
+  };
+
+  const handleMouseUp = useCallback(() => {
+    if (isDrawing) {
+      setIsDrawing(false);
+      setDrawMode(null);
+      const nextHistory = selectionHistory.slice(0, historyIndex + 1);
+      nextHistory.push(new Set(selectedSeatIds));
+      setSelectionHistory(nextHistory);
+      setHistoryIndex(nextHistory.length - 1);
+    }
+  }, [isDrawing, selectedSeatIds, historyIndex, selectionHistory]);
+
+  useEffect(() => {
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleMouseUp]);
+
+  const undoSelection = useCallback(() => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      setHistoryIndex(prevIndex);
+      setSelectedSeatIds(new Set(selectionHistory[prevIndex]));
+    }
+  }, [historyIndex, selectionHistory]);
+
+  const redoSelection = useCallback(() => {
+    if (historyIndex < selectionHistory.length - 1) {
+      const nextIndex = historyIndex + 1;
+      setHistoryIndex(nextIndex);
+      setSelectedSeatIds(new Set(selectionHistory[nextIndex]));
+    }
+  }, [historyIndex, selectionHistory]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCtrl = e.ctrlKey || e.metaKey;
+      if (isCtrl && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        undoSelection();
+      } else if (isCtrl && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redoSelection();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [undoSelection, redoSelection]);
+
+  const toggleRow = (rowLabel: string) => {
+    const rowSeats = seatGrid.find(([label]) => label === rowLabel)?.[1] || [];
+    const allSelected = rowSeats.every((s) => selectedSeatIds.has(s.seatId));
+    const nextSelection = new Set(selectedSeatIds);
+    for (const s of rowSeats) {
+      if (allSelected) {
+        nextSelection.delete(s.seatId);
+      } else {
+        nextSelection.add(s.seatId);
+      }
+    }
+    updateSelection(nextSelection, true);
+  };
+
+  const selectAll = () => {
+    let nextSelection: Set<string>;
+    if (selectedSeatIds.size === visibleSeats.length) {
+      nextSelection = new Set();
+    } else {
+      nextSelection = new Set(visibleSeats.map((s) => s.seatId));
+    }
+    updateSelection(nextSelection, true);
+  };
+
+  const clearSelection = () => {
+    updateSelection(new Set(), true);
+  };
+
+  // Copy Layout handlers
+  const loadOtherRooms = async () => {
+    try {
+      const roomsList = await roomService.getRooms();
+      const filtered = roomsList.filter((r) => r.roomId !== roomId);
+      setOtherRooms(filtered);
+    } catch (err) {
     }
   };
 
@@ -229,7 +348,6 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Auto generate seats
   // ──────────────────────────────────────────
-  // Sinh lại sơ đồ ghế theo số hàng/cột/type admin nhập.
   const handleGenerateSeats = async () => {
     if (!roomId) return;
 
@@ -241,18 +359,35 @@ export default function ManageSeatLayout() {
     try {
       setActionLoading(true);
 
-      // Step 1: Delete existing seats one-by-one (sequential) so the backend
-      // processes each before the next, avoiding race conditions.
-      // Collect any that fail (e.g. tied to an active showtime).
-      if (seats.length > 0) {
-        const failedSeats: string[] = [];
-        for (const seat of seats) {
-          try {
-            await roomService.deleteSeat(seat.seatId);
-          } catch {
-            failedSeats.push(seat.seatCode);
+      // Mô phỏng tính toán sức chứa phòng chiếu sau khi sinh ghế mới
+      let projectedCapacity = 0;
+      for (const s of seats) {
+        if (!s.isActive) continue;
+        const rIndex = s.rowLabel.charCodeAt(0) - 65;
+        const inGrid = rIndex >= 0 && rIndex < genRows && s.seatNumber >= 1 && s.seatNumber <= genCols;
+        if (!inGrid) {
+          projectedCapacity += s.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
+        }
+      }
+      for (let r = 0; r < genRows; r++) {
+        const rowLabel = String.fromCharCode(65 + r);
+        for (let c = 1; c <= genCols; c++) {
+          if (genType === 'SEAT_TYPE_SWEETBOX' && c % 2 === 0) {
+            const existing = seats.find((s) => s.rowLabel === rowLabel && s.seatNumber === c && s.isActive);
+            if (existing) {
+              projectedCapacity += existing.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
+            }
+            continue;
+          }
+          const existing = seats.find((s) => s.rowLabel === rowLabel && s.seatNumber === c);
+          if (existing) {
+            const type = existing.isActive ? existing.seatTypeId : genType;
+            projectedCapacity += type === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
+          } else {
+            projectedCapacity += genType === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
           }
         }
+      }
 
       if (projectedCapacity > (room?.capacity ?? 0)) {
         toast.error(TEXT.SEAT_LAYOUT.ERR_GEN_CAPACITY.replace('{0}', String(projectedCapacity)).replace('{1}', String(room?.capacity)));
@@ -260,16 +395,38 @@ export default function ManageSeatLayout() {
         return;
       }
 
-      // Step 2: Create each seat individually via POST /api/seats.
-      // This bypasses generate-seats entirely, so soft-deleted seat records
-      // still in the DB no longer cause a 409 Conflict.
-      const totalSeats = genRows * genCols;
       let created = 0;
+      let skipped = 0;
       const createFailed: string[] = [];
 
       for (let r = 0; r < genRows; r++) {
         const rowLabel = String.fromCharCode(65 + r); // A, B, C, ...
         for (let c = 1; c <= genCols; c++) {
+          if (genType === 'SEAT_TYPE_SWEETBOX' && c % 2 === 0) {
+            continue;
+          }
+          const existing = seats.find(
+            (s) => s.rowLabel === rowLabel && s.seatNumber === c
+          );
+          if (existing) {
+            if (!existing.isActive) {
+              try {
+                await roomService.updateSeat(existing.seatId, {
+                  rowLabel: existing.rowLabel,
+                  seatNumber: existing.seatNumber,
+                  seatTypeId: genType,
+                  isActive: true,
+                });
+                created++;
+              } catch {
+                createFailed.push(`${rowLabel}${c}`);
+              }
+            } else {
+              skipped++;
+            }
+            continue;
+          }
+
           try {
             await roomService.createSeat({
               roomId,
@@ -293,7 +450,6 @@ export default function ManageSeatLayout() {
       setSelectedSeatIds(new Set());
       await fetchData();
     } catch (err: unknown) {
-      console.error('Lỗi sinh ghế:', err);
       const axiosErr = err as { response?: { data?: { message?: string } } };
       toast.error(axiosErr?.response?.data?.message ?? TEXT.SEAT_LAYOUT.ERR_GEN_FAIL);
 
@@ -362,7 +518,6 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Batch operations
   // ──────────────────────────────────────────
-  // Đổi loại ghế cho toàn bộ ghế đang được chọn.
   const handleBatchChangeType = async () => {
     if (selectedSeatIds.size === 0) {
       toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_EMPTY);
@@ -392,6 +547,7 @@ export default function ManageSeatLayout() {
           rowLabel: seat.rowLabel,
           seatNumber: seat.seatNumber,
           seatTypeId: batchType,
+          isActive: seat.isActive,
         });
       });
       await Promise.all(promises);
@@ -407,7 +563,6 @@ export default function ManageSeatLayout() {
 
   // Backend DELETE /api/seats/{seatId} = soft-delete (set isActive = false)
   // There is no "reactivate" endpoint, so we only support deactivation.
-  // Vô hiệu hóa các ghế đã chọn để không hiển thị cho khách hàng.
   const handleBatchDeactivate = async () => {
     if (selectedSeatIds.size === 0) {
       toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_EMPTY);
@@ -447,64 +602,40 @@ export default function ManageSeatLayout() {
     }
   };
 
-  // Xóa mềm các ghế đã chọn; backend vẫn có thể chặn nếu ghế đang liên quan suất chiếu.
-  const handleBatchDelete = async () => {
-    if (selectedSeatIds.size === 0) {
-      toast.error('Vui lòng chọn ít nhất 1 ghế!');
-      return;
-    }
-    const confirmed = window.confirm(
-      `⚠️ Bạn sắp XÓA ${selectedSeatIds.size} ghế. Hành động này không thể hoàn tác. Tiếp tục?`
-    );
-    if (!confirmed) return;
-
-    try {
-      setActionLoading(true);
-      let deleted = 0;
-      const failed: string[] = [];
-
-      for (const seatId of Array.from(selectedSeatIds)) {
-        try {
-          await roomService.deleteSeat(seatId);
-          deleted++;
-        } catch {
-          const seat = seats.find((s) => s.seatId === seatId);
-          failed.push(seat?.seatCode ?? seatId);
-        }
-      }
-
-      if (failed.length > 0) {
-        toast.warn(
-          `Xóa được ${deleted}/${selectedSeatIds.size} ghế. ` +
-          `${failed.length} ghế bị chặn (đang dùng bởi suất chiếu): ${failed.slice(0, 6).join(', ')}${failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''}.`,
-          { autoClose: 8000 }
-        );
-      } else {
-        toast.success(`Đã xóa ${deleted} ghế thành công!`);
-      }
-
-      setSelectedSeatIds(new Set());
-      await fetchData();
-    } catch (err) {
-      console.error('Lỗi xóa ghế:', err);
-      toast.error('Xóa ghế thất bại.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  // handleBatchDelete đã được hợp nhất vào handleBatchDeactivate
+  // (cả hai đều gọi soft-delete API — giữ 1 hàm tránh nhầm lẫn)
 
   // ──────────────────────────────────────────
   // Stats
   // ──────────────────────────────────────────
-  // Tính nhanh số lượng từng loại ghế để hiển thị các card thống kê.
   const seatStats = (() => {
-    const stats = { total: seats.length, normal: 0, vip: 0, sweetbox: 0, inactive: 0 };
-    for (const s of seats) {
-      if (!s.isActive) stats.inactive++;
+    const stats = {
+      total: 0,
+      normal: 0,
+      vip: 0,
+      sweetbox: 0,
+      inactive: 0,
+      activeNormal: 0,
+      activeVip: 0,
+      activeSweetbox: 0,
+      totalCapacity: 0
+    };
+    for (const s of visibleSeats) {
+      if (!s.isActive) {
+        stats.inactive++;
+      } else {
+        if (s.seatTypeId === 'SEAT_TYPE_NORMAL') stats.activeNormal++;
+        else if (s.seatTypeId === 'SEAT_TYPE_VIP') stats.activeVip++;
+        else if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX') stats.activeSweetbox++;
+      }
+
       if (s.seatTypeId === 'SEAT_TYPE_NORMAL') stats.normal++;
       else if (s.seatTypeId === 'SEAT_TYPE_VIP') stats.vip++;
       else if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX') stats.sweetbox++;
     }
+    stats.totalCapacity = stats.activeNormal + stats.activeVip + stats.activeSweetbox * 2;
+    stats.total = stats.normal + stats.vip + stats.sweetbox * 2;
+    stats.sweetbox = stats.sweetbox * 2;
     return stats;
   })();
 
@@ -567,7 +698,7 @@ export default function ManageSeatLayout() {
               </div>
 
               {/* Seat Grid */}
-              <div className="flex flex-col items-center gap-1.5">
+              <div className="flex flex-col items-center gap-1.5 select-none">
                 {seatGrid.map(([rowLabel, rowSeats]) => {
                   const allRowSelected = rowSeats.every((s) => selectedSeatIds.has(s.seatId));
                   return (
@@ -593,25 +724,37 @@ export default function ManageSeatLayout() {
                         return (
                           <button
                             key={seat.seatId}
-                            onClick={() => toggleSeat(seat.seatId)}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleMouseDown(seat.seatId);
+                            }}
+                            onMouseEnter={() => handleMouseEnter(seat.seatId)}
                             className="relative transition-all duration-150 group/seat"
                             title={`${seat.seatCode} · ${typeInfo.label}${isInactive ? ' (Không HĐ)' : ''}`}
                             style={{
-                              width: maxCols > 14 ? 32 : 40,
+                              width: seat.seatTypeId === 'SEAT_TYPE_SWEETBOX'
+                                ? (maxCols > 14 ? 70 : 86)
+                                : (maxCols > 14 ? 32 : 40),
                               height: maxCols > 14 ? 32 : 40,
                             }}
                           >
                             <div
-                              className={`w-full h-full rounded-lg flex items-center justify-center text-[10px] font-bold transition-all duration-150 ${
-                                isSelected
-                                  ? 'ring-2 ring-white scale-110 shadow-lg'
-                                  : 'hover:scale-105'
-                              } ${isInactive ? 'opacity-30' : ''}`}
+                              className={`w-full h-full rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold transition-all duration-150 ${isSelected
+                                ? 'ring-2 ring-white scale-110 shadow-lg'
+                                : 'hover:scale-105'
+                                } ${isInactive ? 'opacity-30' : ''}`}
                               style={{
                                 backgroundColor: isSelected ? typeInfo.hoverColor : typeInfo.color,
                               }}
                             >
-                              {seat.seatNumber}
+                              {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? (
+                                <FaCouch className="h-3.5 w-7 shrink-0 text-white/90" />
+                              ) : seat.seatTypeId === 'SEAT_TYPE_VIP' ? (
+                                <FaCouch className="h-3.5 w-3.5 shrink-0 text-white/90" />
+                              ) : (
+                                <FaChair className="h-3.5 w-3.5 shrink-0 text-white/90" />
+                              )}
+                              <span>{seat.seatNumber}</span>
                               {isInactive && (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <div className="w-full h-[2px] bg-red-500 rotate-45 absolute" />
@@ -632,7 +775,7 @@ export default function ManageSeatLayout() {
               </div>
 
               {/* Select All / Clear */}
-              <div className="flex justify-center gap-3 mt-5">
+              <div className="flex justify-center items-center gap-3 mt-5">
                 <button
                   onClick={selectAll}
                   className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
@@ -703,7 +846,7 @@ export default function ManageSeatLayout() {
                 <div className="text-xl font-bold text-blue-400">{seatStats.vip}</div>
                 <div className="text-[10px] text-blue-500 uppercase tracking-wider mt-0.5">VIP</div>
               </div>
-              <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
+              <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800 col-span-2">
                 <div className="text-xl font-bold text-pink-400">{seatStats.sweetbox}</div>
                 <div className="text-[10px] text-pink-500 uppercase tracking-wider mt-0.5">Sweetbox</div>
               </div>
@@ -854,18 +997,17 @@ export default function ManageSeatLayout() {
               <button
                 onClick={handleGenerateSeats}
                 disabled={actionLoading}
-                className={`w-full py-2.5 rounded-xl text-sm font-semibold transition shadow-lg ${
-                  actionLoading
-                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                    : 'bg-[#4318FF] hover:bg-blue-700 text-white shadow-[#4318FF]/20'
-                }`}
+                className={`w-full py-2.5 rounded-xl text-sm font-semibold transition shadow-lg ${actionLoading
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  : 'bg-[#4318FF] hover:bg-blue-700 text-white shadow-[#4318FF]/20'
+                  }`}
               >
                 {actionLoading ? TEXT.SEAT_LAYOUT.LOADING_PROCESS : TEXT.SEAT_LAYOUT.BTN_GENERATE}
               </button>
             </div>
           </div>
 
-          {/* ── Batch Editor ── */}
+          {/* ── Copy Layout ── */}
           <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
             <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
               {TEXT.SEAT_LAYOUT.TITLE_COPY}

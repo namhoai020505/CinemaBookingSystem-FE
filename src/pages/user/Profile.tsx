@@ -87,7 +87,6 @@ const emptyEmailForm: EmailFormState = {
   otp: '',
 };
 
-// Format datetime cho các mốc như token hết hạn hoặc OTP đổi email hết hạn.
 const formatDateTime = (value: Date | string | null | undefined) => {
   if (!value) {
     return 'Không xác định';
@@ -104,7 +103,6 @@ const formatDateTime = (value: Date | string | null | undefined) => {
   }).format(date);
 };
 
-// Chuyển date từ API về yyyy-MM-dd để input type="date" hiển thị đúng.
 const normalizeDateInput = (value: string | null | undefined) => {
   if (!value) {
     return '';
@@ -113,7 +111,6 @@ const normalizeDateInput = (value: string | null | undefined) => {
   return value.slice(0, 10);
 };
 
-// Lấy message đầu tiên từ object validation errors của ASP.NET.
 const getValidationMessage = (errors?: Record<string, string[]>) => {
   if (!errors) {
     return '';
@@ -125,7 +122,6 @@ const getValidationMessage = (errors?: Record<string, string[]>) => {
     .join(' ');
 };
 
-// Chuẩn hóa lỗi API thành message cho từng form profile/password/email.
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (axios.isAxiosError<ApiErrorBody>(error)) {
     const body = error.response?.data;
@@ -145,7 +141,6 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-// Nếu API profile lỗi/chưa có dữ liệu, dùng thông tin trong JWT để vẫn hiển thị được header.
 const createFallbackProfile = (authProfile: AuthProfile): CustomerProfile => ({
   userId: authProfile.userId,
   customerProfileId: '',
@@ -162,7 +157,6 @@ const createFallbackProfile = (authProfile: AuthProfile): CustomerProfile => ({
   emailVerified: false,
 });
 
-// Map profile backend sang state form chỉnh sửa thông tin cá nhân.
 const toProfileForm = (profile: CustomerProfile): ProfileFormState => ({
   fullName: profile.fullName || '',
   phoneNumber: profile.phoneNumber || '',
@@ -172,7 +166,6 @@ const toProfileForm = (profile: CustomerProfile): ProfileFormState => ({
   dateOfBirth: normalizeDateInput(profile.dateOfBirth),
 });
 
-// Component nhỏ hiển thị thông báo thành công/lỗi cho từng khối form.
 const StatusMessage = ({
   message,
   type,
@@ -198,7 +191,6 @@ const StatusMessage = ({
   );
 };
 
-// Trang thông tin tài khoản: xem/sửa profile, đổi mật khẩu và đổi email bằng OTP.
 export default function Profile() {
   const authProfile = useMemo(() => getCurrentUserProfile(), []);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -219,7 +211,6 @@ export default function Profile() {
   const [isRequestingEmailOtp, setIsRequestingEmailOtp] = useState(false);
   const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
 
-  // Tải profile từ backend, fallback sang JWT nếu API chưa có dữ liệu đầy đủ.
   const loadProfile = useCallback(
     async (silent = false) => {
       if (!authProfile) {
@@ -257,7 +248,6 @@ export default function Profile() {
     [authProfile]
   );
 
-  // Load profile sau khi component mount.
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       void loadProfile();
@@ -276,7 +266,6 @@ export default function Profile() {
   const displayEmail = displayProfile.email || authProfile.email || 'Chưa có email';
   const displayInitial = (displayName || displayEmail || 'G').trim().charAt(0).toUpperCase();
 
-  // Cập nhật từng field của form thông tin cá nhân.
   const updateProfileForm = (field: keyof ProfileFormState, value: string) => {
     setProfileForm((current) => ({
       ...current,
@@ -284,7 +273,6 @@ export default function Profile() {
     }));
   };
 
-  // Cập nhật từng field của form đổi mật khẩu.
   const updatePasswordForm = (field: keyof PasswordFormState, value: string) => {
     setPasswordForm((current) => ({
       ...current,
@@ -292,7 +280,6 @@ export default function Profile() {
     }));
   };
 
-  // Cập nhật từng field của form đổi email.
   const updateEmailForm = (field: keyof EmailFormState, value: string) => {
     setEmailForm((current) => ({
       ...current,
@@ -300,7 +287,6 @@ export default function Profile() {
     }));
   };
 
-  // Gửi PUT /api/customer/profile để cập nhật thông tin cá nhân.
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setProfileError('');
@@ -346,7 +332,6 @@ export default function Profile() {
     }
   };
 
-  // Gửi POST /customer/change-password sau khi validate mật khẩu xác nhận.
   const handlePasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPasswordError('');
@@ -383,7 +368,6 @@ export default function Profile() {
     }
   };
 
-  // Gửi OTP đổi email tới email mới.
   const handleRequestEmailOtp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setEmailError('');
@@ -418,7 +402,6 @@ export default function Profile() {
     }
   };
 
-  // Xác thực OTP đổi email rồi reload profile mới.
   const handleVerifyEmail = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setEmailError('');

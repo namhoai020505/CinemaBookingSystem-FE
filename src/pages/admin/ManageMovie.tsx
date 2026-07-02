@@ -1,30 +1,45 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { toast } from "react-toastify";
 import { movieService } from "../../services/movieService";
 import type { MovieResponse } from "../../services/movieService";
 import { getMediaUrl } from "../../lib/media";
 import { TEXT } from "../../constants/vi";
 
-// Trang quản trị danh sách phim: tải dữ liệu, mở modal thêm/sửa và gọi API lưu phim.
 export default function ManageMovie() {
-  const [movies, setMovies] = useState<MovieData[]>([]);
+  const [allMovies, setAllMovies] = useState<MovieResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingMovieId, setEditingMovieId] = useState<number | null>(null);
+  const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState<MovieData>({
-    movieNameVn: "",
-    movieNameEng: "",
-    fromDate: "",
-    toDate: "",
-    actor: "",
-    director: "",
-    duration: 120,
+  // Pagination states
+  const [pageIndex, setPageIndex] = useState(1);
+  const [pageSize] = useState(10);
+
+  const [formData, setFormData] = useState({
+    title: "",
+    durationMinutes: 120,
+    genre: "",
+    language: "",
+    releaseDate: "",
+    ageRating: "",
+    description: "",
     trailerUrl: "",
-    content: "",
+    highlight: "",
+    movieStatus: "",
+    director: "",
   });
 
-  const [errors, setErrors] = useState<{ movieNameVn?: string }>({});
+  const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [posterPreview, setPosterPreview] = useState<string>("");
+  const [originalPosterUrl, setOriginalPosterUrl] = useState<string>("");
+
+  const [errors, setErrors] = useState<{ title?: string; durationMinutes?: string }>({});
+
+  // Search Filters
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchGenre, setSearchGenre] = useState("");
 
   // States for DB-backed Genre Selection
   const [genres, setGenres] = useState<{ genreId: number; name: string }[]>([]);
@@ -36,9 +51,9 @@ export default function ManageMovie() {
   const fetchMovies = async () => {
     try {
       setLoading(true);
-      const response = await movieService.getMoviesWithPagination(1, 10) as { data?: MovieData[] };
-      if (response && response.data) {
-        setMovies(response.data);
+      const response = await movieService.getMoviesWithPagination(1, 1000, "");
+      if (response) {
+        setAllMovies(response.items || []);
       }
     } catch (error) {
       toast.error(TEXT.MOVIE.ERR_FETCH_MOVIES);
@@ -70,9 +85,8 @@ export default function ManageMovie() {
   };
 
   useEffect(() => {
-    const loadTimer = window.setTimeout(() => {
-      void fetchMovies();
-    }, 0);
+    void fetchGenres();
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -94,8 +108,14 @@ export default function ManageMovie() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Khối useEffect lắng nghe phím Esc - Cố định mảng phụ thuộc (Sửa lỗi 3, 4)
-  // Cho phép đóng modal nhanh bằng phím Escape.
+
+
+  const handleStatusFilterChange = (status: string) => {
+    setSelectedStatus(status);
+    setPageIndex(1);
+  };
+
+  // Khối useEffect lắng nghe phím Esc
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && isModalOpen) {
@@ -109,45 +129,54 @@ export default function ManageMovie() {
     };
   }, [isModalOpen]);
 
-  // Reset form về trạng thái thêm mới rồi mở modal.
   const handleOpenAddModal = () => {
     setEditingMovieId(null);
     setFormData({
-      movieNameVn: "",
-      movieNameEng: "",
-      fromDate: "",
-      toDate: "",
-      actor: "",
-      director: "",
-      duration: 120,
+      title: "",
+      durationMinutes: 120,
+      genre: "",
+      language: "",
+      releaseDate: "",
+      ageRating: "P",
+      description: "",
       trailerUrl: "",
-      content: "",
+      highlight: "",
+      movieStatus: "",
+      director: "",
     });
+    setSelectedGenreIds([]);
+    setPosterFile(null);
+    setPosterPreview("");
+    setOriginalPosterUrl("");
     setErrors({});
     setIsModalOpen(true);
   };
 
-  // Đổ thông tin phim hiện tại vào form để admin chỉnh sửa.
-  const handleOpenEditModal = (movie: MovieData) => {
-    if (!movie.id) {
-      return;
-    }
+  const handleOpenEditModal = async (movie: MovieResponse) => {
+    try {
+      setLoading(true);
+      const detail = await movieService.getMovieById(movie.id);
+      if (detail) {
+        setEditingMovieId(detail.movieId);
+        setFormData({
+          title: detail.title || "",
+          durationMinutes: detail.durationMinutes || 120,
+          genre: detail.genre || "",
+          language: detail.language || "",
+          releaseDate: detail.releaseDate || "",
+          ageRating: detail.ageRating || "P",
+          description: detail.description || "",
+          trailerUrl: detail.trailerUrl || "",
+          highlight: detail.highlight || "",
+          movieStatus: detail.movieStatus || "",
+          director: detail.director || "",
+        });
 
-    setEditingMovieId(movie.id);
-    setFormData({
-      movieNameVn: movie.movieNameVn || "",
-      movieNameEng: movie.movieNameEng || "",
-      fromDate: movie.fromDate || "",
-      toDate: movie.toDate || "",
-      actor: movie.actor || "",
-      director: movie.director || "",
-      duration: movie.duration || 120,
-      trailerUrl: movie.trailerUrl || "",
-      content: movie.content || "",
-    });
-    setErrors({});
-    setIsModalOpen(true);
-  };
+        // Ánh xạ thể loại từ backend (string[]) thành các IDs tương ứng từ danh sách db genres
+        const matchedIds = (detail.genres ?? [])
+          .map(name => genres.find(g => g.name.toLowerCase() === name.toLowerCase())?.genreId)
+          .filter((id): id is number => id !== undefined);
+        setSelectedGenreIds(matchedIds);
 
         setPosterFile(null);
         setPosterPreview(getMediaUrl(detail.posterUrl) || "");
@@ -160,6 +189,7 @@ export default function ManageMovie() {
     } finally {
       setLoading(false);
     }
+  };
 
   const handleDeleteMovie = async (movie: MovieResponse) => {
     const confirmDelete = window.confirm(TEXT.MOVIE.CONFIRM_HIDE.replace("{0}", movie.movieNameVn));
@@ -232,9 +262,8 @@ export default function ManageMovie() {
     }
   };
 
-  // Cập nhật state form mỗi khi admin nhập dữ liệu trong modal.
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
   ) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
@@ -256,7 +285,6 @@ export default function ManageMovie() {
     }
   };
 
-  // Validate form và quyết định gọi API create hay update tùy trạng thái editingMovieId.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim()) {
@@ -270,6 +298,39 @@ export default function ManageMovie() {
 
     try {
       setLoading(true);
+      const submitData = new FormData();
+      submitData.append("Title", formData.title);
+      submitData.append("DurationMinutes", String(formData.durationMinutes));
+
+      // Gửi danh sách các ID thể loại đã chọn
+      if (selectedGenreIds && selectedGenreIds.length > 0) {
+        selectedGenreIds.forEach(id => {
+          submitData.append("GenreIds", String(id));
+        });
+      }
+
+      if (formData.language) submitData.append("Language", formData.language);
+      if (formData.releaseDate) submitData.append("ReleaseDate", formData.releaseDate);
+      if (formData.ageRating) submitData.append("AgeRating", formData.ageRating);
+      if (formData.description) submitData.append("Description", formData.description);
+      if (formData.trailerUrl) submitData.append("TrailerUrl", formData.trailerUrl);
+      if (formData.highlight) submitData.append("Highlight", formData.highlight);
+      if (formData.director) submitData.append("Director", formData.director);
+
+      // Gửi MovieStatus cho cả create và update
+      submitData.append("MovieStatus", formData.movieStatus);
+
+      if (editingMovieId) {
+        // Nếu giữ ảnh cũ, gửi lại URL để BE lưu trữ
+        if (posterPreview && !posterFile) {
+          submitData.append("PosterUrl", originalPosterUrl);
+        }
+      }
+
+      if (posterFile) {
+        submitData.append("posterFile", posterFile);
+      }
+
       if (editingMovieId) {
         await movieService.updateMovie(editingMovieId, submitData);
         toast.success(TEXT.MOVIE.SUCCESS_UPDATE);
@@ -277,6 +338,7 @@ export default function ManageMovie() {
         await movieService.createMovie(submitData);
         toast.success(TEXT.MOVIE.SUCCESS_CREATE);
       }
+
       setIsModalOpen(false);
       setEditingMovieId(null);
       setPosterFile(null);
@@ -291,6 +353,11 @@ export default function ManageMovie() {
     }
   };
 
+  // Khi bấm thêm mới/sửa xong, nạp lại đúng trang và bộ lọc hiện tại
+  const handleReloadAfterSave = async () => {
+    await fetchMovies();
+  };
+
   return (
     <div className="p-6 bg-[#0A0A0C] min-h-screen text-white font-['Urbanist']">
       {/* HEADER */}
@@ -303,7 +370,7 @@ export default function ManageMovie() {
         </div>
         <button
           onClick={handleOpenAddModal}
-          className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 rounded-xl text-sm font-semibold transition"
+          className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 rounded-xl text-sm font-semibold transition flex items-center gap-2 shadow-lg"
         >
           <span>+</span> {TEXT.MOVIE.ADD_MOVIE}
         </button>
@@ -555,14 +622,11 @@ export default function ManageMovie() {
         </div>
       )}
 
-      {/* ------------------------------------------------------------------ */}
-      {/* MODAL FORM THÊM / SỬA PHIM (ĐÃ SỬA LỖI KHUẤT NÚT LƯU) */}
-      {/* ------------------------------------------------------------------ */}
+      {/* MODAL FORM THÊM / SỬA PHIM */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          {/* Box bọc ngoài cùng: Giới hạn chiều cao tối đa của popup và cố định form */}
           <div className="bg-[#111C44] border border-gray-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Header Modal - Luôn cố định ở trên */}
+            {/* Header Modal */}
             <div className="p-5 border-b border-gray-800 flex justify-between items-center bg-blue-950/20 shrink-0">
               <h2 className="text-lg font-bold text-white uppercase tracking-wide">
                 {editingMovieId
@@ -580,10 +644,10 @@ export default function ManageMovie() {
               </button>
             </div>
 
-            {/* Thân Form nhập liệu - ĐẶT THUỘC TÍNH CUỘN Ở ĐÂY để nút lưu không bao giờ bị khuất */}
+            {/* Thân Form nhập liệu */}
             <form
               onSubmit={handleSubmit}
-              className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin scrollbar-track-[#0F172A] scrollbar-thumb-[#1E293B] hover:scrollbar-thumb-[#4318FF]"
+              className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin scrollbar-track-[#0F172A] scrollbar-thumb-[#1E293B]"
             >
               {/* Tên phim & Thời lượng */}
               <div className="grid grid-cols-3 gap-4">
@@ -610,11 +674,11 @@ export default function ManageMovie() {
                     {TEXT.MOVIE.LABEL_DURATION}
                   </label>
                   <input
-                    type="text"
-                    name="movieNameEng"
-                    value={formData.movieNameEng}
+                    type="number"
+                    name="durationMinutes"
+                    min="1"
+                    value={formData.durationMinutes}
                     onChange={handleInputChange}
-                    placeholder="Nhập tên tiếng Anh..."
                     className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -714,16 +778,17 @@ export default function ManageMovie() {
                   </select>
                 </div>
               </div>
-              {/* Thời lượng & Diễn viên */}
+
+              {/* Ngày khởi chiếu & Độ tuổi */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     {TEXT.MOVIE.LABEL_RELEASE_DATE}
                   </label>
                   <input
-                    type="number"
-                    name="duration"
-                    value={formData.duration}
+                    type="date"
+                    name="releaseDate"
+                    value={formData.releaseDate}
                     onChange={handleInputChange}
                     className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -732,43 +797,61 @@ export default function ManageMovie() {
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     {TEXT.MOVIE.LABEL_AGE}
                   </label>
-                  <input
-                    type="text"
-                    name="actor"
-                    value={formData.actor}
+                  <select
+                    name="ageRating"
+                    value={formData.ageRating}
                     onChange={handleInputChange}
-                    placeholder="Danh sách diễn viên..."
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="P">P - Phổ biến mọi lứa tuổi</option>
+                    <option value="K">K - Dưới 13 tuổi cần người giám hộ</option>
+                    <option value="T13">T13 - Từ đủ 13 tuổi trở lên</option>
+                    <option value="T16">T16 - Từ đủ 16 tuổi trở lên</option>
+                    <option value="T18">T18 - Từ đủ 18 tuổi trở lên</option>
+                  </select>
                 </div>
               </div>
-              {/* Khởi chiếu & Kết thúc */}
+
+              {/* Nhãn nổi bật & Trạng thái phim */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     {TEXT.MOVIE.LABEL_HIGHLIGHT}
                   </label>
-                  <input
-                    type="date"
-                    name="fromDate"
-                    value={formData.fromDate}
+                  <select
+                    name="highlight"
+                    value={formData.highlight}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="">Bình thường</option>
+                    <option value="NEW">NEW – Phim mới ra mắt</option>
+                    <option value="HOT">HOT – Phim đang gây bão</option>
+                    <option value="TRENDING">TRENDING – Phim xu hướng</option>
+                    <option value="POPULAR">POPULAR – Phim ăn khách nhất</option>
+                    {/* Fix #3: Bỏ COMING_SOON khỏi highlight vì trùng tên với movieStatus */}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     {TEXT.MOVIE.LABEL_STATUS}
                   </label>
-                  <input
-                    type="date"
-                    name="toDate"
-                    value={formData.toDate}
+                  {/* Fix #2: Bỏ disabled → cho phép chọn status ngay khi tạo mới */}
+                  <select
+                    name="movieStatus"
+                    value={formData.movieStatus}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="NOW_SHOWING">NOW_SHOWING – Đang chiếu</option>
+                    <option value="COMING_SOON">COMING_SOON – Sắp chiếu</option>
+                    <option value="ENDED">ENDED – Đã kết thúc</option>
+                    <option value="INACTIVE">INACTIVE – Tạm ẩn</option>
+                    <option value="ARCHIVED">ARCHIVED – Lưu trữ</option>
+                  </select>
                 </div>
               </div>
+
               {/* Trailer URL */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
@@ -780,7 +863,7 @@ export default function ManageMovie() {
                   value={formData.trailerUrl}
                   onChange={handleInputChange}
                   placeholder="https://youtube.com/watch?v=..."
-                  className="w-full px-4 py-2.5 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -833,9 +916,9 @@ export default function ManageMovie() {
                   {TEXT.MOVIE.LABEL_DESC}
                 </label>
                 <textarea
-                  name="content"
+                  name="description"
                   rows={3}
-                  value={formData.content}
+                  value={formData.description}
                   onChange={handleInputChange}
                   placeholder={TEXT.MOVIE.PLACEHOLDER_DESC}
                   className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -843,7 +926,7 @@ export default function ManageMovie() {
               </div>
             </form>
 
-            {/* Footer Buttons - LUÔN CỐ ĐỊNH Ở ĐÁY POPUP, hiển thị 100% không sợ khuất màn hình */}
+            {/* Footer Buttons */}
             <div className="p-4 border-t border-gray-800 flex justify-end gap-3 bg-blue-950/10 shrink-0">
               <button
                 type="button"
@@ -857,7 +940,7 @@ export default function ManageMovie() {
               </button>
               <button
                 type="button"
-                onClick={handleSubmit} // Trigger hàm submit chuẩn
+                onClick={handleSubmit}
                 className="px-6 py-2 bg-[#4318FF] hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-lg transition"
               >
                 {editingMovieId ? TEXT.MOVIE.BTN_UPDATE_FORM : TEXT.MOVIE.BTN_SAVE_FORM}

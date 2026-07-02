@@ -8,7 +8,6 @@ import {
   type BookingSeatDetail,
 } from "../../services/bookingService";
 
-// Chuẩn hóa datetime backend để parse ổn định cả khi thiếu hậu tố timezone.
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";
@@ -17,17 +16,14 @@ const normalizeBackendDate = (value?: string | null) => {
   return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
 };
 
-// Parse datetime backend thành timestamp.
 const parseBackendTime = (value?: string | null) => {
   const timestamp = Date.parse(normalizeBackendDate(value));
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
-// Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
-// Format thời gian chiếu/booking cho trang vé.
 const formatDateTime = (value?: string | null) => {
   const timestamp = parseBackendTime(value);
   if (!timestamp) {
@@ -40,7 +36,6 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-// Tạo ảnh QR vé từ chuỗi ticketQrCode backend trả về.
 const getTicketQrImage = (qrCode?: string | null) => {
   if (!qrCode) {
     return "";
@@ -54,24 +49,20 @@ const getTicketQrImage = (qrCode?: string | null) => {
   return `https://api.qrserver.com/v1/create-qr-code/?${query.toString()}`;
 };
 
-// Tạo key payment session để dọn localStorage sau khi booking đã paid.
 const getPaymentStorageKey = (showtimeId: string) => {
   const profile = getCurrentUserProfile();
   const userKey = profile?.userId || profile?.email || "anonymous";
   return `g2c-payment:${userKey}:${showtimeId}`;
 };
 
-// Lấy label ghế ưu tiên seatCode, fallback về row/seatNumber.
 const getSeatLabel = (seat: BookingSeatDetail) =>
   `${seat.rowLabel}${seat.seatNumber}`;
 
-// Trang chi tiết vé sau khi thanh toán thành công hoặc mở từ "Vé của tôi".
 export default function BookingSuccess() {
   const { bookingId } = useParams();
   const [bookingInfo, setBookingInfo] = useState<BookingDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Lấy chi tiết booking và xóa session payment local nếu vé đã thanh toán.
   useEffect(() => {
     const fetchBooking = async () => {
       try {

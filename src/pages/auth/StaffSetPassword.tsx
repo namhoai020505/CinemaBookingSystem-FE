@@ -10,7 +10,6 @@ type ParsedApiError = {
   errorCode?: string;
 };
 
-// Map mã lỗi backend sang câu thông báo dễ hiểu cho flow tạo mật khẩu staff.
 const resetErrorMessages: Record<string, string> = {
   USER_NOT_FOUND: 'Không tìm thấy tài khoản staff với email này.',
   OTP_NOT_FOUND: 'Không tìm thấy mã invitation.',
@@ -20,11 +19,9 @@ const resetErrorMessages: Record<string, string> = {
   ACCOUNT_NOT_ACTIVE: 'Tài khoản staff chưa ở trạng thái hoạt động.',
 };
 
-// Type guard nhỏ để đọc response lỗi an toàn mà không dùng any.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-// Chuẩn hóa lỗi từ Axios/backend thành message có thể hiển thị trực tiếp.
 const parseApiError = (error: unknown): ParsedApiError => {
   if (!isRecord(error)) {
     return { message: 'Đã xảy ra lỗi không xác định.' };
@@ -54,7 +51,6 @@ const parseApiError = (error: unknown): ParsedApiError => {
   return { message: 'Đã xảy ra lỗi không xác định.' };
 };
 
-// Trang được mở từ link email mời staff; dùng lại endpoint reset-password của backend.
 export default function StaffSetPassword() {
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState(() => searchParams.get('email') || '');
@@ -66,7 +62,6 @@ export default function StaffSetPassword() {
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Validate form staff invitation trước khi gửi OTP + mật khẩu mới lên backend.
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
