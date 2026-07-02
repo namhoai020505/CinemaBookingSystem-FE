@@ -68,6 +68,7 @@ export interface MovieResponse {
   imagePoster?: string;
   ageRating?: string;
   highlight?: string;
+  movieStatus?: string;
 }
 
 // ============================================================
@@ -139,6 +140,7 @@ export const showtimeService = {
       params: { pageSize: 200 }  // Lấy đủ phim, không bị cắt trang
     }) as unknown as ApiEnvelope<PagedListEnvelope<MovieResponse>>;
     // BE trả về { data: { items: [...], pageIndex, pageSize, totalCount } }
-    return envelope?.data?.items ?? [];
+    const allMovies = envelope?.data?.items ?? [];
+    return allMovies.filter(m => m.movieStatus === 'NOW_SHOWING' || m.movieStatus === 'COMING_SOON');
   },
 };

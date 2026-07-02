@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { toast } from "react-toastify";
 import { useBlocker } from "react-router-dom";
-
+import { TEXT } from "../../constants/vi";
 import {
   showtimeService,
   type ShowtimeResponse,
@@ -173,9 +173,7 @@ export default function ManageShowtime() {
 
   useEffect(() => {
     if (blocker.state === "blocked") {
-      const confirmed = window.confirm(
-        "⚠️ Bạn có thay đổi lịch chiếu chưa lưu. Nếu chuyển trang bây giờ, tất cả thay đổi sẽ bị mất.\n\nBấm OK để tiếp tục chuyển trang, Hủy để ở lại và lưu lịch chiếu."
-      );
+      const confirmed = window.confirm(TEXT.SHOWTIME.CONFIRM_NAVIGATE_AWAY);
       if (confirmed) {
         blocker.proceed();
       } else {
@@ -190,7 +188,7 @@ export default function ManageShowtime() {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirty) {
         e.preventDefault();
-        e.returnValue = "Bạn có các thay đổi chưa lưu trên lịch chiếu. Nếu rời đi, các thay đổi này sẽ bị mất.";
+        e.returnValue = TEXT.SHOWTIME.BEFORE_UNLOAD;
         return e.returnValue;
       }
     };
@@ -227,7 +225,7 @@ export default function ManageShowtime() {
         setSelectedCinemaId(activeCinemas[0].cinemaId);
       }
     } catch (err) {
-      toast.error("Không thể tải danh sách rạp chiếu.");
+      toast.error(TEXT.SHOWTIME.ERR_FETCH_CINEMAS);
     }
   }, [selectedCinemaId]);
 
@@ -236,7 +234,7 @@ export default function ManageShowtime() {
       const data = await showtimeService.getRooms();
       setRooms(data);
     } catch (err) {
-      toast.error("Không thể tải danh sách phòng chiếu.");
+      toast.error(TEXT.SHOWTIME.ERR_FETCH_ROOMS);
     }
   }, []);
 
@@ -245,7 +243,7 @@ export default function ManageShowtime() {
       const data = await showtimeService.getMoviesForScheduling();
       setMovies(data);
     } catch (err) {
-      toast.error("Không thể tải danh sách phim.");
+      toast.error(TEXT.SHOWTIME.ERR_FETCH_MOVIES);
     }
   }, []);
 
@@ -254,7 +252,7 @@ export default function ManageShowtime() {
       const data = await showtimeService.getShowtimes();
       setAllShowtimes(data);
     } catch (err) {
-      toast.error("Không thể tải lịch chiếu.");
+      toast.error(TEXT.SHOWTIME.ERR_FETCH_SHOWTIMES);
     }
   }, []);
 
@@ -484,11 +482,11 @@ export default function ManageShowtime() {
     }
 
     setIsDirty(true);
-    toast.info("Đã xóa suất chiếu khỏi lịch tạm thời.");
+    toast.info(TEXT.SHOWTIME.TOAST_TEMP_DELETED);
   };
 
   const handleCancelChanges = () => {
-    const confirm = window.confirm("⚠️ Bạn có chắc chắn muốn hủy bỏ toàn bộ các thay đổi chưa lưu trên lịch chiếu này không?");
+    const confirm = window.confirm(TEXT.SHOWTIME.CONFIRM_CANCEL_CHANGES);
     if (!confirm) return;
 
     setIsDirty(false);
@@ -529,13 +527,13 @@ export default function ManageShowtime() {
       setSchedule({});
     }
 
-    toast.info("Đã khôi phục lịch chiếu ban đầu.");
+    toast.info(TEXT.SHOWTIME.TOAST_RESTORED_ORIGINAL);
   };
 
   const handleSaveChanges = async () => {
     // Chặn lưu khi đang xem ngày quá khứ (BE sẽ từ chối với INVALID_START_TIME)
     if (isPastDate) {
-      toast.error("❌ Không thể lưu lịch chiếu cho ngày đã qua. Vui lòng chọn ngày hôm nay hoặc tương lai.");
+      toast.error(TEXT.SHOWTIME.ERR_PAST_DATE_SAVE);
       return;
     }
 
@@ -598,21 +596,9 @@ export default function ManageShowtime() {
     } catch (err: unknown) {
 
       // Map BE errorCode → thông báo tiếng Việt rõ ràng
-      const ERROR_MESSAGES: Record<string, string> = {
-        SHOWTIME_OVERLAP: "❌ Suất chiếu bị trùng lấp thời gian với suất chiếu khác trong cùng phòng!",
-        RESOURCE_HAS_BOOKINGS: "❌ Suất chiếu đã có người đặt vé, không thể di chuyển hoặc xóa.",
-        INVALID_START_TIME: "❌ Giờ chiếu phải là thời gian trong tương lai. Kiểm tra lại ngày và giờ đã chọn.",
-        INVALID_BASE_PRICE: "❌ Giá vé phải lớn hơn 0. Vui lòng kiểm tra giá vé suất chiếu.",
-        ROOM_HAS_NO_SEATS: "❌ Phòng chiếu đích chưa có ghế hoạt động nào.",
-        MOVIE_NOT_SELLABLE: "❌ Phim này không còn được phép xếp lịch (có thể đã bị ẩn hoặc ngừng chiếu).",
-        ROOM_NOT_AVAILABLE: "❌ Phòng chiếu hoặc rạp hiện không ở trạng thái hoạt động.",
-        PAST_SHOWTIME: "❌ Không thể xóa suất chiếu đã diễn ra hoặc đã hoàn thành.",
-        MOVIE_NOT_FOUND: "❌ Không tìm thấy phim. Có thể phim đã bị xóa khỏi hệ thống.",
-        ROOM_NOT_FOUND: "❌ Không tìm thấy phòng chiếu.",
-        SHOWTIME_NOT_FOUND: "❌ Không tìm thấy suất chiếu (có thể đã bị xóa bởi người khác).",
-      };
+      const ERROR_MESSAGES: Record<string, string> = TEXT.SHOWTIME.BE_ERRORS;
 
-      let errorMsg = "Lưu lịch chiếu thất bại. Vui lòng thử lại.";
+      let errorMsg = TEXT.SHOWTIME.ERR_GENERIC_SAVE;
       if (err && typeof err === "object" && "response" in err) {
         const axiosErr = err as { response?: { data?: { message?: string; errorCode?: string } } };
         const beMessage = axiosErr.response?.data?.message;
@@ -638,7 +624,7 @@ export default function ManageShowtime() {
   const handleCinemaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nextVal = e.target.value;
     if (isDirty) {
-      const confirm = window.confirm("⚠️ Bạn có các thay đổi chưa lưu trên lịch chiếu. Đổi rạp chiếu sẽ làm mất các thay đổi này. Tiếp tục?");
+      const confirm = window.confirm(TEXT.SHOWTIME.CONFIRM_CHANGE_CINEMA);
       if (!confirm) return;
     }
     setSelectedCinemaId(nextVal);
@@ -649,7 +635,7 @@ export default function ManageShowtime() {
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const nextVal = e.target.value;
     if (isDirty) {
-      const confirm = window.confirm("⚠️ Bạn có các thay đổi chưa lưu trên lịch chiếu. Đổi ngày sẽ làm mất các thay đổi này. Tiếp tục?");
+      const confirm = window.confirm(TEXT.SHOWTIME.CONFIRM_CHANGE_DATE);
       if (!confirm) return;
     }
     setSelectedDate(nextVal);
@@ -666,7 +652,7 @@ export default function ManageShowtime() {
       <div className="p-6 bg-[#0A0A0C] min-h-screen text-white font-['Urbanist'] flex items-center justify-center">
         <div className="text-center">
           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-400 text-sm">Đang đồng bộ dữ liệu lịch chiếu...</p>
+          <p className="text-gray-400 text-sm">{TEXT.SHOWTIME.SYNCING}</p>
         </div>
       </div>
     );
@@ -676,68 +662,88 @@ export default function ManageShowtime() {
     <div className="p-6 bg-[#0A0A0C] min-h-screen text-white font-['Urbanist'] select-none">
       {/* TIÊU ĐỀ */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold uppercase tracking-wider">Quản Lý Lịch Chiếu</h1>
-        <p className="text-xs text-gray-400 mt-1">Nắm kéo phim thả vào khung giờ để sắp xếp lịch chiếu trực quan</p>
+        <h1 className="text-2xl font-bold uppercase tracking-wider">{TEXT.SHOWTIME.TITLE}</h1>
+        <p className="text-xs text-gray-400 mt-1">{TEXT.SHOWTIME.SUBTITLE}</p>
       </div>
 
       {/* BỘ LỌC RẠP + NGÀY */}
       <div className="flex gap-4 mb-6 bg-[#111C44] p-4 rounded-xl border border-gray-800 shadow-xl flex-wrap">
-        <select
-          value={selectedCinemaId}
-          onChange={handleCinemaChange}
-          className="bg-[#0F172A] border border-gray-700 rounded-lg px-4 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-        >
-          {cinemas.length === 0 && <option value="">Không có rạp nào</option>}
-          {cinemas.map((c) => (
-            <option key={c.cinemaId} value={c.cinemaId}>
-              {c.cinemaName}
-            </option>
-          ))}
-        </select>
+        <div className="relative group">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-blue-400 group-hover:text-blue-300 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1v1H9V7zm5 0h1v1h-1V7zm-5 4h1v1H9v-1zm5 0h1v1h-1v-1zm-5 4h1v1H9v-1zm5 0h1v1h-1v-1z" />
+            </svg>
+          </div>
+          <select
+            value={selectedCinemaId}
+            onChange={handleCinemaChange}
+            className="pl-9 pr-10 py-2.5 appearance-none bg-gradient-to-r from-[#1E293B] to-[#0F172A] border border-gray-700 hover:border-blue-500/40 rounded-xl text-sm font-medium text-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all duration-300 shadow-md hover:shadow-lg group-hover:shadow-blue-500/20"
+          >
+            {cinemas.length === 0 && <option value="" className="bg-[#0F172A] text-white">{TEXT.SHOWTIME.NO_CINEMAS}</option>}
+            {cinemas.map((c) => (
+              <option key={c.cinemaId} value={c.cinemaId} className="bg-[#0F172A] text-white">
+                {c.cinemaName}
+              </option>
+            ))}
+          </select>
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-blue-300 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
 
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={handleDateChange}
-          className={`bg-[#0F172A] border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition ${isPastDate
-              ? 'border-amber-500/50 text-amber-400'
-              : 'border-gray-700 text-gray-200'
-            }`}
-        />
+        <div className="relative group">
+          <div className={`absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none transition-colors ${isPastDate ? 'text-amber-500' : 'text-blue-400 group-hover:text-blue-300'}`}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={handleDateChange}
+            style={{ colorScheme: "dark" }}
+            className={`pl-9 pr-3 py-2 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all duration-300 shadow-md hover:shadow-lg ${isPastDate
+                ? 'bg-amber-950/20 border border-amber-500/30 text-amber-400 focus:ring-amber-500'
+                : 'bg-gradient-to-r from-[#1E293B] to-[#0F172A] border border-gray-700 hover:border-blue-500/40 text-blue-50'
+              }`}
+          />
+        </div>
 
         {/* Cảnh báo ngày quá khứ */}
         {isPastDate && (
           <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 px-3 py-1.5 rounded-lg text-amber-400 text-xs font-semibold">
             <span>⚠️</span>
-            <span>Ngày đã qua — chỉ xem, không thể chỉnh sửa lịch</span>
+            <span>{TEXT.SHOWTIME.PAST_DATE_WARNING}</span>
           </div>
         )}
 
         {isDirty && !isPastDate && (
           <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg ml-4">
             <span className="text-xs text-amber-400 font-semibold flex items-center gap-1">
-              ⚠️ Có thay đổi chưa lưu
+              {TEXT.SHOWTIME.UNSAVED_CHANGES_WARNING}
             </span>
             <button
               onClick={handleSaveChanges}
               disabled={actionLoading}
               className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white rounded transition shadow-md"
             >
-              {actionLoading ? "Đang lưu..." : "💾 Lưu Lịch Chiếu"}
+              {actionLoading ? TEXT.SHOWTIME.BTN_SAVING : TEXT.SHOWTIME.BTN_SAVE_SCHEDULE}
             </button>
             <button
               onClick={handleCancelChanges}
               disabled={actionLoading}
               className="px-3 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-xs font-bold text-white rounded transition"
             >
-              Hủy
+              {TEXT.SHOWTIME.BTN_CANCEL}
             </button>
           </div>
         )}
 
         <div className="flex items-center gap-2 ml-auto text-xs text-gray-500">
           <span className="inline-block w-3 h-3 rounded bg-blue-500/40 border border-blue-500/30"></span>
-          Giá vé mặc định: {DEFAULT_BASE_PRICE.toLocaleString("vi-VN")}đ
+          {TEXT.SHOWTIME.DEFAULT_TICKET_PRICE} {DEFAULT_BASE_PRICE.toLocaleString("vi-VN")}đ
         </div>
       </div>
 
@@ -748,8 +754,8 @@ export default function ManageShowtime() {
         <div id="timeline-scroll-wrapper" className="col-span-3 bg-[#111C44] border border-gray-800 rounded-2xl shadow-2xl overflow-x-auto class-scroll-custom max-w-full">
           {filteredRooms.length === 0 ? (
             <div className="p-12 text-center text-gray-500">
-              <p className="text-lg font-semibold mb-2">Không có phòng chiếu</p>
-              <p className="text-sm">Rạp này chưa có phòng chiếu nào hoạt động, hoặc chưa chọn rạp.</p>
+              <p className="text-lg font-semibold mb-2">{TEXT.SHOWTIME.NO_ROOMS_TITLE}</p>
+              <p className="text-sm">{TEXT.SHOWTIME.NO_ROOMS_DESC}</p>
             </div>
           ) : (
             <div style={{ width: `${192 + TOTAL_HOURS * HOUR_WIDTH}px` }} className="flex flex-col">
@@ -757,7 +763,7 @@ export default function ManageShowtime() {
               {/* 1️⃣ TRỤC THỜI GIAN (HEADER) */}
               <div className="flex border-b border-gray-800 bg-blue-950/20 text-xs text-gray-400 font-bold uppercase h-12 items-center">
                 <div className="w-48 h-full flex items-center justify-center border-r border-gray-800 bg-[#111C44] sticky left-0 z-40 shrink-0 text-white">
-                  Phòng / Giờ
+                  {TEXT.SHOWTIME.HEADER_ROOM_TIME}
                 </div>
 
                 <div className="flex-1 flex h-full items-center relative">
@@ -786,14 +792,14 @@ export default function ManageShowtime() {
                     {/* Cột tên phòng ghim cứng lề trái */}
                     <div className="w-48 h-[95px] border-r border-gray-800 font-semibold text-gray-200 text-center text-sm bg-[#111C44] sticky left-0 z-30 shrink-0 shadow-md flex flex-col items-center justify-center gap-0.5">
                       <span>{room.roomName}</span>
-                      <span className="text-[9px] text-gray-500 font-normal">{room.seatCount} ghế</span>
+                      <span className="text-[9px] text-gray-500 font-normal">{room.seatCount} {TEXT.SHOWTIME.SEAT_COUNT}</span>
                     </div>
 
                     {/* Vùng nhận Drop và vẽ phim */}
                     <div
                       className={`flex-1 h-[95px] relative flex shrink-0 transition ${isPastDate
-                          ? 'bg-[#0d1637]/10 cursor-not-allowed'
-                          : 'bg-[#0d1637]/30 cursor-crosshair'
+                        ? 'bg-[#0d1637]/10 cursor-not-allowed'
+                        : 'bg-[#0d1637]/30 cursor-crosshair'
                         }`}
                       onDragOver={(e) => { if (!isPastDate) e.preventDefault(); }}
                       onDrop={(e) => { if (!isPastDate) void handleDropOnRow(e, room.roomId); }}
@@ -833,8 +839,8 @@ export default function ManageShowtime() {
                               draggable={!isPastDate}
                               onDragStart={() => { if (!isPastDate) handleDragStartFromTimeline(slot, room.roomId); }}
                               className={`absolute top-3 bottom-3 rounded-xl shadow-xl border border-white/10 px-3 py-2 flex flex-col justify-between overflow-hidden transition-all pointer-events-auto ${isPastDate
-                                  ? 'cursor-default opacity-60'
-                                  : 'cursor-grab active:cursor-grabbing hover:brightness-110 hover:scale-[1.01] hover:shadow-2xl hover:z-50'
+                                ? 'cursor-default opacity-60'
+                                : 'cursor-grab active:cursor-grabbing hover:brightness-110 hover:scale-[1.01] hover:shadow-2xl hover:z-50'
                                 } ${isCurrentDragging ? 'opacity-40 z-50' : 'z-20'}`}
                               style={{ left: `${leftPx}px`, width: `${widthPx}px`, backgroundColor: slot.color }}
                             >
@@ -872,11 +878,11 @@ export default function ManageShowtime() {
         {/* DANH SÁCH PHIM CHỜ BÊN PHẢI */}
         <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-4 shadow-2xl flex flex-col max-h-[480px]">
           <h3 className="text-xs font-bold uppercase text-gray-400 tracking-wider mb-4 border-b border-gray-800 pb-3">
-            🎬 Danh Sách Phim Đang Chiếu
+            {TEXT.SHOWTIME.UNSCHEDULED_MOVIES_TITLE}
           </h3>
           {unscheduledMovies.length === 0 ? (
             <div className="text-center text-gray-500 py-6 text-sm">
-              Chưa có phim nào đang chiếu.
+              {TEXT.SHOWTIME.NO_UNSCHEDULED_MOVIES}
             </div>
           ) : (
             <div className="space-y-3 overflow-y-auto pr-1">
@@ -886,13 +892,13 @@ export default function ManageShowtime() {
                   draggable={!isPastDate}
                   onDragStart={() => { if (!isPastDate) handleDragStartFromSidebar(movie); }}
                   className={`p-3.5 rounded-xl border border-gray-800 bg-[#0F172A] transition-all flex flex-col justify-between ${isPastDate
-                      ? 'cursor-not-allowed opacity-50'
-                      : 'hover:border-gray-600 cursor-grab active:cursor-grabbing hover:translate-x-1'
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'hover:border-gray-600 cursor-grab active:cursor-grabbing hover:translate-x-1'
                     }`}
                 >
                   <div className="text-sm font-bold text-white">{movie.movieNameVn}</div>
                   <div className="text-[10px] text-gray-400 mt-1 flex justify-between items-center">
-                    <span>⏱️ {movie.duration} phút ({movie.ageRating})</span>
+                    <span>⏱️ {movie.duration} {TEXT.SHOWTIME.MINUTES} ({movie.ageRating})</span>
                     <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded text-white shadow-sm" style={{ backgroundColor: movie.color }}>
                       {isPastDate ? 'Chỉ Xem' : 'Kéo Thả'}
                     </span>
