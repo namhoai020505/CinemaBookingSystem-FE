@@ -59,7 +59,7 @@ export interface RoomResponse {
 export interface MovieResponse {
   id: string;
   movieNameVn: string;
-  genre?: string;
+  genres?: string[];
   duration: number;
   imagePoster?: string;
   ageRating?: string;
@@ -74,7 +74,17 @@ interface ApiEnvelope<T> {
   errorCode?: string;
 }
 
-// Gom API quản lý lịch chiếu và dữ liệu phụ trợ cho màn ManageShowtime.
+/** Kớp cấu trúc PagedList<T> từ BE */
+interface PagedListEnvelope<T> {
+  items: T[];
+  pageIndex: number;
+  pageSize: number;
+  totalCount: number;
+}
+
+// ============================================================
+// Service methods
+// ============================================================
 export const showtimeService = {
   // GET /api/showtimes: lấy toàn bộ suất chiếu.
   getShowtimes: async (): Promise<ShowtimeResponse[]> => {
@@ -111,11 +121,12 @@ export const showtimeService = {
     return envelope?.data ?? [];
   },
 
-  // GET /api/movies?status=NOW_SHOWING: lấy phim đang chiếu để tạo lịch.
+  /** GET /api/movies – BE trả về PagedList<MovieResponse> */
   getMoviesForScheduling: async (): Promise<MovieResponse[]> => {
     const envelope = await axiosInstance.get('/api/movies', {
-      params: { status: 'NOW_SHOWING' },
-    }) as unknown as ApiEnvelope<MovieResponse[]>;
-    return envelope?.data ?? [];
+      params: { pageSize: 200 }  // Lấy đủ phim, không bị cắt trang
+    }) as unknown as ApiEnvelope<PagedListEnvelope<MovieResponse>>;
+    // BE trả về { data: { items: [...], pageIndex, pageSize, totalCount } }
+    return envelope?.data?.items ?? [];
   },
 };
