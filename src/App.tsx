@@ -1,5 +1,3 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import RequireAuth from './components/RequireAuth';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
 import AdminLayout from './layouts/admin/AdminLayout';
@@ -34,6 +32,8 @@ const RootLayout = () => {
   useIdleTimeout(10);
   return <Outlet />;
 };
+
+
 
 // Sử dụng createBrowserRouter (Data Router) để hỗ trợ useBlocker
 const router = createBrowserRouter([

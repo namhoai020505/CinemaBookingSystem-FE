@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { FaPaperPlane, FaRegStar, FaStar, FaUserCircle } from "react-icons/fa";
-import { FiArrowLeft, FiClock, FiGlobe, FiCalendar, FiFilm, FiPlay } from "react-icons/fi";
+import { FiArrowLeft, FiClock, FiGlobe, FiCalendar, FiFilm, FiPlay, FiUser } from "react-icons/fi";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api from "../../lib/api";
 import { getAccessToken, getRoleFromAccessToken, isAccessTokenExpired, isCustomerRole } from "../../lib/auth";
@@ -869,6 +869,7 @@ export default function MovieShowtimes() {
 
   // Luôn chọn sẵn vé đầu tiên hợp lệ để payload review có bookingId đúng cho BE kiểm tra.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedReviewBookingId((currentBookingId) => {
       if (
         currentBookingId &&
@@ -888,6 +889,7 @@ export default function MovieShowtimes() {
 
   // Điều hướng sang trang chọn ghế, truyền kèm movie/showtime để tránh màn loading thiếu dữ liệu.
   const handleSelectShowtime = (slot: ShowtimeSlot) => {
+    // eslint-disable-next-line react-hooks/purity
     if (!isShowtimeVisibleToCustomer(slot, Date.now())) {
       setErrorMessage("Suất chiếu này đã quá giờ. Vui lòng chọn suất chiếu khác.");
       return;

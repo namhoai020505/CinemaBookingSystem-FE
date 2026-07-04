@@ -108,23 +108,6 @@ const getGenreValue = (item: MovieApiItem) => {
   return "Đang cập nhật";
 };
 
-// Chuyển đường dẫn poster tương đối từ backend thành URL đầy đủ cho trình duyệt.
-const resolvePosterUrl = (value: string) => {
-  const posterUrl = value.trim();
-  if (!posterUrl) {
-    return "";
-  }
-
-  if (/^(https?:|data:|blob:)/i.test(posterUrl)) {
-    return posterUrl;
-  }
-
-  if (posterUrl.startsWith("/")) {
-    return `${API_ORIGIN}${posterUrl}`;
-  }
-
-  return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
-};
 
 // Bóc danh sách phim từ nhiều kiểu response khác nhau của API.
 const extractMovieList = (response: unknown): MovieApiItem[] => {
@@ -420,11 +403,10 @@ export default function Home() {
                 aria-label={`Go to slide ${index + 1}`}
                 aria-current={activeSlideIndex === index}
                 onClick={() => goToSlide(index)}
-                className={`h-3 w-3 rounded-full border border-white/80 transition ${
-                  activeSlideIndex === index
-                    ? "bg-white"
-                    : "bg-transparent hover:bg-white/50"
-                }`}
+                className={`h-3 w-3 rounded-full border border-white/80 transition ${activeSlideIndex === index
+                  ? "bg-white"
+                  : "bg-transparent hover:bg-white/50"
+                  }`}
               />
             ))}
           </div>

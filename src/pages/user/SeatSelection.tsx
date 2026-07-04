@@ -497,22 +497,6 @@ const formatDateTime = (value?: string | null) => {
     });
 };
 
-// Chuyển poster path tương đối thành URL đầy đủ.
-const resolvePosterUrl = (value?: string | null) => {
-  const posterUrl = value?.trim();
-  if (!posterUrl) {
-    return "";
-  }
-
-  if (/^(https?:|data:|blob:)/i.test(posterUrl)) {
-    return posterUrl;
-  }
-
-  if (posterUrl.startsWith("/")) {
-    return `${API_ORIGIN}${posterUrl}`;
-  }
-
-
 // Label tiếng Việt cho từng loại ghế.
 const getSeatTypeLabel = (type: SeatType) => {
   if (type === "VIP") {
@@ -1291,8 +1275,8 @@ export default function SeatSelection() {
                                   void handleSelectSeat(seat);
                                 }}
                                 className={`group relative flex h-8 shrink-0 items-center justify-center rounded-md border transition-all sm:h-9 ${seat.type === "SWEETBOX"
-                                    ? "w-14 sm:w-16 xl:w-[70px]"
-                                    : "w-8 sm:w-9"
+                                  ? "w-14 sm:w-16 xl:w-[70px]"
+                                  : "w-8 sm:w-9"
                                   } ${getSeatStyles(seat)}`}
                               >
                                 {renderSeatIcon(seat)}
@@ -1373,8 +1357,8 @@ export default function SeatSelection() {
                 disabled={selectedSeats.length === 0 || submitting}
                 onClick={handleProceed}
                 className={`h-12 self-center rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all ${selectedSeats.length > 0 && !submitting
-                    ? "bg-[#FFD166] text-black hover:-translate-y-0.5 hover:bg-[#FFE7A3]"
-                    : "cursor-not-allowed bg-slate-800 text-slate-500"
+                  ? "bg-[#FFD166] text-black hover:-translate-y-0.5 hover:bg-[#FFE7A3]"
+                  : "cursor-not-allowed bg-slate-800 text-slate-500"
                   }`}
               >
                 {submitting ? "Đang giữ..." : "Tiếp tục"}
