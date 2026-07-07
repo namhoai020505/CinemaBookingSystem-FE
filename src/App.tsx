@@ -82,6 +82,7 @@ const router = createBrowserRouter([
               { path: 'staff', element: <ManageStaff /> },
               { path: 'rooms', element: <ManageRooms /> },
               { path: 'rooms/:roomId/seats', element: <ManageSeatLayout /> },
+              { path: 'reviews', element: <ReviewModeration /> },
             ],
           },
         ],

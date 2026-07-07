@@ -95,7 +95,7 @@ export const reviewService = {
   getModerationQueue: async () => {
     try {
       const response = (await api.get(
-        '/api/reviews/admin/moderation-queue',
+        '/api/reviews/admin/flagged',
       )) as unknown as ApiResponse<ReviewQueueItem[]>;
       return response;
     } catch (error) {
