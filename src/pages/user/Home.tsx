@@ -15,6 +15,10 @@ import {
 } from "../../lib/auth";
 import { getMediaUrl } from "../../lib/media";
 import { movieService } from "../../services/movieService";
+import {
+  showtimeService,
+  type ShowtimeResponse,
+} from "../../services/showtimeService";
 
 type HeroSlide = {
   id: string;
@@ -37,6 +41,7 @@ type MovieApiItem = Record<string, unknown>;
 
 const AUTO_PLAY_MS = 4500;
 const SLIDE_TRANSITION_MS = 700;
+const BUY_TICKET_VISIBILITY_REFRESH_MS = 30_000;
 
 const mockHeroSlides: HeroSlide[] = [
   { id: "slide-1", imageUrl: slide1, alt: "Movie banner slide 1" },
@@ -134,6 +139,37 @@ const extractMovieList = (response: unknown): MovieApiItem[] => {
   return [];
 };
 
+const getShowtimeTimestamp = (value: string) => {
+  if (!value) {
+    return 0;
+  }
+
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+
+  if (match) {
+    const [, year, month, date, hour, minute] = match;
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(date),
+      Number(hour),
+      Number(minute),
+    ).getTime();
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
+const isBookableShowtime = (showtime: ShowtimeResponse, currentTimeMs: number) => {
+  const startTimestamp = getShowtimeTimestamp(showtime.startTime);
+
+  return showtime.status?.toUpperCase() === "OPEN" && startTimestamp > currentTimeMs;
+};
+
+// Map dữ liệu phim backend sang model card mà trang chủ đang render.
 const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
   const movieId = getStringValue(movie, ["movieId", "id", "movieID", "MovieId"]);
   const title =
@@ -167,32 +203,64 @@ export default function Home() {
   const [slideIndex, setSlideIndex] = useState(1);
   const [withTransition, setWithTransition] = useState(true);
   const [movies, setMovies] = useState<Movie[]>([]);
+  const [showtimes, setShowtimes] = useState<ShowtimeResponse[]>([]);
   const [loadingMovies, setLoadingMovies] = useState(true);
   const [movieError, setMovieError] = useState("");
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [selectedShowtimeMovie, setSelectedShowtimeMovie] =
     useState<Movie | null>(null);
 
+  // Tải danh sách phim và lịch chiếu để chỉ hiện nút mua vé khi phim có suất chiếu còn bán.
   useEffect(() => {
-    const fetchMovies = async () => {
+    const fetchMoviesAndShowtimes = async () => {
       try {
         setLoadingMovies(true);
         setMovieError("");
 
-        const response = await movieService.getActiveMovies();
-        const moviesData = extractMovieList(response);
+        const [moviesResponse, showtimesResponse] = await Promise.all([
+          movieService.getActiveMovies(),
+          showtimeService.getShowtimes(),
+        ]);
+
+        const moviesData = extractMovieList(moviesResponse);
         setMovies(moviesData.map(mapApiMovieToCard));
+        setShowtimes(showtimesResponse);
       } catch (error) {
         console.error("Lỗi lấy danh sách phim:", error);
         setMovies([]);
+        setShowtimes([]);
         setMovieError("Không tải được danh sách phim từ hệ thống.");
       } finally {
         setLoadingMovies(false);
       }
     };
-    fetchMovies();
+
+    void fetchMoviesAndShowtimes();
   }, []);
 
-  // Save scroll position when user scrolls the Home page
+  // Tự refresh điều kiện hiện nút mua vé khi suất chiếu gần nhất vừa quá giờ.
+  useEffect(() => {
+    const timerId = window.setInterval(
+      () => setCurrentTimeMs(Date.now()),
+      BUY_TICKET_VISIBILITY_REFRESH_MS,
+    );
+
+    return () => window.clearInterval(timerId);
+  }, []);
+
+  const bookableMovieIds = useMemo(() => {
+    const movieIds = new Set<string>();
+
+    showtimes.forEach((showtime) => {
+      if (isBookableShowtime(showtime, currentTimeMs)) {
+        movieIds.add(String(showtime.movieId));
+      }
+    });
+
+    return movieIds;
+  }, [currentTimeMs, showtimes]);
+
+  // Lưu vị trí scroll để khi quay lại từ flow đặt vé vẫn đứng gần card cũ.
   useEffect(() => {
     const handleScroll = () => {
       sessionStorage.setItem("home-scroll-y", String(window.scrollY));
@@ -479,17 +547,18 @@ export default function Home() {
                     <span className="text-white/80">{movie.duration}</span>
                   </p>
 
-                  <button
-                    type="button"
-                    disabled={!movie.movieId}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleBuyTicket(movie);
-                    }}
-                    className="mt-5 h-10 w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] text-xs font-extrabold uppercase text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Mua vé
-                  </button>
+                  {movie.movieId && bookableMovieIds.has(String(movie.movieId)) ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleBuyTicket(movie);
+                      }}
+                      className="mt-5 h-10 w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] text-xs font-extrabold uppercase text-black transition hover:brightness-105"
+                    >
+                      Mua vé
+                    </button>
+                  ) : null}
                 </article>
               ))
             )}
