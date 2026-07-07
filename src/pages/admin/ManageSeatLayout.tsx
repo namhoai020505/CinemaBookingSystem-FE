@@ -635,7 +635,6 @@ export default function ManageSeatLayout() {
     }
     stats.totalCapacity = stats.activeNormal + stats.activeVip + stats.activeSweetbox * 2;
     stats.total = stats.normal + stats.vip + stats.sweetbox * 2;
-    stats.sweetbox = stats.sweetbox * 2;
     return stats;
   })();
 
@@ -857,8 +856,8 @@ export default function ManageSeatLayout() {
               <button
                 onClick={() => setShowInactiveSeats((v) => !v)}
                 className={`mt-3 w-full py-2 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-2 ${showInactiveSeats
-                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25'
-                    : 'bg-gray-800/50 text-gray-400 border-gray-700 hover:bg-gray-700'
+                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25'
+                  : 'bg-gray-800/50 text-gray-400 border-gray-700 hover:bg-gray-700'
                   }`}
               >
                 {showInactiveSeats ? TEXT.SEAT_LAYOUT.BTN_HIDE_INACTIVE : TEXT.SEAT_LAYOUT.BTN_SHOW_INACTIVE.replace('{0}', String(totalInactiveCount))}
