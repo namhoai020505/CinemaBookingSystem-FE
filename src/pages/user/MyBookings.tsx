@@ -26,7 +26,6 @@ const FILTERS: { id: BookingFilter; label: string }[] = [
   { id: "PAID", label: "Đã thanh toán" },
 ];
 
-// Chuẩn hóa datetime backend để parse ổn định cả khi thiếu Z.
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";
@@ -35,17 +34,14 @@ const normalizeBackendDate = (value?: string | null) => {
   return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
 };
 
-// Parse datetime backend thành timestamp, trả 0 nếu không hợp lệ.
 const parseBackendDate = (value?: string | null) => {
   const timestamp = Date.parse(normalizeBackendDate(value));
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
-// Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
-// Format đầy đủ ngày giờ cho thông tin booking.
 const formatDateTime = (value?: string | null) => {
   const timestamp = parseBackendDate(value);
 
@@ -59,7 +55,6 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-// Format ngày ngắn dùng trong card vé.
 const formatShortDate = (value?: string | null) => {
   const timestamp = parseBackendDate(value);
 
@@ -73,7 +68,6 @@ const formatShortDate = (value?: string | null) => {
   });
 };
 
-// Lấy thứ trong tuần của suất chiếu.
 const formatWeekday = (value?: string | null) => {
   const timestamp = parseBackendDate(value);
 
@@ -86,7 +80,6 @@ const formatWeekday = (value?: string | null) => {
   });
 };
 
-// Lấy giờ chiếu ngắn HH:mm.
 const formatShortTime = (value?: string | null) => {
   const timestamp = parseBackendDate(value);
 
@@ -100,7 +93,6 @@ const formatShortTime = (value?: string | null) => {
   });
 };
 
-// Rút gọn mã booking dài để card dễ nhìn hơn.
 const getShortBookingId = (bookingId: string) => {
   if (bookingId.length <= 18) {
     return bookingId;
@@ -109,7 +101,6 @@ const getShortBookingId = (bookingId: string) => {
   return `${bookingId.slice(0, 10)}...${bookingId.slice(-6)}`;
 };
 
-// Trả metadata hiển thị badge theo trạng thái booking.
 const getStatusMeta = (status: string) => {
   const normalizedStatus = status.toUpperCase();
 
@@ -158,7 +149,6 @@ const getStatusMeta = (status: string) => {
   };
 };
 
-// Hiển thị thời gian còn lại để thanh toán booking pending.
 const getPaymentDeadlineLabel = (expiredAt?: string | null) => {
   const expiredTimestamp = parseBackendDate(expiredAt);
 
@@ -183,22 +173,18 @@ const getPaymentDeadlineLabel = (expiredAt?: string | null) => {
   return `Còn ${minutes} phút để thanh toán`;
 };
 
-// Booking còn chờ thanh toán thì hiện nút tiếp tục thanh toán.
 const isPendingPayment = (booking: BookingSummary) =>
   booking.status.toUpperCase() === "PENDING_PAYMENT";
 
-// Booking đã thanh toán thì được tính vào thống kê đã mua/tổng chi.
 const isPaid = (booking: BookingSummary) =>
   booking.status.toUpperCase() === "PAID";
 
-// Trang "Vé của tôi": hiển thị lịch sử booking, filter trạng thái và nút thanh toán tiếp.
 export default function MyBookings() {
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [activeFilter, setActiveFilter] = useState<BookingFilter>("ALL");
 
-  // Lấy danh sách booking của user hiện tại từ backend.
   useEffect(() => {
     const fetchMyBookings = async () => {
       try {
@@ -223,7 +209,6 @@ export default function MyBookings() {
     void fetchMyBookings();
   }, []);
 
-  // Sắp xếp booking mới nhất lên trước.
   const sortedBookings = useMemo(
     () =>
       [...bookings].sort(
@@ -233,7 +218,6 @@ export default function MyBookings() {
     [bookings],
   );
 
-  // Ẩn các booking pending đã hết hạn theo rule trong bookingService.
   const visibleBookings = useMemo(
     () =>
       sortedBookings.filter(
@@ -242,7 +226,6 @@ export default function MyBookings() {
     [sortedBookings],
   );
 
-  // Lọc danh sách theo tab user đang chọn.
   const filteredBookings = useMemo(() => {
     if (activeFilter === "ALL") {
       return visibleBookings;
@@ -253,7 +236,6 @@ export default function MyBookings() {
     );
   }, [activeFilter, visibleBookings]);
 
-  // Tính các số tổng ở đầu trang: tổng vé, vé chờ thanh toán, tổng chi.
   const stats = useMemo(() => {
     const paidBookings = visibleBookings.filter(isPaid);
     const pendingBookings = visibleBookings.filter(isPendingPayment);

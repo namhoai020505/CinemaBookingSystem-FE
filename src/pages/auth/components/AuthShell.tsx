@@ -24,7 +24,6 @@ type GoogleLoginButtonProps = {
   isLoading?: boolean;
 };
 
-// Hiển thị tab Đăng nhập / Đăng ký và báo mode được chọn về controller.
 export const AuthTabs = ({ authMode, onSwitchMode }: AuthTabsProps) => (
   <div className="flex overflow-hidden rounded-t-lg border border-gray-700 bg-[#0F172A]">
     <button
@@ -52,7 +51,6 @@ export const AuthTabs = ({ authMode, onSwitchMode }: AuthTabsProps) => (
   </div>
 );
 
-// Gom thông báo thành công và lỗi để form auth chỉ cần truyền message vào một chỗ.
 export const AuthFeedback = ({ successMessage, error }: AuthFeedbackProps) => (
   <>
     {successMessage ? (
@@ -69,7 +67,6 @@ export const AuthFeedback = ({ successMessage, error }: AuthFeedbackProps) => (
   </>
 );
 
-// Nút submit dùng chung cho login, đăng ký, xác thực OTP và đặt lại mật khẩu.
 export const AuthSubmitButton = ({
   isLoading,
   isVerifyStep,
@@ -98,7 +95,15 @@ export const AuthSubmitButton = ({
   </button>
 );
 
-// Nút Google hiển thị theo style của app nhưng vẫn gọi GoogleLogin thật để lấy ID token.
+/**
+ * GoogleLoginButton renders a custom-styled button that triggers the Google
+ * One-Tap / popup flow from @react-oauth/google. The hidden <GoogleLogin>
+ * component provides the real Google OAuth button; our visible button clicks
+ * its inner <div> to open the popup programmatically.
+ *
+ * `credential` returned by onSuccess is a signed Google ID Token (JWT) —
+ * exactly what the backend expects in POST /api/auth/google-login { idToken }.
+ */
 export const GoogleLoginButton = ({ onSuccess, isLoading = false }: GoogleLoginButtonProps) => {
   return (
     <div className={`mt-2 flex justify-center w-full ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
@@ -120,3 +125,5 @@ export const GoogleLoginButton = ({ onSuccess, isLoading = false }: GoogleLoginB
     </div>
   );
 };
+
+

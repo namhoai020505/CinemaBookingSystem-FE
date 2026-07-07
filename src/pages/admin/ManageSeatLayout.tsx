@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { FaChair, FaCouch } from 'react-icons/fa';
 import { roomService } from '../../services/roomService';
 import type { RoomResponse, SeatResponse } from '../../services/roomService';
+import { TEXT } from '../../constants/vi';
 
 // ============================================================
 // Constants
@@ -14,7 +15,6 @@ const SEAT_TYPES = [
   { id: 'SEAT_TYPE_SWEETBOX', label: 'Sweetbox', color: '#EC4899', hoverColor: '#F472B6', selectedBorder: '#F9A8D4' },
 ] as const;
 
-// Lấy cấu hình màu/label của từng loại ghế để dùng lại ở grid và legend.
 const getSeatColor = (seatTypeId: string) => {
   const found = SEAT_TYPES.find((t) => t.id === seatTypeId);
   return found ?? SEAT_TYPES[0];
@@ -23,7 +23,6 @@ const getSeatColor = (seatTypeId: string) => {
 // ============================================================
 // Component
 // ============================================================
-// Trang cấu hình sơ đồ ghế cho một phòng chiếu cụ thể.
 export default function ManageSeatLayout() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
@@ -64,7 +63,6 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Data fetching
   // ──────────────────────────────────────────
-  // Tải thông tin phòng và danh sách ghế hiện tại của phòng.
   const fetchData = useCallback(async () => {
     if (!roomId) return;
     try {
@@ -76,13 +74,12 @@ export default function ManageSeatLayout() {
       setRoom(roomData);
       setSeats(seatsData);
     } catch (err) {
-      toast.error('Không thể tải dữ liệu phòng chiếu.');
+      toast.error(TEXT.SEAT_LAYOUT.ERR_FETCH_DATA);
     } finally {
       setLoading(false);
     }
   }, [roomId]);
 
-  // Gọi fetchData khi roomId thay đổi để luôn hiển thị đúng phòng đang quản lý.
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
@@ -126,7 +123,6 @@ export default function ManageSeatLayout() {
     return sortedRows;
   })();
 
-  // Số cột lớn nhất giúp căn chỉnh header/grid ngay cả khi các hàng không đều nhau.
   const maxCols = seatGrid.reduce((max, [, rowSeats]) => Math.max(max, rowSeats.length), 0);
   const visibleSeats = seatGrid.flatMap(([, rowSeats]) => rowSeats);
 
@@ -235,7 +231,6 @@ export default function ManageSeatLayout() {
     updateSelection(nextSelection, true);
   };
 
-  // Toggle chọn toàn bộ ghế trong phòng.
   const selectAll = () => {
     let nextSelection: Set<string>;
     if (selectedSeatIds.size === visibleSeats.length) {
@@ -263,7 +258,7 @@ export default function ManageSeatLayout() {
   const handleCopyLayout = async () => {
     if (!roomId || !selectedSourceRoomId) return;
 
-    const confirmMsg = `⚠️ CẢNH BÁO:\nHành động này sẽ XÓA toàn bộ ghế hiện tại của phòng này và sao chép sơ đồ ghế từ phòng nguồn.\nBạn có chắc chắn muốn tiếp tục?`;
+    const confirmMsg = TEXT.SEAT_LAYOUT.MSG_COPY_WARN;
     if (!window.confirm(confirmMsg)) return;
 
     try {
@@ -273,7 +268,7 @@ export default function ManageSeatLayout() {
       // 1. Tải sơ đồ ghế phòng nguồn
       const sourceSeats = await roomService.getSeatMap(selectedSourceRoomId);
       if (sourceSeats.length === 0) {
-        toast.error('Phòng nguồn không có ghế nào để sao chép.');
+        toast.error(TEXT.SEAT_LAYOUT.ERR_COPY_EMPTY);
         setActionLoading(false);
         return;
       }
@@ -336,15 +331,15 @@ export default function ManageSeatLayout() {
       }
 
       if (failedSeats.length > 0) {
-        toast.warn(`Sao chép thành công. Tạo mới: ${copiedCount}, Cập nhật: ${updatedCount}, Vô hiệu hóa: ${deactivatedCount}. Thất bại ở: ${failedSeats.slice(0, 5).join(', ')}...`);
+        toast.warn(TEXT.SEAT_LAYOUT.MSG_COPY_WARN_RESULT.replace('{0}', String(copiedCount)).replace('{1}', String(updatedCount)).replace('{2}', String(deactivatedCount)).replace('{3}', failedSeats.slice(0, 5).join(', ')));
       } else {
-        toast.success(`Đã sao chép thành công sơ đồ ghế (Tạo mới: ${copiedCount}, Cập nhật: ${updatedCount}, Vô hiệu hóa: ${deactivatedCount})!`);
+        toast.success(TEXT.SEAT_LAYOUT.MSG_COPY_SUCCESS.replace('{0}', String(copiedCount)).replace('{1}', String(updatedCount)).replace('{2}', String(deactivatedCount)));
       }
 
       setSelectedSeatIds(new Set());
       await fetchData();
     } catch (err) {
-      toast.error('Sao chép sơ đồ ghế thất bại.');
+      toast.error(TEXT.SEAT_LAYOUT.ERR_COPY_FAIL);
     } finally {
       setActionLoading(false);
     }
@@ -353,14 +348,11 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Auto generate seats
   // ──────────────────────────────────────────
-  // Sinh lại sơ đồ ghế theo số hàng/cột/type admin nhập.
   const handleGenerateSeats = async () => {
     if (!roomId) return;
 
     if (seats.length > 0) {
-      const confirmed = window.confirm(
-        `⚠️ Bạn có muốn sinh thêm các ghế mới trong sơ đồ ${genRows}×${genCols} không? Các ghế hiện tại sẽ được giữ nguyên.`
-      );
+      const confirmed = window.confirm(TEXT.SEAT_LAYOUT.MSG_GEN_CONFIRM.replace('{0}', String(genRows)).replace('{1}', String(genCols)));
       if (!confirmed) return;
     }
 
@@ -398,9 +390,7 @@ export default function ManageSeatLayout() {
       }
 
       if (projectedCapacity > (room?.capacity ?? 0)) {
-        toast.error(
-          `Không thể sinh thêm ghế vì tổng số chỗ ngồi sau khi sinh (${projectedCapacity}) sẽ vượt quá sức chứa tối đa của phòng (${room?.capacity} chỗ).`
-        );
+        toast.error(TEXT.SEAT_LAYOUT.ERR_GEN_CAPACITY.replace('{0}', String(projectedCapacity)).replace('{1}', String(room?.capacity)));
         setActionLoading(false);
         return;
       }
@@ -452,19 +442,16 @@ export default function ManageSeatLayout() {
       }
 
       if (createFailed.length > 0) {
-        toast.warn(
-          `Tạo/Kích hoạt được ${created} ghế (bỏ qua ${skipped} ghế hoạt động). Không thể xử lý: ${createFailed.slice(0, 8).join(', ')}${createFailed.length > 8 ? ` (+${createFailed.length - 8} nữa)` : ''}.`,
-          { autoClose: 8000 }
-        );
+        toast.warn(TEXT.SEAT_LAYOUT.MSG_GEN_WARN.replace('{0}', String(created)).replace('{1}', String(skipped)).replace('{2}', createFailed.slice(0, 8).join(', ')).replace('{3}', createFailed.length > 8 ? ` (+${createFailed.length - 8} nữa)` : ''), { autoClose: 8000 });
       } else {
-        toast.success(`Đã tạo/kích hoạt ${created} ghế thành công! (Bỏ qua ${skipped} ghế đã tồn tại và hoạt động)`);
+        toast.success(TEXT.SEAT_LAYOUT.MSG_GEN_SUCCESS.replace('{0}', String(created)).replace('{1}', String(skipped)));
       }
 
       setSelectedSeatIds(new Set());
       await fetchData();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
-      toast.error(axiosErr?.response?.data?.message ?? 'Sinh ghế thất bại. Vui lòng thử lại.');
+      toast.error(axiosErr?.response?.data?.message ?? TEXT.SEAT_LAYOUT.ERR_GEN_FAIL);
 
       await fetchData();
     } finally {
@@ -474,7 +461,7 @@ export default function ManageSeatLayout() {
 
   const handleBatchReactivate = async () => {
     if (selectedSeatIds.size === 0) {
-      toast.error('Vui lòng chọn ít nhất 1 ghế!');
+      toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_EMPTY);
       return;
     }
 
@@ -487,7 +474,7 @@ export default function ManageSeatLayout() {
     }
     const newCapacity = seatStats.totalCapacity + capacityDiff;
     if (newCapacity > (room?.capacity ?? 0)) {
-      toast.error(`Không thể kích hoạt các ghế này vì tổng số chỗ ngồi sau khi kích hoạt (${newCapacity}) sẽ vượt quá sức chứa tối đa của phòng (${room?.capacity} chỗ).`);
+      toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_CAPACITY.replace('{0}', String(newCapacity)).replace('{1}', String(room?.capacity)));
       return;
     }
 
@@ -514,82 +501,27 @@ export default function ManageSeatLayout() {
       }
 
       if (failed.length > 0) {
-        toast.warn(
-          `Kích hoạt được ${reactivated}/${selectedSeatIds.size} ghế. ` +
-          `Thất bại: ${failed.slice(0, 6).join(', ')}${failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''}.`,
-          { autoClose: 8000 }
-        );
+        toast.warn(TEXT.SEAT_LAYOUT.MSG_REACTIVATE_WARN.replace('{0}', String(reactivated)).replace('{1}', String(selectedSeatIds.size)).replace('{2}', failed.slice(0, 6).join(', ')).replace('{3}', failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''), { autoClose: 8000 });
       } else {
-        toast.success(`Đã kích hoạt thành công ${reactivated} ghế!`);
+        toast.success(TEXT.SEAT_LAYOUT.MSG_REACTIVATE_SUCCESS.replace('{0}', String(reactivated)));
       }
 
       setSelectedSeatIds(new Set());
       await fetchData();
     } catch (err) {
-      toast.error('Kích hoạt thất bại.');
+      toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_FAIL);
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Đổi loại ghế cho toàn bộ ghế đang được chọn.
-  // Sweetbox chiếm 2 cột liền kề:
-  //   - Sweetbox → Normal/VIP: tạo thêm ghế tại cột kế bên
-  //   - Normal/VIP → Sweetbox: nếu ghế kề cũng được chọn thì consume nó;
-  //     KHÔNG tự động vô hiệu ghế kề ngoài selection để tránh side effects.
+  // ──────────────────────────────────────────
+  // Batch operations
+  // ──────────────────────────────────────────
   const handleBatchChangeType = async () => {
     if (selectedSeatIds.size === 0) {
-      toast.error('Vui lòng chọn ít nhất 1 ghế!');
+      toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_EMPTY);
       return;
-    }
-
-    // ── Validation riêng cho chuyển sang Sweetbox ──
-    // Bắt buộc chọn đúng bội số 2, mỗi cặp phải liền kề (cùng hàng, số cột kề nhau),
-    // và tất cả phải là ghế Normal hoặc VIP (không phải sweetbox).
-    if (batchType === 'SEAT_TYPE_SWEETBOX') {
-      const selectedList = Array.from(selectedSeatIds)
-        .map((id) => seats.find((s) => s.seatId === id))
-        .filter((s): s is SeatResponse => !!s);
-
-      // Kiểm tra tất cả đều không phải sweetbox
-      const hasSweetbox = selectedList.some((s) => s.seatTypeId === 'SEAT_TYPE_SWEETBOX');
-      if (hasSweetbox) {
-        toast.error('Không thể chuyển ghế Sweetbox sang Sweetbox. Vui lòng chỉ chọn ghế Normal hoặc VIP.');
-        return;
-      }
-
-      // Kiểm tra số lượng phải là bội số 2
-      if (selectedList.length % 2 !== 0) {
-        toast.error('Để chuyển sang Sweetbox, hãy chọn số chẵn ghế (mỗi 2 ghế liền kề = 1 Sweetbox).');
-        return;
-      }
-
-      // Kiểm tra từng cặp phải liền kề nhau (cùng hàng, seatNumber kề)
-      const sorted = [...selectedList].sort((a, b) => {
-        const rowCmp = a.rowLabel.localeCompare(b.rowLabel);
-        return rowCmp !== 0 ? rowCmp : a.seatNumber - b.seatNumber;
-      });
-
-      const invalidPairs: string[] = [];
-      for (let i = 0; i < sorted.length; i += 2) {
-        const left = sorted[i];
-        const right = sorted[i + 1];
-        const isAdjacent =
-          left.rowLabel === right.rowLabel &&
-          right.seatNumber === left.seatNumber + 1;
-        if (!isAdjacent) {
-          invalidPairs.push(`${left.seatCode} & ${right.seatCode}`);
-        }
-      }
-
-      if (invalidPairs.length > 0) {
-        toast.error(
-          `Các ghế sau không liền kề nhau nên không thể ghép thành Sweetbox: ${invalidPairs.join(', ')}. ` +
-          'Hãy chọn các cặp ghế nằm sát nhau cùng hàng.',
-          { autoClose: 8000 }
-        );
-        return;
-      }
     }
 
     let capacityDiff = 0;
@@ -602,134 +534,42 @@ export default function ManageSeatLayout() {
     }
     const newCapacity = seatStats.totalCapacity + capacityDiff;
     if (newCapacity > (room?.capacity ?? 0)) {
-      toast.error(`Không thể đổi loại ghế vì tổng số chỗ ngồi sau khi đổi (${newCapacity}) sẽ vượt quá sức chứa tối đa của phòng (${room?.capacity} chỗ).`);
+      toast.error(TEXT.SEAT_LAYOUT.ERR_CHANGE_TYPE_CAPACITY.replace('{0}', String(newCapacity)).replace('{1}', String(room?.capacity)));
       return;
     }
 
     try {
       setActionLoading(true);
-      let changed = 0;
-      const failed: string[] = [];
-
-      // Tiền xử lý: với Normal/VIP → Sweetbox, nếu ghế kề cũng trong selection
-      // thì đánh dấu consumed → bỏ qua ở loop chính (không chuyển nó thành sweetbox riêng)
-      const consumedSeatIds = new Set<string>();
-      if (batchType === 'SEAT_TYPE_SWEETBOX') {
-        const orderedSelected = Array.from(selectedSeatIds)
-          .map((id) => seats.find((s) => s.seatId === id))
-          .filter((s): s is SeatResponse => !!s && s.seatTypeId !== 'SEAT_TYPE_SWEETBOX')
-          .sort((a, b) => {
-            const rowCmp = a.rowLabel.localeCompare(b.rowLabel);
-            return rowCmp !== 0 ? rowCmp : a.seatNumber - b.seatNumber;
-          });
-
-        for (const seat of orderedSelected) {
-          if (consumedSeatIds.has(seat.seatId)) continue;
-          const neighbor = orderedSelected.find(
-            (s) => s.rowLabel === seat.rowLabel && s.seatNumber === seat.seatNumber + 1
-          );
-          if (neighbor) consumedSeatIds.add(neighbor.seatId);
-        }
-      }
-
-      for (const seatId of Array.from(selectedSeatIds)) {
-        // Bỏ qua ghế bị consume (nó sẽ bị vô hiệu hóa khi sweetbox kề xử lý)
-        if (consumedSeatIds.has(seatId)) continue;
-
+      const promises = Array.from(selectedSeatIds).map((seatId) => {
         const seat = seats.find((s) => s.seatId === seatId);
-        if (!seat) continue;
-
-        const wasSweetbox = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX';
-        const becomingSweetbox = batchType === 'SEAT_TYPE_SWEETBOX';
-
-        try {
-          // 1. Cập nhật loại của ghế gốc
-          await roomService.updateSeat(seatId, {
-            rowLabel: seat.rowLabel,
-            seatNumber: seat.seatNumber,
-            seatTypeId: batchType,
-            isActive: seat.isActive,
-          });
-
-          // 2. Sweetbox → Normal/VIP: tạo thêm ghế ở cột kế bên (seatNumber + 1)
-          if (wasSweetbox && !becomingSweetbox) {
-            const neighborNumber = seat.seatNumber + 1;
-            const neighborSeat = seats.find(
-              (s) => s.rowLabel === seat.rowLabel && s.seatNumber === neighborNumber
-            );
-            if (neighborSeat) {
-              // Ghế kề đã tồn tại (inactive) → kích hoạt và đặt đúng loại
-              await roomService.updateSeat(neighborSeat.seatId, {
-                rowLabel: neighborSeat.rowLabel,
-                seatNumber: neighborSeat.seatNumber,
-                seatTypeId: batchType,
-                isActive: true,
-              });
-            } else {
-              // Chưa có record → tạo mới
-              await roomService.createSeat({
-                roomId: seat.roomId,
-                rowLabel: seat.rowLabel,
-                seatNumber: neighborNumber,
-                seatTypeId: batchType,
-              });
-            }
-          }
-
-          // 3. Normal/VIP → Sweetbox: chỉ vô hiệu ghế kề nếu nó nằm trong selection
-          //    (đã được đánh dấu consumed ở bước tiền xử lý).
-          //    KHÔNG tự động vô hiệu ghế kề ngoài selection.
-          if (!wasSweetbox && becomingSweetbox) {
-            const neighborNumber = seat.seatNumber + 1;
-            const neighborSeat = seats.find(
-              (s) => s.rowLabel === seat.rowLabel && s.seatNumber === neighborNumber
-            );
-            if (neighborSeat && consumedSeatIds.has(neighborSeat.seatId) && neighborSeat.isActive) {
-              await roomService.deleteSeat(neighborSeat.seatId);
-            }
-          }
-
-          changed++;
-        } catch {
-          failed.push(seat.seatCode);
-        }
-      }
-
-      if (failed.length > 0) {
-        toast.warn(
-          `Đổi loại được ${changed}/${selectedSeatIds.size - consumedSeatIds.size} ghế. ` +
-          `Thất bại: ${failed.slice(0, 6).join(', ')}${failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''}.`,
-          { autoClose: 8000 }
-        );
-      } else if (batchType === 'SEAT_TYPE_SWEETBOX') {
-        toast.success(`Đã chuyển thành công ${changed} ghế Sweetbox!`);
-      } else {
-        toast.success(`Đã đổi loại ${changed} ghế thành công!`);
-      }
-
+        if (!seat) return Promise.resolve();
+        return roomService.updateSeat(seatId, {
+          rowLabel: seat.rowLabel,
+          seatNumber: seat.seatNumber,
+          seatTypeId: batchType,
+          isActive: seat.isActive,
+        });
+      });
+      await Promise.all(promises);
+      toast.success(TEXT.SEAT_LAYOUT.MSG_CHANGE_TYPE_SUCCESS.replace('{0}', String(selectedSeatIds.size)));
       setSelectedSeatIds(new Set());
       await fetchData();
     } catch (err) {
-      toast.error('Cập nhật ghế thất bại.');
+      toast.error(TEXT.SEAT_LAYOUT.ERR_CHANGE_TYPE_FAIL);
     } finally {
       setActionLoading(false);
     }
   };
 
-
-
   // Backend DELETE /api/seats/{seatId} = soft-delete (set isActive = false)
   // There is no "reactivate" endpoint, so we only support deactivation.
-  // Vô hiệu hóa các ghế đã chọn để không hiển thị cho khách hàng.
   const handleBatchDeactivate = async () => {
     if (selectedSeatIds.size === 0) {
-      toast.error('Vui lòng chọn ít nhất 1 ghế!');
+      toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_EMPTY);
       return;
     }
 
-    const confirmed = window.confirm(
-      `⚠️ Bạn sắp vô hiệu hóa ${selectedSeatIds.size} ghế. Ghế đã vô hiệu hóa sẽ không hiển thị cho khách hàng. Tiếp tục?`
-    );
+    const confirmed = window.confirm(TEXT.SEAT_LAYOUT.MSG_DEACTIVATE_CONFIRM.replace('{0}', String(selectedSeatIds.size)));
     if (!confirmed) return;
 
     try {
@@ -748,74 +588,26 @@ export default function ManageSeatLayout() {
       }
 
       if (failed.length > 0) {
-        toast.warn(
-          `Vô hiệu hóa được ${deactivated}/${selectedSeatIds.size} ghế. ` +
-          `${failed.length} ghế bị chặn (đang dùng bởi suất chiếu): ${failed.slice(0, 6).join(', ')}${failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''}.`,
-          { autoClose: 8000 }
-        );
+        toast.warn(TEXT.SEAT_LAYOUT.MSG_DEACTIVATE_WARN.replace('{0}', String(deactivated)).replace('{1}', String(selectedSeatIds.size)).replace('{2}', String(failed.length)).replace('{3}', failed.slice(0, 6).join(', ')).replace('{4}', failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''), { autoClose: 8000 });
       } else {
-        toast.success(`Đã vô hiệu hóa ${deactivated} ghế!`);
+        toast.success(TEXT.SEAT_LAYOUT.MSG_DEACTIVATE_SUCCESS.replace('{0}', String(deactivated)));
       }
 
       setSelectedSeatIds(new Set());
       await fetchData();
     } catch (err) {
-      toast.error('Vô hiệu hóa thất bại.');
+      toast.error(TEXT.SEAT_LAYOUT.ERR_DEACTIVATE_FAIL);
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Xóa mềm các ghế đã chọn; backend vẫn có thể chặn nếu ghế đang liên quan suất chiếu.
-  const handleBatchDelete = async () => {
-    if (selectedSeatIds.size === 0) {
-      toast.error('Vui lòng chọn ít nhất 1 ghế!');
-      return;
-    }
-    const confirmed = window.confirm(
-      `⚠️ Bạn sắp XÓA ${selectedSeatIds.size} ghế. Hành động này không thể hoàn tác. Tiếp tục?`
-    );
-    if (!confirmed) return;
-
-    try {
-      setActionLoading(true);
-      let deleted = 0;
-      const failed: string[] = [];
-
-      for (const seatId of Array.from(selectedSeatIds)) {
-        try {
-          await roomService.deleteSeat(seatId);
-          deleted++;
-        } catch {
-          const seat = seats.find((s) => s.seatId === seatId);
-          failed.push(seat?.seatCode ?? seatId);
-        }
-      }
-
-      if (failed.length > 0) {
-        toast.warn(
-          `Xóa được ${deleted}/${selectedSeatIds.size} ghế. ` +
-          `${failed.length} ghế bị chặn (đang dùng bởi suất chiếu): ${failed.slice(0, 6).join(', ')}${failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''}.`,
-          { autoClose: 8000 }
-        );
-      } else {
-        toast.success(`Đã xóa ${deleted} ghế thành công!`);
-      }
-
-      setSelectedSeatIds(new Set());
-      await fetchData();
-    } catch (err) {
-      console.error('Lỗi xóa ghế:', err);
-      toast.error('Xóa ghế thất bại.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  // handleBatchDelete đã được hợp nhất vào handleBatchDeactivate
+  // (cả hai đều gọi soft-delete API — giữ 1 hàm tránh nhầm lẫn)
 
   // ──────────────────────────────────────────
   // Stats
   // ──────────────────────────────────────────
-  // Tính nhanh số lượng từng loại ghế để hiển thị các card thống kê.
   const seatStats = (() => {
     const stats = {
       total: 0,
@@ -843,7 +635,7 @@ export default function ManageSeatLayout() {
     }
     stats.totalCapacity = stats.activeNormal + stats.activeVip + stats.activeSweetbox * 2;
     stats.total = stats.normal + stats.vip + stats.sweetbox * 2;
-    // stats.sweetbox giữ nguyên = số ghế vật lý (mỗi ghế sweetbox chiếm 2 chỗ ngồi đã được tính trong total)
+    stats.sweetbox = stats.sweetbox * 2;
     return stats;
   })();
 
@@ -855,7 +647,7 @@ export default function ManageSeatLayout() {
       <div className="min-h-screen bg-[#0A0A0C] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-[#4318FF] border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-gray-400 font-['Urbanist']">Đang tải sơ đồ ghế...</span>
+          <span className="text-sm text-gray-400 font-['Urbanist']">{TEXT.SEAT_LAYOUT.LOADING}</span>
         </div>
       </div>
     );
@@ -869,16 +661,16 @@ export default function ManageSeatLayout() {
           onClick={() => navigate('/admin/rooms')}
           className="px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm font-semibold transition flex items-center gap-2"
         >
-          <span>←</span> Quay lại
+          <span>←</span> {TEXT.SEAT_LAYOUT.BTN_BACK}
         </button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold uppercase tracking-wider">
-            Sơ Đồ Ghế
+            {TEXT.SEAT_LAYOUT.TITLE}
           </h1>
           <p className="mt-0.5 text-xs text-gray-400">
             {room ? `${room.roomName} — ${room.cinemaName}` : `Phòng ${roomId}`}
             {room && (
-              <span className="ml-2 text-gray-500">· Sức chứa: {room.capacity}</span>
+              <span className="ml-2 text-gray-500">· {TEXT.SEAT_LAYOUT.ROOM_CAPACITY.replace('{0}', String(room.capacity))}</span>
             )}
           </p>
         </div>
@@ -894,15 +686,15 @@ export default function ManageSeatLayout() {
           {seats.length === 0 ? (
             <div className="text-center py-16">
               <div className="text-5xl mb-4">💺</div>
-              <p className="text-gray-400 text-sm mb-2">Phòng chiếu chưa có ghế nào.</p>
-              <p className="text-gray-500 text-xs">Sử dụng bảng điều khiển bên phải để sinh ghế tự động.</p>
+              <p className="text-gray-400 text-sm mb-2">{TEXT.SEAT_LAYOUT.NO_SEATS}</p>
+              <p className="text-gray-500 text-xs">{TEXT.SEAT_LAYOUT.NO_SEATS_HINT}</p>
             </div>
           ) : (
             <>
               {/* Screen indicator */}
               <div className="text-center mb-6">
                 <div className="mx-auto max-w-md h-2 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent rounded-full" />
-                <span className="text-[10px] uppercase tracking-[0.3em] text-gray-500 mt-1 block">Màn Hình</span>
+                <span className="text-[10px] uppercase tracking-[0.3em] text-gray-500 mt-1 block">{TEXT.SEAT_LAYOUT.SCREEN}</span>
               </div>
 
               {/* Seat Grid */}
@@ -918,7 +710,7 @@ export default function ManageSeatLayout() {
                           ? 'bg-[#4318FF] text-white'
                           : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-white'
                           }`}
-                        title={`Chọn tất cả hàng ${rowLabel}`}
+                        title={TEXT.SEAT_LAYOUT.BTN_SELECT_ALL_ROW.replace('{0}', rowLabel)}
                       >
                         {rowLabel}
                       </button>
@@ -988,14 +780,14 @@ export default function ManageSeatLayout() {
                   onClick={selectAll}
                   className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
                 >
-                  {selectedSeatIds.size === seats.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                  {selectedSeatIds.size === seats.length ? TEXT.SEAT_LAYOUT.BTN_DESELECT_ALL : TEXT.SEAT_LAYOUT.BTN_SELECT_ALL}
                 </button>
                 {selectedSeatIds.size > 0 && (
                   <button
                     onClick={clearSelection}
                     className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
                   >
-                    Bỏ chọn ({selectedSeatIds.size})
+                    {TEXT.SEAT_LAYOUT.BTN_DESELECT.replace('{0}', String(selectedSeatIds.size))}
                   </button>
                 )}
                 <div className="h-4 w-[1px] bg-gray-800 mx-1" />
@@ -1003,17 +795,17 @@ export default function ManageSeatLayout() {
                   onClick={undoSelection}
                   disabled={historyIndex === 0}
                   className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
-                  title="Hoàn tác chọn ghế (Ctrl+Z)"
+                  title={TEXT.SEAT_LAYOUT.TOOLTIP_UNDO}
                 >
-                  <span>↩️</span> Undo
+                  <span>↩️</span> {TEXT.SEAT_LAYOUT.BTN_UNDO}
                 </button>
                 <button
                   onClick={redoSelection}
                   disabled={historyIndex >= selectionHistory.length - 1}
                   className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
-                  title="Làm lại chọn ghế (Ctrl+Y)"
+                  title={TEXT.SEAT_LAYOUT.TOOLTIP_REDO}
                 >
-                  Redo <span>↪️</span>
+                  {TEXT.SEAT_LAYOUT.BTN_REDO} <span>↪️</span>
                 </button>
               </div>
             </>
@@ -1026,25 +818,25 @@ export default function ManageSeatLayout() {
         <div className="space-y-5">
           {/* ── Stats ── */}
           <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">Thống Kê Ghế</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">{TEXT.SEAT_LAYOUT.TITLE_STATS}</h3>
             <div className="grid grid-cols-2 gap-2.5">
               <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800 col-span-2">
                 <div className="text-xl font-bold text-white">
                   {seatStats.totalCapacity} / {room?.capacity ?? 0}
                 </div>
                 <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">
-                  Sức chứa đã dùng (chỗ ngồi)
+                  {TEXT.SEAT_LAYOUT.STATS_CAPACITY}
                 </div>
               </div>
               <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
                 <div className="text-xl font-bold text-white">{seatStats.total}</div>
-                <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">Tổng Ghế</div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_TOTAL}</div>
               </div>
               <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
                 <div className={`text-xl font-bold ${totalInactiveCount > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
                   {totalInactiveCount}
                 </div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Vô Hiệu</div>
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_INACTIVE}</div>
               </div>
               <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
                 <div className="text-xl font-bold text-gray-400">{seatStats.normal}</div>
@@ -1069,7 +861,7 @@ export default function ManageSeatLayout() {
                     : 'bg-gray-800/50 text-gray-400 border-gray-700 hover:bg-gray-700'
                   }`}
               >
-                {showInactiveSeats ? '🙈 Ẩn ghế vô hiệu' : `👁️ Hiện ${totalInactiveCount} ghế vô hiệu`}
+                {showInactiveSeats ? TEXT.SEAT_LAYOUT.BTN_HIDE_INACTIVE : TEXT.SEAT_LAYOUT.BTN_SHOW_INACTIVE.replace('{0}', String(totalInactiveCount))}
               </button>
             )}
           </div>
@@ -1077,15 +869,15 @@ export default function ManageSeatLayout() {
           {/* ── Batch Editor ── */}
           <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
             <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
-              🎯 Chỉnh Sửa Hàng Loạt
+              {TEXT.SEAT_LAYOUT.TITLE_BATCH}
             </h3>
             <p className="text-[10px] text-gray-500 mb-3">
-              Đã chọn: <span className="text-white font-bold">{selectedSeatIds.size}</span> ghế
+              {TEXT.SEAT_LAYOUT.BATCH_SELECTED} <span className="text-white font-bold">{selectedSeatIds.size}</span> {TEXT.SEAT_LAYOUT.BATCH_SEATS}
             </p>
 
             {selectedSeatIds.size === 0 ? (
               <div className="bg-[#0F172A] rounded-xl p-4 text-center border border-gray-800">
-                <span className="text-xs text-gray-500">Click vào ghế trên sơ đồ hoặc click vào chữ cái hàng để chọn.</span>
+                <span className="text-xs text-gray-500">{TEXT.SEAT_LAYOUT.BATCH_HINT}</span>
               </div>
             ) : (() => {
               // Phân loại ghế đang chọn
@@ -1102,7 +894,7 @@ export default function ManageSeatLayout() {
                     <>
                       <div>
                         <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">
-                          Đổi Loại Ghế ({selectedActive.length} ghế active)
+                          {TEXT.SEAT_LAYOUT.BATCH_CHANGE_TYPE.replace('{0}', String(selectedActive.length))}
                         </label>
                         <div className="flex gap-2">
                           <select
@@ -1119,7 +911,7 @@ export default function ManageSeatLayout() {
                             disabled={actionLoading}
                             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            Áp dụng
+                            {TEXT.SEAT_LAYOUT.BTN_APPLY}
                           </button>
                         </div>
                       </div>
@@ -1129,7 +921,7 @@ export default function ManageSeatLayout() {
                         disabled={actionLoading}
                         className="w-full py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50"
                       >
-                        🚫 Vô Hiệu Hóa {selectedActive.length} Ghế Active
+                        {TEXT.SEAT_LAYOUT.BTN_BATCH_DEACTIVATE.replace('{0}', String(selectedActive.length))}
                       </button>
                     </>
                   )}
@@ -1141,13 +933,13 @@ export default function ManageSeatLayout() {
                       disabled={actionLoading}
                       className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50"
                     >
-                      ✅ Kích Hoạt Lại {selectedInactive.length} Ghế Vô Hiệu
+                      {TEXT.SEAT_LAYOUT.BTN_BATCH_REACTIVATE.replace('{0}', String(selectedInactive.length))}
                     </button>
                   )}
 
                   {/* Gợi ý nếu chọn lẫn lộn */}
                   {selectedActive.length > 0 && selectedInactive.length > 0 && (
-                    <p className="text-[10px] text-gray-500 text-center">Đang chọn cả ghế active và vô hiệu.</p>
+                    <p className="text-[10px] text-gray-500 text-center">{TEXT.SEAT_LAYOUT.BATCH_MIXED_HINT}</p>
                   )}
                 </div>
               );
@@ -1157,12 +949,12 @@ export default function ManageSeatLayout() {
           {/* ── Auto Generator ── */}
           <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
             <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
-              ⚡ Sinh Ghế Tự Động
+              {TEXT.SEAT_LAYOUT.TITLE_GEN}
             </h3>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Số Hàng</label>
+                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_ROWS}</label>
                   <input
                     type="number"
                     min={1}
@@ -1173,7 +965,7 @@ export default function ManageSeatLayout() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Số Cột</label>
+                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_COLS}</label>
                   <input
                     type="number"
                     min={1}
@@ -1185,7 +977,7 @@ export default function ManageSeatLayout() {
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Loại Ghế Mặc Định</label>
+                <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_TYPE}</label>
                 <select
                   value={genType}
                   onChange={(e) => setGenType(e.target.value)}
@@ -1198,8 +990,8 @@ export default function ManageSeatLayout() {
               </div>
               <div className="bg-[#0F172A] rounded-lg p-2.5 border border-gray-800">
                 <span className="text-xs text-gray-400">
-                  Sẽ tạo <span className="text-white font-bold">{genRows * genCols}</span> ghế
-                  ({genRows} hàng × {genCols} cột)
+                  {TEXT.SEAT_LAYOUT.GEN_INFO_1} <span className="text-white font-bold">{genRows * genCols}</span> {TEXT.SEAT_LAYOUT.GEN_INFO_2}
+                  {TEXT.SEAT_LAYOUT.GEN_INFO_3.replace('{0}', String(genRows)).replace('{1}', String(genCols))}
                 </span>
               </div>
               <button
@@ -1210,7 +1002,7 @@ export default function ManageSeatLayout() {
                   : 'bg-[#4318FF] hover:bg-blue-700 text-white shadow-[#4318FF]/20'
                   }`}
               >
-                {actionLoading ? 'Đang xử lý...' : '⚡ Sinh Ghế Ngay'}
+                {actionLoading ? TEXT.SEAT_LAYOUT.LOADING_PROCESS : TEXT.SEAT_LAYOUT.BTN_GENERATE}
               </button>
             </div>
           </div>
@@ -1218,10 +1010,10 @@ export default function ManageSeatLayout() {
           {/* ── Copy Layout ── */}
           <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
             <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
-              📋 Sao Chép Sơ Đồ
+              {TEXT.SEAT_LAYOUT.TITLE_COPY}
             </h3>
             <p className="text-[10px] text-gray-500 mb-3">
-              Áp dụng sơ đồ thiết kế ghế từ một phòng chiếu khác cho phòng này.
+              {TEXT.SEAT_LAYOUT.COPY_DESC}
             </p>
             <button
               onClick={() => {
@@ -1231,13 +1023,13 @@ export default function ManageSeatLayout() {
               disabled={actionLoading}
               className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-xl transition border border-gray-700"
             >
-              📋 Sao chép từ phòng khác...
+              {TEXT.SEAT_LAYOUT.BTN_COPY}
             </button>
           </div>
 
           {/* ── Legend ── */}
           <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">Chú Thích</h3>
+            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">{TEXT.SEAT_LAYOUT.TITLE_LEGEND}</h3>
             <div className="space-y-2">
               {SEAT_TYPES.map((t) => (
                 <div key={t.id} className="flex items-center gap-2.5">
@@ -1246,9 +1038,9 @@ export default function ManageSeatLayout() {
                     style={{ backgroundColor: t.color }}
                   />
                   <span className="text-xs text-gray-300">{t.label}</span>
-                  {t.id === 'SEAT_TYPE_NORMAL' && <span className="text-[10px] text-gray-500 ml-auto">Phụ thu 0đ</span>}
-                  {t.id === 'SEAT_TYPE_VIP' && <span className="text-[10px] text-blue-500 ml-auto">+30,000đ</span>}
-                  {t.id === 'SEAT_TYPE_SWEETBOX' && <span className="text-[10px] text-pink-500 ml-auto">+50,000đ</span>}
+                  {t.id === 'SEAT_TYPE_NORMAL' && <span className="text-[10px] text-gray-500 ml-auto">{TEXT.SEAT_LAYOUT.LEGEND_FEE_0}</span>}
+                  {t.id === 'SEAT_TYPE_VIP' && <span className="text-[10px] text-blue-500 ml-auto">{TEXT.SEAT_LAYOUT.LEGEND_FEE_30}</span>}
+                  {t.id === 'SEAT_TYPE_SWEETBOX' && <span className="text-[10px] text-pink-500 ml-auto">{TEXT.SEAT_LAYOUT.LEGEND_FEE_50}</span>}
                 </div>
               ))}
               <div className="flex items-center gap-2.5 pt-1 border-t border-gray-800">
@@ -1257,11 +1049,11 @@ export default function ManageSeatLayout() {
                     <div className="w-full h-[2px] bg-red-500 rotate-45" />
                   </div>
                 </div>
-                <span className="text-xs text-gray-500">Không hoạt động</span>
+                <span className="text-xs text-gray-500">{TEXT.SEAT_LAYOUT.LEGEND_INACTIVE}</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <div className="w-5 h-5 rounded-md bg-gray-600 ring-2 ring-white" />
-                <span className="text-xs text-gray-500">Đang được chọn</span>
+                <span className="text-xs text-gray-500">{TEXT.SEAT_LAYOUT.LEGEND_SELECTED}</span>
               </div>
             </div>
           </div>
@@ -1273,23 +1065,23 @@ export default function ManageSeatLayout() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-6 shadow-2xl w-full max-w-md mx-4">
             <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-              <span>📋</span> Sao chép sơ đồ ghế
+              <span>📋</span> {TEXT.SEAT_LAYOUT.MODAL_COPY_TITLE}
             </h3>
             <p className="text-xs text-gray-400 mb-4">
-              Lấy toàn bộ thiết kế ghế từ một phòng chiếu khác và áp dụng cho phòng hiện tại. Ghế hiện tại của phòng này sẽ được đồng bộ/vô hiệu hóa tương ứng.
+              {TEXT.SEAT_LAYOUT.MODAL_COPY_DESC}
             </p>
             <div className="space-y-4">
               <div>
-                <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1.5">Chọn phòng chiếu nguồn</label>
+                <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1.5">{TEXT.SEAT_LAYOUT.MODAL_COPY_LABEL}</label>
                 <select
                   value={selectedSourceRoomId}
                   onChange={(e) => setSelectedSourceRoomId(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
                 >
-                  <option value="">-- Chọn phòng --</option>
+                  <option value="">{TEXT.SEAT_LAYOUT.MODAL_COPY_PLACEHOLDER}</option>
                   {otherRooms.map((r) => (
                     <option key={r.roomId} value={r.roomId}>
-                      {r.roomName} ({r.cinemaName}) - {r.seatCount} ghế
+                      {TEXT.SEAT_LAYOUT.MODAL_COPY_ROOM_INFO.replace('{0}', r.roomName).replace('{1}', r.cinemaName).replace('{2}', String(r.seatCount))}
                     </option>
                   ))}
                 </select>
@@ -1299,14 +1091,14 @@ export default function ManageSeatLayout() {
                   onClick={() => setShowCopyModal(false)}
                   className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold rounded-lg transition"
                 >
-                  Hủy bỏ
+                  {TEXT.SEAT_LAYOUT.BTN_CANCEL}
                 </button>
                 <button
                   onClick={handleCopyLayout}
                   disabled={!selectedSourceRoomId || actionLoading}
                   className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
                 >
-                  Xác nhận sao chép
+                  {TEXT.SEAT_LAYOUT.BTN_CONFIRM_COPY}
                 </button>
               </div>
             </div>
@@ -1319,7 +1111,7 @@ export default function ManageSeatLayout() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-8 flex flex-col items-center gap-3 shadow-2xl">
             <div className="w-8 h-8 border-2 border-[#4318FF] border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-gray-300">Đang xử lý...</span>
+            <span className="text-sm text-gray-300">{TEXT.SEAT_LAYOUT.LOADING_PROCESS}</span>
           </div>
         </div>
       )}
