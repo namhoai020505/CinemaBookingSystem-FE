@@ -39,25 +39,6 @@ const getStatusBadge = (status: string) => {
   );
 };
 
-// Next status in cycle: ACTIVE → MAINTENANCE → INACTIVE → ACTIVE
-const NEXT_STATUS: Record<string, string> = {
-  ACTIVE: 'MAINTENANCE',
-  MAINTENANCE: 'INACTIVE',
-  INACTIVE: 'ACTIVE',
-};
-
-const STATUS_CYCLE_LABEL: Record<string, string> = {
-  ACTIVE: '🔧 Bảo Trì',
-  MAINTENANCE: '⛔ Ngừng HĐ',
-  INACTIVE: '✅ Kích Hoạt',
-};
-
-const STATUS_CYCLE_CLASS: Record<string, string> = {
-  ACTIVE: 'bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border-yellow-500/20',
-  MAINTENANCE: 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20',
-  INACTIVE: 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20',
-};
-
 // Trang quản lý phòng chiếu: lọc theo rạp, thêm/sửa/xóa phòng và đi tới sơ đồ ghế.
 export default function ManageRooms() {
   const navigate = useNavigate();
@@ -66,7 +47,6 @@ export default function ManageRooms() {
   const [rooms, setRooms] = useState<RoomResponse[]>([]);
   const [cinemas, setCinemas] = useState<CinemaResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [togglingRoomId, setTogglingRoomId] = useState<string | null>(null);
 
   // Filters
   const [filterCinemaId, setFilterCinemaId] = useState<string>('ALL');
@@ -129,36 +109,6 @@ export default function ManageRooms() {
     return matchCinema && matchStatus;
   });
 
-  // ──────────────────────────────────────────
-  // Status cycle toggle
-  // ──────────────────────────────────────────
-  const handleCycleStatus = async (room: RoomResponse) => {
-    const nextStatus = NEXT_STATUS[room.roomStatus] ?? 'ACTIVE';
-    const nextLabel = STATUS_CONFIG[nextStatus]?.label ?? nextStatus;
-
-    const confirmed = window.confirm(
-      `Đổi trạng thái phòng "${room.roomName}" thành "${nextLabel}"?`
-    );
-    if (!confirmed) return;
-
-    try {
-      setTogglingRoomId(room.roomId);
-      await roomService.updateRoom(room.roomId, {
-        roomName: room.roomName,
-        capacity: room.capacity,
-        roomStatus: nextStatus,
-      });
-      toast.success(`Đã đổi trạng thái phòng "${room.roomName}" thành ${nextLabel}!`);
-      // Optimistic update in local state
-      setRooms((prev) =>
-        prev.map((r) => r.roomId === room.roomId ? { ...r, roomStatus: nextStatus } : r)
-      );
-    } catch (err) {
-      toast.error('Đổi trạng thái thất bại. Vui lòng thử lại.');
-    } finally {
-      setTogglingRoomId(null);
-    }
-  };
 
   // ──────────────────────────────────────────
   // Modal handlers
@@ -219,20 +169,24 @@ export default function ManageRooms() {
     }
   };
 
-  // Xác nhận trước khi xóa phòng vì backend có thể xóa kèm sơ đồ ghế của phòng.
+  // Ngừng hoạt động phòng (xóa mềm) thay vì xóa hoàn toàn khỏi DB
   const handleDelete = async (room: RoomResponse) => {
     const confirmed = window.confirm(
-      `⚠️ Bạn có chắc chắn muốn xóa phòng "${room.roomName}" khỏi hệ thống? Tất cả ghế trong phòng cũng sẽ bị xóa.`
+      `⚠️ Bạn có chắc chắn muốn ngừng hoạt động phòng "${room.roomName}"?`
     );
     if (!confirmed) return;
 
     try {
       setLoading(true);
-      await roomService.deleteRoom(room.roomId);
-      toast.success(`Đã xóa phòng "${room.roomName}" thành công!`);
+      await roomService.updateRoom(room.roomId, {
+        roomName: room.roomName,
+        capacity: room.capacity,
+        roomStatus: 'INACTIVE',
+      });
+      toast.success(`Đã chuyển trạng thái phòng "${room.roomName}" sang ngừng hoạt động.`);
       await fetchData();
     } catch (err) {
-      toast.error('Xóa phòng thất bại. Có thể phòng đang được sử dụng.');
+      toast.error('Không thể ngừng hoạt động phòng chiếu này.');
     } finally {
       setLoading(false);
     }
@@ -336,7 +290,6 @@ export default function ManageRooms() {
             </thead>
             <tbody className="divide-y divide-gray-800/50 text-sm">
               {filteredRooms.map((room) => {
-                const isToggling = togglingRoomId === room.roomId;
                 return (
                   <tr
                     key={room.roomId}
@@ -372,15 +325,6 @@ export default function ManageRooms() {
                           Sơ Đồ Ghế
                         </button>
 
-                        {/* Quick status cycle button */}
-                        <button
-                          onClick={() => void handleCycleStatus(room)}
-                          disabled={isToggling}
-                          className={`px-3 py-1.5 border text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed ${STATUS_CYCLE_CLASS[room.roomStatus] ?? 'bg-gray-500/10 text-gray-400 border-gray-500/20'}`}
-                          title={`Chuyển sang: ${STATUS_CONFIG[NEXT_STATUS[room.roomStatus] ?? 'ACTIVE']?.label ?? ''}`}
-                        >
-                          {isToggling ? '...' : (STATUS_CYCLE_LABEL[room.roomStatus] ?? '↻')}
-                        </button>
 
                         <button
                           onClick={() => handleOpenEdit(room)}
@@ -391,8 +335,9 @@ export default function ManageRooms() {
                         <button
                           onClick={() => void handleDelete(room)}
                           className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 text-xs font-semibold rounded-lg transition"
+                          title="Ngừng hoạt động phòng"
                         >
-                          Xóa
+                          Ngừng HĐ
                         </button>
                       </div>
                     </td>

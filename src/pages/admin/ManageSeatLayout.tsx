@@ -532,14 +532,64 @@ export default function ManageSeatLayout() {
     }
   };
 
-  // ──────────────────────────────────────────
-  // Batch operations
-  // ──────────────────────────────────────────
   // Đổi loại ghế cho toàn bộ ghế đang được chọn.
+  // Sweetbox chiếm 2 cột liền kề:
+  //   - Sweetbox → Normal/VIP: tạo thêm ghế tại cột kế bên
+  //   - Normal/VIP → Sweetbox: nếu ghế kề cũng được chọn thì consume nó;
+  //     KHÔNG tự động vô hiệu ghế kề ngoài selection để tránh side effects.
   const handleBatchChangeType = async () => {
     if (selectedSeatIds.size === 0) {
       toast.error('Vui lòng chọn ít nhất 1 ghế!');
       return;
+    }
+
+    // ── Validation riêng cho chuyển sang Sweetbox ──
+    // Bắt buộc chọn đúng bội số 2, mỗi cặp phải liền kề (cùng hàng, số cột kề nhau),
+    // và tất cả phải là ghế Normal hoặc VIP (không phải sweetbox).
+    if (batchType === 'SEAT_TYPE_SWEETBOX') {
+      const selectedList = Array.from(selectedSeatIds)
+        .map((id) => seats.find((s) => s.seatId === id))
+        .filter((s): s is SeatResponse => !!s);
+
+      // Kiểm tra tất cả đều không phải sweetbox
+      const hasSweetbox = selectedList.some((s) => s.seatTypeId === 'SEAT_TYPE_SWEETBOX');
+      if (hasSweetbox) {
+        toast.error('Không thể chuyển ghế Sweetbox sang Sweetbox. Vui lòng chỉ chọn ghế Normal hoặc VIP.');
+        return;
+      }
+
+      // Kiểm tra số lượng phải là bội số 2
+      if (selectedList.length % 2 !== 0) {
+        toast.error('Để chuyển sang Sweetbox, hãy chọn số chẵn ghế (mỗi 2 ghế liền kề = 1 Sweetbox).');
+        return;
+      }
+
+      // Kiểm tra từng cặp phải liền kề nhau (cùng hàng, seatNumber kề)
+      const sorted = [...selectedList].sort((a, b) => {
+        const rowCmp = a.rowLabel.localeCompare(b.rowLabel);
+        return rowCmp !== 0 ? rowCmp : a.seatNumber - b.seatNumber;
+      });
+
+      const invalidPairs: string[] = [];
+      for (let i = 0; i < sorted.length; i += 2) {
+        const left = sorted[i];
+        const right = sorted[i + 1];
+        const isAdjacent =
+          left.rowLabel === right.rowLabel &&
+          right.seatNumber === left.seatNumber + 1;
+        if (!isAdjacent) {
+          invalidPairs.push(`${left.seatCode} & ${right.seatCode}`);
+        }
+      }
+
+      if (invalidPairs.length > 0) {
+        toast.error(
+          `Các ghế sau không liền kề nhau nên không thể ghép thành Sweetbox: ${invalidPairs.join(', ')}. ` +
+          'Hãy chọn các cặp ghế nằm sát nhau cùng hàng.',
+          { autoClose: 8000 }
+        );
+        return;
+      }
     }
 
     let capacityDiff = 0;
@@ -558,18 +608,105 @@ export default function ManageSeatLayout() {
 
     try {
       setActionLoading(true);
-      const promises = Array.from(selectedSeatIds).map((seatId) => {
+      let changed = 0;
+      const failed: string[] = [];
+
+      // Tiền xử lý: với Normal/VIP → Sweetbox, nếu ghế kề cũng trong selection
+      // thì đánh dấu consumed → bỏ qua ở loop chính (không chuyển nó thành sweetbox riêng)
+      const consumedSeatIds = new Set<string>();
+      if (batchType === 'SEAT_TYPE_SWEETBOX') {
+        const orderedSelected = Array.from(selectedSeatIds)
+          .map((id) => seats.find((s) => s.seatId === id))
+          .filter((s): s is SeatResponse => !!s && s.seatTypeId !== 'SEAT_TYPE_SWEETBOX')
+          .sort((a, b) => {
+            const rowCmp = a.rowLabel.localeCompare(b.rowLabel);
+            return rowCmp !== 0 ? rowCmp : a.seatNumber - b.seatNumber;
+          });
+
+        for (const seat of orderedSelected) {
+          if (consumedSeatIds.has(seat.seatId)) continue;
+          const neighbor = orderedSelected.find(
+            (s) => s.rowLabel === seat.rowLabel && s.seatNumber === seat.seatNumber + 1
+          );
+          if (neighbor) consumedSeatIds.add(neighbor.seatId);
+        }
+      }
+
+      for (const seatId of Array.from(selectedSeatIds)) {
+        // Bỏ qua ghế bị consume (nó sẽ bị vô hiệu hóa khi sweetbox kề xử lý)
+        if (consumedSeatIds.has(seatId)) continue;
+
         const seat = seats.find((s) => s.seatId === seatId);
-        if (!seat) return Promise.resolve();
-        return roomService.updateSeat(seatId, {
-          rowLabel: seat.rowLabel,
-          seatNumber: seat.seatNumber,
-          seatTypeId: batchType,
-          isActive: seat.isActive,
-        });
-      });
-      await Promise.all(promises);
-      toast.success(`Đã đổi loại ${selectedSeatIds.size} ghế thành công!`);
+        if (!seat) continue;
+
+        const wasSweetbox = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX';
+        const becomingSweetbox = batchType === 'SEAT_TYPE_SWEETBOX';
+
+        try {
+          // 1. Cập nhật loại của ghế gốc
+          await roomService.updateSeat(seatId, {
+            rowLabel: seat.rowLabel,
+            seatNumber: seat.seatNumber,
+            seatTypeId: batchType,
+            isActive: seat.isActive,
+          });
+
+          // 2. Sweetbox → Normal/VIP: tạo thêm ghế ở cột kế bên (seatNumber + 1)
+          if (wasSweetbox && !becomingSweetbox) {
+            const neighborNumber = seat.seatNumber + 1;
+            const neighborSeat = seats.find(
+              (s) => s.rowLabel === seat.rowLabel && s.seatNumber === neighborNumber
+            );
+            if (neighborSeat) {
+              // Ghế kề đã tồn tại (inactive) → kích hoạt và đặt đúng loại
+              await roomService.updateSeat(neighborSeat.seatId, {
+                rowLabel: neighborSeat.rowLabel,
+                seatNumber: neighborSeat.seatNumber,
+                seatTypeId: batchType,
+                isActive: true,
+              });
+            } else {
+              // Chưa có record → tạo mới
+              await roomService.createSeat({
+                roomId: seat.roomId,
+                rowLabel: seat.rowLabel,
+                seatNumber: neighborNumber,
+                seatTypeId: batchType,
+              });
+            }
+          }
+
+          // 3. Normal/VIP → Sweetbox: chỉ vô hiệu ghế kề nếu nó nằm trong selection
+          //    (đã được đánh dấu consumed ở bước tiền xử lý).
+          //    KHÔNG tự động vô hiệu ghế kề ngoài selection.
+          if (!wasSweetbox && becomingSweetbox) {
+            const neighborNumber = seat.seatNumber + 1;
+            const neighborSeat = seats.find(
+              (s) => s.rowLabel === seat.rowLabel && s.seatNumber === neighborNumber
+            );
+            if (neighborSeat && consumedSeatIds.has(neighborSeat.seatId) && neighborSeat.isActive) {
+              await roomService.deleteSeat(neighborSeat.seatId);
+            }
+          }
+
+          changed++;
+        } catch {
+          failed.push(seat.seatCode);
+        }
+      }
+
+      if (failed.length > 0) {
+        toast.warn(
+          `Đổi loại được ${changed}/${selectedSeatIds.size - consumedSeatIds.size} ghế. ` +
+          `Thất bại: ${failed.slice(0, 6).join(', ')}${failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''}.`,
+          { autoClose: 8000 }
+        );
+      } else if (batchType === 'SEAT_TYPE_SWEETBOX') {
+        toast.success(`Đã chuyển thành công ${changed} ghế Sweetbox!`);
+      } else {
+        toast.success(`Đã đổi loại ${changed} ghế thành công!`);
+      }
+
       setSelectedSeatIds(new Set());
       await fetchData();
     } catch (err) {
@@ -578,6 +715,8 @@ export default function ManageSeatLayout() {
       setActionLoading(false);
     }
   };
+
+
 
   // Backend DELETE /api/seats/{seatId} = soft-delete (set isActive = false)
   // There is no "reactivate" endpoint, so we only support deactivation.

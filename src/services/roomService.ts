@@ -79,9 +79,11 @@ interface ApiEnvelope<T> {
 
 // Gom API quản lý phòng và layout ghế cho admin.
 export const roomService = {
-  // GET /api/rooms/rooms: lấy toàn bộ danh sách phòng.
-  getRooms: async (): Promise<RoomResponse[]> => {
-    const envelope = await axiosInstance.get('/api/rooms/rooms') as unknown as ApiEnvelope<RoomResponse[]>;
+  // GET /api/rooms/rooms: lấy toàn bộ danh sách phòng (bao gồm cả phòng ngưng hoạt động).
+  getRooms: async (includeInactive = true): Promise<RoomResponse[]> => {
+    const envelope = await axiosInstance.get('/api/rooms/rooms', {
+      params: { includeInactive }
+    }) as unknown as ApiEnvelope<RoomResponse[]>;
     return envelope?.data ?? [];
   },
 
