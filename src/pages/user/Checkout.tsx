@@ -18,6 +18,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import fallbackPoster from "../../assets/movie1.jpg";
 import api from "../../lib/api";
 import { getCurrentUserProfile } from "../../lib/auth";
+import { getMediaUrl } from "../../lib/media";
 import {
   bookingService,
   hideExpiredBookingFromHistory,
@@ -32,7 +33,7 @@ const PAYMENT_PROVIDER_ID = "PP_SEPAY";
 const PAYMENT_WINDOW_SECONDS = 600;
 const DEFAULT_LOCK_SECONDS = 600;
 const PAYMENT_STATUS_POLL_MS = 5000;
-const API_ORIGIN = String(api.defaults.baseURL || "").replace(/\/$/, "");
+
 
 const FNB_ITEMS = [
   {
@@ -203,24 +204,6 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-// Chuyển poster path tương đối thành URL đầy đủ.
-const resolvePosterUrl = (value?: string | null) => {
-  const posterUrl = value?.trim();
-  if (!posterUrl) {
-    return "";
-  }
-
-  if (/^(https?:|data:|blob:)/i.test(posterUrl)) {
-    return posterUrl;
-  }
-
-  if (posterUrl.startsWith("/")) {
-    return `${API_ORIGIN}${posterUrl}`;
-  }
-
-  return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
-};
-
 // Lấy định danh user hiện tại để tách session theo tài khoản.
 const getUserKey = () => {
   const profile = getCurrentUserProfile();
@@ -356,8 +339,8 @@ const getSeatHoldRemainingSeconds = (
   const session = readSeatLockSession(showtimeId, userKey);
   const selectedExpiries = session
     ? session.selectedSeatIds
-        .map((seatId) => session.lockedSeats[seatId]?.lockedUntil)
-        .filter(Boolean)
+      .map((seatId) => session.lockedSeats[seatId]?.lockedUntil)
+      .filter(Boolean)
     : selectedSeats.map((seat) => seat.lockedUntil).filter(Boolean);
 
   const earliestExpiry = selectedExpiries
@@ -753,7 +736,7 @@ export default function Checkout() {
             ? `${movie.durationMinutes} phút`
             : undefined,
           ageRating: movie?.ageRating || undefined,
-          posterUrl: resolvePosterUrl(movie?.posterUrl),
+          posterUrl: getMediaUrl(movie?.posterUrl),
           cinemaName: showtime.cinemaName,
           roomName: showtime.roomName,
           startTime: showtime.startTime,
@@ -942,14 +925,14 @@ export default function Checkout() {
         setBooking((current) =>
           current
             ? {
-                ...current,
-                status: response.data.status,
-                movieTitle: response.data.movieTitle || current.movieTitle,
-                cinemaName: response.data.cinemaName || current.cinemaName,
-                roomName: response.data.roomName || current.roomName,
-                startTime: response.data.startTime || current.startTime,
-                totalAmount: response.data.totalAmount || current.totalAmount,
-              }
+              ...current,
+              status: response.data.status,
+              movieTitle: response.data.movieTitle || current.movieTitle,
+              cinemaName: response.data.cinemaName || current.cinemaName,
+              roomName: response.data.roomName || current.roomName,
+              startTime: response.data.startTime || current.startTime,
+              totalAmount: response.data.totalAmount || current.totalAmount,
+            }
             : current,
         );
 
@@ -1017,14 +1000,14 @@ export default function Checkout() {
       setBooking((current) =>
         current
           ? {
-              ...current,
-              status: response.data.status,
-              movieTitle: response.data.movieTitle || current.movieTitle,
-              cinemaName: response.data.cinemaName || current.cinemaName,
-              roomName: response.data.roomName || current.roomName,
-              startTime: response.data.startTime || current.startTime,
-              totalAmount: response.data.totalAmount || current.totalAmount,
-            }
+            ...current,
+            status: response.data.status,
+            movieTitle: response.data.movieTitle || current.movieTitle,
+            cinemaName: response.data.cinemaName || current.cinemaName,
+            roomName: response.data.roomName || current.roomName,
+            startTime: response.data.startTime || current.startTime,
+            totalAmount: response.data.totalAmount || current.totalAmount,
+          }
           : current,
       );
 
@@ -1709,11 +1692,10 @@ export default function Checkout() {
                 type="button"
                 onClick={() => void handleCreatePayment()}
                 disabled={submitting || seatHoldSeconds <= 0}
-                className={`rounded-md py-3 text-xs font-black uppercase transition ${
-                  submitting || seatHoldSeconds <= 0
-                    ? "cursor-not-allowed bg-slate-700 text-slate-400"
-                    : "bg-[#FFD166] text-white hover:bg-[#FFE7A3] hover:text-slate-950"
-                }`}
+                className={`rounded-md py-3 text-xs font-black uppercase transition ${submitting || seatHoldSeconds <= 0
+                  ? "cursor-not-allowed bg-slate-700 text-slate-400"
+                  : "bg-[#FFD166] text-white hover:bg-[#FFE7A3] hover:text-slate-950"
+                  }`}
               >
                 {submitting ? "Đang tạo..." : "Tiếp tục"}
               </button>
@@ -1732,3 +1714,4 @@ export default function Checkout() {
     </div>
   );
 }
+

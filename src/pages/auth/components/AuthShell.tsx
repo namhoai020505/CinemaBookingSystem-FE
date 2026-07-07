@@ -1,6 +1,4 @@
 import { GoogleLogin } from '@react-oauth/google';
-import { useRef } from 'react';
-import { FcGoogle } from 'react-icons/fc';
 import type { AuthMode } from '../authTypes';
 
 type AuthTabsProps = {
@@ -102,47 +100,23 @@ export const AuthSubmitButton = ({
 
 // Nút Google hiển thị theo style của app nhưng vẫn gọi GoogleLogin thật để lấy ID token.
 export const GoogleLoginButton = ({ onSuccess, isLoading = false }: GoogleLoginButtonProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Click vào nút Google ẩn để mở popup OAuth mà không phá layout custom.
-  const triggerGoogleLogin = () => {
-    const btn = containerRef.current?.querySelector('div[role="button"]') as HTMLElement | null;
-    btn?.click();
-  };
-
   return (
-    <div className="mt-2">
-      {/* Nút Google thật được ẩn đi, chỉ dùng để kích hoạt popup OAuth chính thức. */}
-      <div
-        ref={containerRef}
-        style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', opacity: 0 }}
-        aria-hidden="true"
-      >
-        <GoogleLogin
-          onSuccess={(credentialResponse) => {
-            if (credentialResponse.credential) {
-              onSuccess(credentialResponse.credential);
-            }
-          }}
-          onError={() => {
-            console.error('Google login failed or was cancelled');
-          }}
-          useOneTap={false}
-        />
-      </div>
-
-      {/* Nút người dùng nhìn thấy, giữ giao diện đồng nhất với các nút auth còn lại. */}
-      <button
-        type="button"
-        disabled={isLoading}
-        onClick={triggerGoogleLogin}
-        className={`flex w-full items-center justify-center gap-2 rounded-md bg-white py-2.5 text-sm font-bold uppercase text-black shadow transition ${
-          isLoading ? 'cursor-not-allowed opacity-70' : 'hover:bg-gray-100'
-        }`}
-      >
-        <FcGoogle size={20} />
-        {isLoading ? 'Đang xử lý...' : 'Đăng Nhập Bằng Google'}
-      </button>
+    <div className={`mt-2 flex justify-center w-full ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
+      <GoogleLogin
+        onSuccess={(credentialResponse) => {
+          if (credentialResponse.credential) {
+            onSuccess(credentialResponse.credential);
+          }
+        }}
+        onError={() => {
+          console.error('Google login failed or was cancelled');
+        }}
+        useOneTap={false}
+        theme="outline"
+        size="large"
+        shape="rectangular"
+        width="382"
+      />
     </div>
   );
 };

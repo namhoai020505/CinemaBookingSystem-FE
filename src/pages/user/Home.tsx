@@ -13,6 +13,7 @@ import {
   getAccessToken,
   isAccessTokenExpired,
 } from "../../lib/auth";
+import { getMediaUrl } from "../../lib/media";
 import { movieService } from "../../services/movieService";
 import {
   showtimeService,
@@ -30,6 +31,7 @@ type Movie = {
   title: string;
   genre: string;
   duration: string;
+  director?: string;
   posterUrl: string;
   ageRating: string;
   highlight?: string;
@@ -61,7 +63,7 @@ const getRealSlideIndex = (index: number) =>
     LAST_REAL_SLIDE_INDEX) +
   FIRST_REAL_SLIDE_INDEX;
 
-const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || "http://localhost:5070";
+
 
 // Type guard dùng khi đọc dữ liệu phim có shape chưa cố định từ backend.
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -111,23 +113,6 @@ const getGenreValue = (item: MovieApiItem) => {
   return "Đang cập nhật";
 };
 
-// Chuyển đường dẫn poster tương đối từ backend thành URL đầy đủ cho trình duyệt.
-const resolvePosterUrl = (value: string) => {
-  const posterUrl = value.trim();
-  if (!posterUrl) {
-    return "";
-  }
-
-  if (/^(https?:|data:|blob:)/i.test(posterUrl)) {
-    return posterUrl;
-  }
-
-  if (posterUrl.startsWith("/")) {
-    return `${API_ORIGIN}${posterUrl}`;
-  }
-
-  return `${API_ORIGIN}/${posterUrl.replace(/^\.?\//, "")}`;
-};
 
 // Bóc danh sách phim từ nhiều kiểu response khác nhau của API.
 const extractMovieList = (response: unknown): MovieApiItem[] => {
@@ -198,7 +183,7 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     "durationMinutes",
     "runningTime",
   ]);
-  const posterUrl = resolvePosterUrl(
+  const posterUrl = getMediaUrl(
     getStringValue(movie, ["imagePoster", "posterUrl", "imageUrl", "poster"]),
   );
   const isHot = movie.isHot === true || movie.highlight === true;
@@ -208,6 +193,7 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     title,
     genre: getGenreValue(movie),
     duration: durationValue ? `${durationValue} phút` : "Đang cập nhật",
+    director: getStringValue(movie, ["director", "Director"]) || "Đang cập nhật",
     posterUrl,
     ageRating: getStringValue(movie, ["ageRating", "rating", "rated"]) || "P",
     highlight: isHot ? "HOT" : undefined,
@@ -483,11 +469,10 @@ export default function Home() {
                 aria-label={`Go to slide ${index + 1}`}
                 aria-current={activeSlideIndex === index}
                 onClick={() => goToSlide(index)}
-                className={`h-3 w-3 rounded-full border border-white/80 transition ${
-                  activeSlideIndex === index
-                    ? "bg-white"
-                    : "bg-transparent hover:bg-white/50"
-                }`}
+                className={`h-3 w-3 rounded-full border border-white/80 transition ${activeSlideIndex === index
+                  ? "bg-white"
+                  : "bg-transparent hover:bg-white/50"
+                  }`}
               />
             ))}
           </div>
@@ -565,6 +550,9 @@ export default function Home() {
                     {movie.title}
                   </h3>
                   <p className="mt-1 text-xs leading-5 text-white">
+                    Đạo diễn: <span className="text-white/80">{movie.director}</span>
+                  </p>
+                  <p className="text-xs leading-5 text-white">
                     Thể loại: <span className="text-white/80">{movie.genre}</span>
                   </p>
                   <p className="text-xs leading-5 text-white">

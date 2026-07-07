@@ -56,6 +56,7 @@ export interface UpdateSeatPayload {
   rowLabel: string;
   seatNumber: number;
   seatTypeId: string;
+  isActive?: boolean;
 }
 
 // Kiểu dữ liệu rạp dùng khi tạo phòng.
@@ -78,9 +79,11 @@ interface ApiEnvelope<T> {
 
 // Gom API quản lý phòng và layout ghế cho admin.
 export const roomService = {
-  // GET /api/rooms/rooms: lấy toàn bộ danh sách phòng.
-  getRooms: async (): Promise<RoomResponse[]> => {
-    const envelope = await axiosInstance.get('/api/rooms/rooms') as unknown as ApiEnvelope<RoomResponse[]>;
+  // GET /api/rooms/rooms: lấy toàn bộ danh sách phòng (bao gồm cả phòng ngưng hoạt động).
+  getRooms: async (includeInactive = true): Promise<RoomResponse[]> => {
+    const envelope = await axiosInstance.get('/api/rooms/rooms', {
+      params: { includeInactive }
+    }) as unknown as ApiEnvelope<RoomResponse[]>;
     return envelope?.data ?? [];
   },
 
@@ -126,7 +129,7 @@ export const roomService = {
 
   // PUT /api/seats/{seatId}: cập nhật thông tin một ghế.
   updateSeat: async (seatId: string, payload: UpdateSeatPayload): Promise<SeatResponse> => {
-    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, payload) as unknown as ApiEnvelope<SeatResponse>;
+    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, { seatId, ...payload }) as unknown as ApiEnvelope<SeatResponse>;
     return envelope.data;
   },
 

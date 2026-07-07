@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { FaPaperPlane, FaRegStar, FaStar, FaUserCircle } from "react-icons/fa";
-import { FiArrowLeft, FiClock, FiGlobe, FiCalendar, FiFilm, FiPlay } from "react-icons/fi";
+import { FiArrowLeft, FiClock, FiGlobe, FiCalendar, FiFilm, FiPlay, FiUser } from "react-icons/fi";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api from "../../lib/api";
 import { getAccessToken, getRoleFromAccessToken, isAccessTokenExpired, isCustomerRole } from "../../lib/auth";
@@ -40,6 +40,7 @@ type MovieDetailResponse = {
   posterUrl?: string | null;
   trailerUrl?: string | null;
   movieStatus: string;
+  director?: string | null;
 };
 
 type SeatMapResponse = {
@@ -60,6 +61,7 @@ type MovieInfo = {
   releaseDate?: string;
   description?: string;
   trailerUrl?: string;
+  director?: string;
 };
 
 type SeatAvailability = {
@@ -253,6 +255,7 @@ const mapMovieDetailToInfo = (
   title: movie?.title || showtime?.movieTitle || "Phim hệ thống",
   durationMinutes: movie?.durationMinutes,
   ageRating: movie?.ageRating || "P",
+  director: movie?.director || "Đang cập nhật",
   genre: movie?.genre || "Đang cập nhật",
   posterUrl: movie?.posterUrl || FALLBACK_POSTER,
   language: movie?.language || "Tiếng Việt",
@@ -884,6 +887,7 @@ export default function MovieShowtimes() {
 
   // Luôn chọn sẵn vé đầu tiên hợp lệ để payload review có bookingId đúng cho BE kiểm tra.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedReviewBookingId((currentBookingId) => {
       if (
         currentBookingId &&
@@ -903,6 +907,7 @@ export default function MovieShowtimes() {
 
   // Điều hướng sang trang chọn ghế, truyền kèm movie/showtime để tránh màn loading thiếu dữ liệu.
   const handleSelectShowtime = (slot: ShowtimeSlot) => {
+    // eslint-disable-next-line react-hooks/purity
     if (!isShowtimeVisibleToCustomer(slot, Date.now())) {
       setErrorMessage("Suất chiếu này đã quá giờ. Vui lòng chọn suất chiếu khác.");
       return;
@@ -1067,6 +1072,10 @@ export default function MovieShowtimes() {
 
                 {/* Metadata List */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#0F172A]/50 border border-gray-800/80 rounded-2xl p-4 text-xs text-gray-300">
+                  <div className="flex items-center gap-2.5">
+                    <FiUser className="h-4 w-4 text-[#FFD166] shrink-0" />
+                    <span><b>Đạo diễn:</b> {movieInfo.director || "Đang cập nhật"}</span>
+                  </div>
                   <div className="flex items-center gap-2.5">
                     <FiFilm className="h-4 w-4 text-[#FFD166] shrink-0" />
                     <span><b>Thể loại:</b> {movieInfo.genre || "Đang cập nhật"}</span>
