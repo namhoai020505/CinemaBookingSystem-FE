@@ -40,7 +40,7 @@ const getStatusBadge = (status: string) => {
   );
 };
 
-
+// Trang quản lý phòng chiếu: lọc theo rạp, thêm/sửa/xóa phòng và đi tới sơ đồ ghế.
 export default function ManageRooms() {
   const navigate = useNavigate();
 
@@ -165,6 +165,7 @@ export default function ManageRooms() {
     }
   };
 
+  // Ngừng hoạt động phòng (xóa mềm) thay vì xóa hoàn toàn khỏi DB
   const handleDelete = async (room: RoomResponse) => {
     const confirmed = window.confirm(TEXT.ROOM.CONFIRM_DEACTIVATE.replace("{0}", room.roomName));
     if (!confirmed) return;
@@ -327,6 +328,7 @@ export default function ManageRooms() {
                         <button
                           onClick={() => void handleDelete(room)}
                           className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 text-xs font-semibold rounded-lg transition"
+                          title="Ngừng hoạt động phòng"
                         >
                           {TEXT.ROOM.BTN_DELETE}
                         </button>

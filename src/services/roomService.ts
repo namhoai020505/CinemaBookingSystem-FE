@@ -88,12 +88,13 @@ interface ApiEnvelope<T> {
 // Service methods
 // ============================================================
 export const roomService = {
-
   // ---------- Rooms ----------
 
   /** GET /api/rooms/rooms – Lấy toàn bộ danh sách phòng */
   getRooms: async (includeInactive = true): Promise<RoomResponse[]> => {
-    const envelope = await axiosInstance.get(`/api/rooms/rooms?includeInactive=${includeInactive}`) as unknown as ApiEnvelope<RoomResponse[]>;
+    const envelope = await axiosInstance.get('/api/rooms/rooms', {
+      params: { includeInactive }
+    }) as unknown as ApiEnvelope<RoomResponse[]>;
     return envelope?.data ?? [];
   },
 
