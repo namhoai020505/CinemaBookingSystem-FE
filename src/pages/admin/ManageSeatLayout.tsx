@@ -813,6 +813,8 @@ export default function ManageSeatLayout() {
   };
 
   // ──────────────────────────────────────────
+  void handleBatchDelete;
+
   // Stats
   // ──────────────────────────────────────────
   // Tính nhanh số lượng từng loại ghế để hiển thị các card thống kê.
