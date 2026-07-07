@@ -704,7 +704,7 @@ export default function ManageSeatLayout() {
     }
     stats.totalCapacity = stats.activeNormal + stats.activeVip + stats.activeSweetbox * 2;
     stats.total = stats.normal + stats.vip + stats.sweetbox * 2;
-    stats.sweetbox = stats.sweetbox * 2;
+    // stats.sweetbox giữ nguyên = số ghế vật lý (mỗi ghế sweetbox chiếm 2 chỗ ngồi đã được tính trong total)
     return stats;
   })();
 
