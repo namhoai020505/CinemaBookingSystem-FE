@@ -99,8 +99,10 @@ export const roomService = {
   },
 
   /** GET /api/rooms/rooms/{roomId} – Chi tiết phòng */
-  getRoomById: async (roomId: string): Promise<RoomResponse> => {
-    const envelope = await axiosInstance.get(`/api/rooms/rooms/${roomId}`) as unknown as ApiEnvelope<RoomResponse>;
+  getRoomById: async (roomId: string, includeInactive = true): Promise<RoomResponse> => {
+    const envelope = await axiosInstance.get(`/api/rooms/rooms/${roomId}`, {
+      params: { includeInactive }
+    }) as unknown as ApiEnvelope<RoomResponse>;
     return envelope.data;
   },
 

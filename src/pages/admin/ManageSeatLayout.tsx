@@ -141,6 +141,10 @@ export default function ManageSeatLayout() {
   };
 
   const handleMouseDown = (seatId: string) => {
+    if (room?.roomStatus !== 'MAINTENANCE') {
+      toast.warn('Chỉ có thể chỉnh sửa sơ đồ ghế khi trạng thái phòng là BẢO TRÌ (MAINTENANCE).');
+      return;
+    }
     setIsDrawing(true);
     const currentlySelected = selectedSeatIds.has(seatId);
     const nextMode = currentlySelected ? 'deselect' : 'select';
@@ -156,7 +160,7 @@ export default function ManageSeatLayout() {
   };
 
   const handleMouseEnter = (seatId: string) => {
-    if (!isDrawing || !drawMode) return;
+    if (!isDrawing || !drawMode || room?.roomStatus !== 'MAINTENANCE') return;
     const nextSelection = new Set(selectedSeatIds);
     if (drawMode === 'select') {
       nextSelection.add(seatId);
@@ -218,6 +222,10 @@ export default function ManageSeatLayout() {
   }, [undoSelection, redoSelection]);
 
   const toggleRow = (rowLabel: string) => {
+    if (room?.roomStatus !== 'MAINTENANCE') {
+      toast.warn('Chỉ có thể chỉnh sửa sơ đồ ghế khi trạng thái phòng là BẢO TRÌ (MAINTENANCE).');
+      return;
+    }
     const rowSeats = seatGrid.find(([label]) => label === rowLabel)?.[1] || [];
     const allSelected = rowSeats.every((s) => selectedSeatIds.has(s.seatId));
     const nextSelection = new Set(selectedSeatIds);
@@ -232,6 +240,10 @@ export default function ManageSeatLayout() {
   };
 
   const selectAll = () => {
+    if (room?.roomStatus !== 'MAINTENANCE') {
+      toast.warn('Chỉ có thể chỉnh sửa sơ đồ ghế khi trạng thái phòng là BẢO TRÌ (MAINTENANCE).');
+      return;
+    }
     let nextSelection: Set<string>;
     if (selectedSeatIds.size === visibleSeats.length) {
       nextSelection = new Set();
@@ -242,6 +254,7 @@ export default function ManageSeatLayout() {
   };
 
   const clearSelection = () => {
+    if (room?.roomStatus !== 'MAINTENANCE') return;
     updateSelection(new Set(), true);
   };
 
@@ -816,6 +829,20 @@ export default function ManageSeatLayout() {
         </div>
       </div>
 
+      {/* ALERT BANNER IF NOT MAINTENANCE */}
+      {room && room.roomStatus !== 'MAINTENANCE' && (
+        <div className="mb-6 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 flex items-start gap-3">
+          <span className="text-xl">⚠️</span>
+          <div>
+            <h4 className="font-bold text-sm">Chế độ xem thông tin (Không thể chỉnh sửa)</h4>
+            <p className="text-xs text-gray-300 mt-1">
+              Phòng chiếu đang ở trạng thái <strong className="text-white">{room.roomStatus}</strong>.
+              Bạn chỉ có thể thay đổi sơ đồ ghế khi trạng thái phòng được chuyển sang <strong className="text-white">BẢO TRÌ (MAINTENANCE)</strong> và không có suất chiếu nào của phòng này có booking.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* MAIN LAYOUT: Grid + Control Panel */}
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
 
@@ -1040,7 +1067,8 @@ export default function ManageSeatLayout() {
                           <select
                             value={batchType}
                             onChange={(e) => setBatchType(e.target.value)}
-                            className="flex-1 px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
+                            disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                            className="flex-1 px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
                           >
                             {SEAT_TYPES.map((t) => (
                               <option key={t.id} value={t.id}>{t.label}</option>
@@ -1048,7 +1076,7 @@ export default function ManageSeatLayout() {
                           </select>
                           <button
                             onClick={handleBatchChangeType}
-                            disabled={actionLoading}
+                            disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
                             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {TEXT.SEAT_LAYOUT.BTN_APPLY}
@@ -1058,8 +1086,8 @@ export default function ManageSeatLayout() {
 
                       <button
                         onClick={handleBatchDeactivate}
-                        disabled={actionLoading}
-                        className="w-full py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50"
+                        disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                        className="w-full py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {TEXT.SEAT_LAYOUT.BTN_BATCH_DEACTIVATE.replace('{0}', String(selectedActive.length))}
                       </button>
@@ -1070,8 +1098,8 @@ export default function ManageSeatLayout() {
                   {selectedInactive.length > 0 && (
                     <button
                       onClick={handleBatchReactivate}
-                      disabled={actionLoading}
-                      className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50"
+                      disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                      className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {TEXT.SEAT_LAYOUT.BTN_BATCH_REACTIVATE.replace('{0}', String(selectedInactive.length))}
                     </button>
@@ -1100,8 +1128,9 @@ export default function ManageSeatLayout() {
                     min={1}
                     max={26}
                     value={genRows}
+                    disabled={room?.roomStatus !== 'MAINTENANCE'}
                     onChange={(e) => setGenRows(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -1111,8 +1140,9 @@ export default function ManageSeatLayout() {
                     min={1}
                     max={30}
                     value={genCols}
+                    disabled={room?.roomStatus !== 'MAINTENANCE'}
                     onChange={(e) => setGenCols(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -1120,8 +1150,9 @@ export default function ManageSeatLayout() {
                 <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_TYPE}</label>
                 <select
                   value={genType}
+                  disabled={room?.roomStatus !== 'MAINTENANCE'}
                   onChange={(e) => setGenType(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
                 >
                   {SEAT_TYPES.map((t) => (
                     <option key={t.id} value={t.id}>{t.label}</option>
@@ -1136,9 +1167,9 @@ export default function ManageSeatLayout() {
               </div>
               <button
                 onClick={handleGenerateSeats}
-                disabled={actionLoading}
-                className={`w-full py-2.5 rounded-xl text-sm font-semibold transition shadow-lg ${actionLoading
-                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                className={`w-full py-2.5 rounded-xl text-sm font-semibold transition shadow-lg ${room?.roomStatus !== 'MAINTENANCE' || actionLoading
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed shadow-none'
                   : 'bg-[#4318FF] hover:bg-blue-700 text-white shadow-[#4318FF]/20'
                   }`}
               >
@@ -1160,8 +1191,8 @@ export default function ManageSeatLayout() {
                 void loadOtherRooms();
                 setShowCopyModal(true);
               }}
-              disabled={actionLoading}
-              className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-xl transition border border-gray-700"
+              disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+              className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-xl transition border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {TEXT.SEAT_LAYOUT.BTN_COPY}
             </button>

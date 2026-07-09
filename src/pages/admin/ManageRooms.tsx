@@ -186,6 +186,26 @@ export default function ManageRooms() {
     }
   };
 
+  const handleReactivate = async (room: RoomResponse) => {
+    const confirmed = window.confirm(`Bạn có chắc chắn muốn kích hoạt lại phòng "${room.roomName}"?`);
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      await roomService.updateRoom(room.roomId, {
+        roomName: room.roomName,
+        capacity: room.capacity,
+        roomStatus: 'ACTIVE',
+      });
+      toast.success(`Đã kích hoạt lại phòng "${room.roomName}" thành công.`);
+      await fetchData();
+    } catch (err) {
+      toast.error('Không thể kích hoạt lại phòng chiếu này.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ──────────────────────────────────────────
   // Render
   // ──────────────────────────────────────────
@@ -325,13 +345,23 @@ export default function ManageRooms() {
                         >
                           {TEXT.ROOM.BTN_EDIT}
                         </button>
-                        <button
-                          onClick={() => void handleDelete(room)}
-                          className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 text-xs font-semibold rounded-lg transition"
-                          title="Ngừng hoạt động phòng"
-                        >
-                          {TEXT.ROOM.BTN_DELETE}
-                        </button>
+                        {room.roomStatus === 'INACTIVE' ? (
+                          <button
+                            onClick={() => void handleReactivate(room)}
+                            className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-lg transition"
+                            title="Kích hoạt phòng"
+                          >
+                            Kích Hoạt
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => void handleDelete(room)}
+                            className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 text-xs font-semibold rounded-lg transition"
+                            title="Ngừng hoạt động phòng"
+                          >
+                            {TEXT.ROOM.BTN_DELETE}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
