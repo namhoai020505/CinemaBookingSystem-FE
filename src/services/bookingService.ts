@@ -72,6 +72,17 @@ export interface CheckoutPayload {
   }[];
 }
 
+// Backend CreateBookingRequest shape
+interface CreateBookingRequestPayload {
+  ShowtimeId: string;
+  ShowtimeSeatIds: string[];
+  VoucherCode?: string;
+  FoodAndBeverages?: {
+    FbItemId: string;
+    Quantity: number;
+  }[];
+}
+
 export type CheckoutSeat = {
   showtimeSeatId: string;
   seatCode: string;
@@ -91,6 +102,10 @@ export type CheckoutResponse = {
   bookingId: string;
   bookingStatus: string;
   showtimeId: string;
+  movieTitle?: string;
+  cinemaName?: string;
+  roomName?: string;
+  startTime?: string | null;
   seats: CheckoutSeat[];
   foodItems: CheckoutFoodItem[];
   seatSubtotal: number;
@@ -99,7 +114,7 @@ export type CheckoutResponse = {
   voucherDiscount: number;
   rewardDiscount: number;
   totalAmount: number;
-  expiredAt: string;
+  expiredAt: string | null;
 };
 
 const HIDDEN_EXPIRED_BOOKINGS_KEY = 'g2c-hidden-expired-bookings';
@@ -171,8 +186,46 @@ export const bookingService = {
   },
 
   checkout: async (payload: CheckoutPayload) => {
-    const response = await axiosInstance.post('/api/bookings/checkout', payload) as unknown as ApiResponse<CheckoutResponse>;
-    return response;
+    // Backend endpoint: POST /api/bookings (CreateBookingRequest)
+    // Maps FE payload fields → BE PascalCase fields
+    const bePayload: CreateBookingRequestPayload = {
+      ShowtimeId: String(payload.showtimeId),
+      ShowtimeSeatIds: payload.showtimeSeatIds.map(String),
+      VoucherCode: payload.voucherCode,
+      FoodAndBeverages: payload.foodItems?.map((item) => ({
+        FbItemId: item.fbItemId,
+        Quantity: item.quantity,
+      })),
+    };
+
+    const raw = await axiosInstance.post('/api/bookings', bePayload) as unknown as ApiResponse<BookingSummary>;
+
+    // Map BookingResponse → CheckoutResponse shape expected by Checkout.tsx
+    if (!raw.success || !raw.data) {
+      return raw as unknown as ApiResponse<CheckoutResponse>;
+    }
+
+    const booking = raw.data;
+    const mapped: CheckoutResponse = {
+      bookingId: booking.bookingId,
+      bookingStatus: booking.status,
+      showtimeId: booking.showtimeId,
+      movieTitle: booking.movieTitle,
+      cinemaName: booking.cinemaName,
+      roomName: booking.roomName,
+      startTime: booking.startTime ? String(booking.startTime) : null,
+      seats: [],
+      foodItems: [],
+      seatSubtotal: 0,
+      foodSubtotal: 0,
+      grossAmount: booking.totalAmount,
+      voucherDiscount: 0,
+      rewardDiscount: 0,
+      totalAmount: booking.totalAmount,
+      expiredAt: booking.expiredAt ? String(booking.expiredAt) : null,
+    };
+
+    return { ...raw, data: mapped } as ApiResponse<CheckoutResponse>;
   },
 
   getBookingById: async (bookingId: string | number) => {

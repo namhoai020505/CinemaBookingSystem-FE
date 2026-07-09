@@ -266,7 +266,8 @@ export default function ManageMovie() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
   ) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const parsed = name === "durationMinutes" ? (value === "" ? 0 : Number(value)) : value;
+    setFormData({ ...formData, [name]: parsed });
     if (name === "title" && value.trim() !== "") {
       setErrors({ ...errors, title: undefined });
     }
@@ -301,6 +302,7 @@ export default function ManageMovie() {
       const submitData = new FormData();
       submitData.append("Title", formData.title);
       submitData.append("DurationMinutes", String(formData.durationMinutes));
+      submitData.append("IsDurationConfirmed", "true");
 
       // Gửi danh sách các ID thể loại đã chọn
       if (selectedGenreIds && selectedGenreIds.length > 0) {
