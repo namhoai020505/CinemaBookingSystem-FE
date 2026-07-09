@@ -45,7 +45,14 @@ export default function ManageMovie() {
   const [genres, setGenres] = useState<{ genreId: number; name: string }[]>([]);
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
   const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
+  const [genreSearchInput, setGenreSearchInput] = useState("");
   const genreDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isGenreDropdownOpen) {
+      setGenreSearchInput("");
+    }
+  }, [isGenreDropdownOpen]);
 
   // 1. Hàm lấy danh sách phim (Fetch tất cả để xử lý client-side)
   const fetchMovies = async () => {
@@ -708,6 +715,16 @@ export default function ManageMovie() {
 
                   {isGenreDropdownOpen && (
                     <div className="absolute z-50 mt-1 w-full bg-[#1E293B] border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-60 flex flex-col animate-fadeIn">
+                      {/* Search box in dropdown */}
+                      <div className="p-2 border-b border-gray-700 bg-[#0F172A]">
+                        <input
+                          type="text"
+                          value={genreSearchInput}
+                          onChange={(e) => setGenreSearchInput(e.target.value)}
+                          placeholder="Tìm thể loại..."
+                          className="w-full px-3 py-1.5 bg-[#1E293B] border border-gray-700 text-white text-xs rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
                       <div className="overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#1E293B] [&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-500">
                         <div
                           onClick={() => {
@@ -719,27 +736,34 @@ export default function ManageMovie() {
                         >
                           {TEXT.MOVIE.PLACEHOLDER_GENRE}
                         </div>
-                        {genres.map((g) => {
-                          const isSelected = selectedGenreIds.includes(g.genreId);
-                          return (
-                            <div
-                              key={g.genreId}
-                              onClick={() => {
-                                setSelectedGenreIds([g.genreId]);
-                                setIsGenreDropdownOpen(false);
-                              }}
-                              className={`px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between transition-colors duration-150 ${isSelected ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
-                                }`}
-                            >
-                              <span>{g.name}</span>
-                              {isSelected && (
-                                <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                          );
-                        })}
+                        {genres
+                          .filter((g) => g.name.toLowerCase().includes(genreSearchInput.toLowerCase()))
+                          .map((g) => {
+                            const isSelected = selectedGenreIds.includes(g.genreId);
+                            return (
+                              <div
+                                key={g.genreId}
+                                onClick={() => {
+                                  setSelectedGenreIds([g.genreId]);
+                                  setIsGenreDropdownOpen(false);
+                                }}
+                                className={`px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between transition-colors duration-150 ${isSelected ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
+                                  }`}
+                              >
+                                <span>{g.name}</span>
+                                {isSelected && (
+                                  <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                            );
+                          })}
+                        {genres.filter((g) => g.name.toLowerCase().includes(genreSearchInput.toLowerCase())).length === 0 && (
+                          <div className="px-4 py-3 text-xs text-gray-500 italic text-center">
+                            Không tìm thấy thể loại nào
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
