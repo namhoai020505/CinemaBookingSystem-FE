@@ -430,11 +430,6 @@ export default function ManageSeatLayout() {
       setOtherRooms(filtered);
     } catch (err) {
     }
-    updateSelection(nextSelection, true);
-  };
-
-  const clearSelection = () => {
-    updateSelection(new Set(), true);
   };
 
   const handleCopyLayout = async () => {
@@ -730,69 +725,6 @@ export default function ManageSeatLayout() {
     const newCapacity = seatStats.totalCapacity + capacityDiff;
     if (newCapacity > (room?.capacity ?? 0)) {
       toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_CAPACITY.replace('{0}', String(newCapacity)).replace('{1}', String(room?.capacity)));
-      return;
-    }
-
-    // ── Validation riêng cho chuyển sang Sweetbox ──
-    // Bắt buộc chọn đúng bội số 2, mỗi cặp phải liền kề (cùng hàng, số cột kề nhau),
-    // và tất cả phải là ghế Normal hoặc VIP (không phải sweetbox).
-    if (batchType === 'SEAT_TYPE_SWEETBOX') {
-      const selectedList = Array.from(selectedSeatIds)
-        .map((id) => seats.find((s) => s.seatId === id))
-        .filter((s): s is SeatResponse => !!s);
-
-      // Kiểm tra tất cả đều không phải sweetbox
-      const hasSweetbox = selectedList.some((s) => s.seatTypeId === 'SEAT_TYPE_SWEETBOX');
-      if (hasSweetbox) {
-        toast.error('Không thể chuyển ghế Sweetbox sang Sweetbox. Vui lòng chỉ chọn ghế Normal hoặc VIP.');
-        return;
-      }
-
-      // Kiểm tra số lượng phải là bội số 2
-      if (selectedList.length % 2 !== 0) {
-        toast.error('Để chuyển sang Sweetbox, hãy chọn số chẵn ghế (mỗi 2 ghế liền kề = 1 Sweetbox).');
-        return;
-      }
-
-      // Kiểm tra từng cặp phải liền kề nhau (cùng hàng, seatNumber kề)
-      const sorted = [...selectedList].sort((a, b) => {
-        const rowCmp = a.rowLabel.localeCompare(b.rowLabel);
-        return rowCmp !== 0 ? rowCmp : a.seatNumber - b.seatNumber;
-      });
-
-      const invalidPairs: string[] = [];
-      for (let i = 0; i < sorted.length; i += 2) {
-        const left = sorted[i];
-        const right = sorted[i + 1];
-        const isAdjacent =
-          left.rowLabel === right.rowLabel &&
-          right.seatNumber === left.seatNumber + 1;
-        if (!isAdjacent) {
-          invalidPairs.push(`${left.seatCode} & ${right.seatCode}`);
-        }
-      }
-
-      if (invalidPairs.length > 0) {
-        toast.error(
-          `Các ghế sau không liền kề nhau nên không thể ghép thành Sweetbox: ${invalidPairs.join(', ')}. ` +
-          'Hãy chọn các cặp ghế nằm sát nhau cùng hàng.',
-          { autoClose: 8000 }
-        );
-        return;
-      }
-    }
-
-    let capacityDiff = 0;
-    for (const seatId of Array.from(selectedSeatIds)) {
-      const seat = seats.find((s) => s.seatId === seatId);
-      if (!seat || !seat.isActive) continue;
-      const oldCap = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-      const newCap = batchType === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-      capacityDiff += (newCap - oldCap);
-    }
-    const newCapacity = seatStats.totalCapacity + capacityDiff;
-    if (newCapacity > (room?.capacity ?? 0)) {
-      toast.error(`Không thể đổi loại ghế vì tổng số chỗ ngồi sau khi đổi (${newCapacity}) sẽ vượt quá sức chứa tối đa của phòng (${room?.capacity} chỗ).`);
       return;
     }
 
@@ -1750,52 +1682,6 @@ export default function ManageSeatLayout() {
                   className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
                 >
                   {TEXT.SEAT_LAYOUT.BTN_CONFIRM_COPY}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* COPY LAYOUT MODAL */}
-      {showCopyModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-6 shadow-2xl w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-              <span>📋</span> Sao chép sơ đồ ghế
-            </h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Lấy toàn bộ thiết kế ghế từ một phòng chiếu khác và áp dụng cho phòng hiện tại. Ghế hiện tại của phòng này sẽ được đồng bộ/vô hiệu hóa tương ứng.
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1.5">Chọn phòng chiếu nguồn</label>
-                <select
-                  value={selectedSourceRoomId}
-                  onChange={(e) => setSelectedSourceRoomId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
-                >
-                  <option value="">-- Chọn phòng --</option>
-                  {otherRooms.map((r) => (
-                    <option key={r.roomId} value={r.roomId}>
-                      {r.roomName} ({r.cinemaName}) - {r.seatCount} ghế
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-3 justify-end pt-2">
-                <button
-                  onClick={() => setShowCopyModal(false)}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold rounded-lg transition"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  onClick={handleCopyLayout}
-                  disabled={!selectedSourceRoomId || actionLoading}
-                  className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
-                >
-                  Xác nhận sao chép
                 </button>
               </div>
             </div>

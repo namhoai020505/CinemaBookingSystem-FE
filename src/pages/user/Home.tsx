@@ -454,10 +454,11 @@ export default function Home() {
                 aria-label={`Go to slide ${index + 1}`}
                 aria-current={activeSlideIndex === index}
                 onClick={() => goToSlide(index)}
-                className={`h-3 w-3 rounded-full border border-white/80 transition ${activeSlideIndex === index
-                  ? "bg-white"
-                  : "bg-transparent hover:bg-white/50"
-                  }`}
+                className={`h-3 w-3 rounded-full border border-white/80 transition ${
+                  activeSlideIndex === index
+                    ? "bg-white"
+                    : "bg-transparent hover:bg-white/50"
+                }`}
               />
             ))}
           </div>

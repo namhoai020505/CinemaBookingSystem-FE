@@ -753,36 +753,6 @@ export default function ManageShowtime() {
           </div>
         )}
 
-        {/* Cảnh báo ngày quá khứ */}
-        {isPastDate && (
-          <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 px-3 py-1.5 rounded-lg text-amber-400 text-xs font-semibold">
-            <span>⚠️</span>
-            <span>Ngày đã qua — chỉ xem, không thể chỉnh sửa lịch</span>
-          </div>
-        )}
-
-        {isDirty && !isPastDate && (
-          <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg ml-4">
-            <span className="text-xs text-amber-400 font-semibold flex items-center gap-1">
-              ⚠️ Có thay đổi chưa lưu
-            </span>
-            <button
-              onClick={handleSaveChanges}
-              disabled={actionLoading}
-              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white rounded transition shadow-md"
-            >
-              {actionLoading ? "Đang lưu..." : "💾 Lưu Lịch Chiếu"}
-            </button>
-            <button
-              onClick={handleCancelChanges}
-              disabled={actionLoading}
-              className="px-3 py-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-xs font-bold text-white rounded transition"
-            >
-              Hủy
-            </button>
-          </div>
-        )}
-
         <div className="flex items-center gap-2 ml-auto text-xs text-gray-500">
           <span className="inline-block w-3 h-3 rounded bg-blue-500/40 border border-blue-500/30"></span>
           {TEXT.SHOWTIME.DEFAULT_TICKET_PRICE} {DEFAULT_BASE_PRICE.toLocaleString("vi-VN")}đ
