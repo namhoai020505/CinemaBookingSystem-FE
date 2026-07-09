@@ -39,7 +39,7 @@ export default function ManageMovie() {
   // Search Filters
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [searchGenre, setSearchGenre] = useState("");
+  const [searchGenres, setSearchGenres] = useState<string[]>([]);
 
   // States for DB-backed Genre Selection
   const [genres, setGenres] = useState<{ genreId: number; name: string }[]>([]);
@@ -48,11 +48,22 @@ export default function ManageMovie() {
   const [genreSearchInput, setGenreSearchInput] = useState("");
   const genreDropdownRef = useRef<HTMLDivElement>(null);
 
+  // States for external filter genre search
+  const [isFilterGenreDropdownOpen, setIsFilterGenreDropdownOpen] = useState(false);
+  const [filterGenreSearchInput, setFilterGenreSearchInput] = useState("");
+  const filterGenreDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!isGenreDropdownOpen) {
       setGenreSearchInput("");
     }
   }, [isGenreDropdownOpen]);
+
+  useEffect(() => {
+    if (!isFilterGenreDropdownOpen) {
+      setFilterGenreSearchInput("");
+    }
+  }, [isFilterGenreDropdownOpen]);
 
   // 1. Hàm lấy danh sách phim (Fetch tất cả để xử lý client-side)
   const fetchMovies = async () => {
@@ -72,11 +83,11 @@ export default function ManageMovie() {
   const filteredMovies = React.useMemo(() => {
     return allMovies.filter(movie => {
       if (selectedStatus && movie.movieStatus !== selectedStatus) return false;
-      if (searchGenre && (!movie.genres || !movie.genres.includes(searchGenre))) return false;
+      if (searchGenres.length > 0 && (!movie.genres || !searchGenres.some(sg => movie.genres.includes(sg)))) return false;
       if (searchTerm && !movie.movieNameVn.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       return true;
     });
-  }, [allMovies, selectedStatus, searchGenre, searchTerm]);
+  }, [allMovies, selectedStatus, searchGenres, searchTerm]);
 
   const totalCount = filteredMovies.length;
   const totalPages = Math.ceil(totalCount / pageSize);
@@ -102,6 +113,12 @@ export default function ManageMovie() {
         !genreDropdownRef.current.contains(event.target as Node)
       ) {
         setIsGenreDropdownOpen(false);
+      }
+      if (
+        filterGenreDropdownRef.current &&
+        !filterGenreDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsFilterGenreDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -428,19 +445,89 @@ export default function ManageMovie() {
             }}
             className="w-full lg:w-48 bg-[#0F172A] border border-gray-700 text-sm text-white px-4 py-2 rounded-xl focus:outline-none focus:border-[#4318FF] transition"
           />
-          <select
-            value={searchGenre}
-            onChange={(e) => {
-              setSearchGenre(e.target.value);
-              setPageIndex(1);
-            }}
-            className="bg-[#0F172A] border border-gray-700 text-sm text-white px-4 py-2 rounded-xl focus:outline-none focus:border-[#4318FF] transition"
-          >
-            <option value="">{TEXT.MOVIE.ALL_GENRES}</option>
-            {genres.map(g => (
-              <option key={g.genreId} value={g.name}>{g.name}</option>
-            ))}
-          </select>
+          <div className="relative min-w-[180px]" ref={filterGenreDropdownRef}>
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={isFilterGenreDropdownOpen ? filterGenreSearchInput : searchGenres.join(", ")}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterGenreSearchInput(val);
+                  if (val === "") {
+                    setSearchGenres([]);
+                    setPageIndex(1);
+                  }
+                  setIsFilterGenreDropdownOpen(true);
+                }}
+                onFocus={() => {
+                  setFilterGenreSearchInput("");
+                  setIsFilterGenreDropdownOpen(true);
+                }}
+                placeholder={TEXT.MOVIE.ALL_GENRES}
+                className="bg-[#0F172A] border border-gray-700 text-sm text-white px-4 py-2 pr-10 rounded-xl focus:outline-none focus:border-[#4318FF] transition w-full min-h-[38px] truncate"
+              />
+              <div
+                className="absolute right-3 cursor-pointer"
+                onClick={() => setIsFilterGenreDropdownOpen(!isFilterGenreDropdownOpen)}
+              >
+                <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+
+            {isFilterGenreDropdownOpen && (
+              <div className="absolute right-0 z-50 mt-1 w-56 bg-[#1E293B] border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-60 flex flex-col animate-fadeIn">
+                <div className="overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#1E293B] [&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-500">
+                  <div
+                    onClick={() => {
+                      setSearchGenres([]);
+                      setPageIndex(1);
+                      setIsFilterGenreDropdownOpen(false);
+                    }}
+                    className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${searchGenres.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
+                      }`}
+                  >
+                    {TEXT.MOVIE.ALL_GENRES}
+                  </div>
+                  {genres
+                    .filter((g) => g.name.toLowerCase().includes(filterGenreSearchInput.toLowerCase()))
+                    .map((g) => {
+                      const isSelected = searchGenres.includes(g.name);
+                      return (
+                        <div
+                          key={g.genreId}
+                          onClick={() => {
+                            let nextGenres: string[];
+                            if (isSelected) {
+                              nextGenres = searchGenres.filter(name => name !== g.name);
+                            } else {
+                              nextGenres = [...searchGenres, g.name];
+                            }
+                            setSearchGenres(nextGenres);
+                            setPageIndex(1);
+                          }}
+                          className={`px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between transition-colors duration-150 ${isSelected ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
+                            }`}
+                        >
+                          <span>{g.name}</span>
+                          {isSelected && (
+                            <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {genres.filter((g) => g.name.toLowerCase().includes(filterGenreSearchInput.toLowerCase())).length === 0 && (
+                    <div className="px-4 py-3 text-xs text-gray-500 italic text-center">
+                      Không tìm thấy thể loại nào
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <button
             onClick={() => {
               setSearchTerm(searchInput);
@@ -699,32 +786,37 @@ export default function ManageMovie() {
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     {TEXT.MOVIE.LABEL_GENRE}
                   </label>
-                  <div
-                    onClick={() => setIsGenreDropdownOpen(!isGenreDropdownOpen)}
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer flex items-center justify-between"
-                  >
-                    <span className={selectedGenreIds.length === 0 ? "text-gray-400" : ""}>
-                      {selectedGenreIds.length > 0
-                        ? genres.find(g => g.genreId === selectedGenreIds[0])?.name || TEXT.MOVIE.PLACEHOLDER_GENRE
-                        : TEXT.MOVIE.PLACEHOLDER_GENRE}
-                    </span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                    </svg>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={isGenreDropdownOpen ? genreSearchInput : selectedGenreIds.map(id => genres.find(g => g.genreId === id)?.name).filter(Boolean).join(", ")}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setGenreSearchInput(val);
+                        if (val === "") {
+                          setSelectedGenreIds([]);
+                        }
+                        setIsGenreDropdownOpen(true);
+                      }}
+                      onFocus={() => {
+                        setGenreSearchInput("");
+                        setIsGenreDropdownOpen(true);
+                      }}
+                      placeholder={TEXT.MOVIE.PLACEHOLDER_GENRE}
+                      className="w-full px-4 py-2 pr-10 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] truncate"
+                    />
+                    <div
+                      className="absolute right-3 cursor-pointer"
+                      onClick={() => setIsGenreDropdownOpen(!isGenreDropdownOpen)}
+                    >
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
                   </div>
 
                   {isGenreDropdownOpen && (
                     <div className="absolute z-50 mt-1 w-full bg-[#1E293B] border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-60 flex flex-col animate-fadeIn">
-                      {/* Search box in dropdown */}
-                      <div className="p-2 border-b border-gray-700 bg-[#0F172A]">
-                        <input
-                          type="text"
-                          value={genreSearchInput}
-                          onChange={(e) => setGenreSearchInput(e.target.value)}
-                          placeholder="Tìm thể loại..."
-                          className="w-full px-3 py-1.5 bg-[#1E293B] border border-gray-700 text-white text-xs rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
                       <div className="overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#1E293B] [&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-500">
                         <div
                           onClick={() => {
@@ -744,8 +836,13 @@ export default function ManageMovie() {
                               <div
                                 key={g.genreId}
                                 onClick={() => {
-                                  setSelectedGenreIds([g.genreId]);
-                                  setIsGenreDropdownOpen(false);
+                                  let nextIds: number[];
+                                  if (isSelected) {
+                                    nextIds = selectedGenreIds.filter(id => id !== g.genreId);
+                                  } else {
+                                    nextIds = [...selectedGenreIds, g.genreId];
+                                  }
+                                  setSelectedGenreIds(nextIds);
                                 }}
                                 className={`px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between transition-colors duration-150 ${isSelected ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
                                   }`}
