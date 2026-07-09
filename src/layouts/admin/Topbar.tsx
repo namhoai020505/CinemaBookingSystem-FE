@@ -76,7 +76,7 @@ const Topbar = ({
   return (
     <header
       className={[
-        'sticky top-0 z-30 flex h-[72px] items-center gap-4 border-b px-6 backdrop-blur-xl transition-colors',
+        'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-4 border-b px-6 backdrop-blur-xl transition-colors',
         isLightMode
           ? 'border-slate-200 bg-white/90 text-slate-950'
           : 'border-white/10 bg-[#0B1220]/90 text-white',

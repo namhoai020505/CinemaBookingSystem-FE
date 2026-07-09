@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import {
   FaBuilding,
   FaCalendarAlt,
@@ -29,6 +29,30 @@ import {
 } from '../../services/dashboardService';
 import { showtimeService, type CinemaResponse } from '../../services/showtimeService';
 
+type ReportSectionId = 'revenue' | 'performance' | 'channels';
+
+type DatePreset = {
+  id: string;
+  label: string;
+  description: string;
+  getRange: () => Pick<DashboardFilter, 'fromDate' | 'toDate'>;
+};
+
+type RevenueBar = {
+  label: string;
+  value: number;
+  colorClass: string;
+  note: string;
+};
+
+type ThemeAwareProps = {
+  isLightMode: boolean;
+};
+
+type DateInputElement = HTMLInputElement & {
+  showPicker?: () => void;
+};
+
 const emptyOverview: DashboardOverview = {
   grossRevenue: 0,
   totalRefunds: 0,
@@ -47,6 +71,125 @@ const emptyOccupancyAndFb: OccupancyAndFbBreakdown = {
   fbRevenuePercentage: 0,
   fbItems: [],
 };
+
+const padDatePart = (value: number) => String(value).padStart(2, '0');
+
+const toDateInputValue = (date: Date) =>
+  `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+
+const cloneDate = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const addDays = (date: Date, amount: number) => {
+  const nextDate = cloneDate(date);
+  nextDate.setDate(nextDate.getDate() + amount);
+  return nextDate;
+};
+
+const getStartOfWeek = (date: Date) => {
+  const nextDate = cloneDate(date);
+  const mondayOffset = (nextDate.getDay() + 6) % 7;
+  nextDate.setDate(nextDate.getDate() - mondayOffset);
+  return nextDate;
+};
+
+const getDatePresets = (): DatePreset[] => [
+  {
+    id: 'all',
+    label: 'Tất cả',
+    description: 'Không giới hạn thời gian',
+    getRange: () => ({ fromDate: undefined, toDate: undefined }),
+  },
+  {
+    id: 'today',
+    label: 'Hôm nay',
+    description: 'Doanh thu trong ngày',
+    getRange: () => {
+      const today = new Date();
+      const value = toDateInputValue(today);
+      return { fromDate: value, toDate: value };
+    },
+  },
+  {
+    id: 'this-week',
+    label: 'Tuần này',
+    description: 'Từ thứ 2 đến hôm nay',
+    getRange: () => {
+      const today = new Date();
+      return {
+        fromDate: toDateInputValue(getStartOfWeek(today)),
+        toDate: toDateInputValue(today),
+      };
+    },
+  },
+  {
+    id: 'last-week',
+    label: 'Tuần trước',
+    description: 'Trọn tuần trước',
+    getRange: () => {
+      const thisWeekStart = getStartOfWeek(new Date());
+      const lastWeekStart = addDays(thisWeekStart, -7);
+      const lastWeekEnd = addDays(thisWeekStart, -1);
+      return {
+        fromDate: toDateInputValue(lastWeekStart),
+        toDate: toDateInputValue(lastWeekEnd),
+      };
+    },
+  },
+  {
+    id: 'this-month',
+    label: 'Tháng này',
+    description: 'Từ đầu tháng đến hôm nay',
+    getRange: () => {
+      const today = new Date();
+      return {
+        fromDate: toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)),
+        toDate: toDateInputValue(today),
+      };
+    },
+  },
+  {
+    id: 'last-month',
+    label: 'Tháng trước',
+    description: 'Trọn tháng trước',
+    getRange: () => {
+      const today = new Date();
+      return {
+        fromDate: toDateInputValue(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
+        toDate: toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 0)),
+      };
+    },
+  },
+  {
+    id: 'this-year',
+    label: 'Năm nay',
+    description: 'Từ đầu năm đến hôm nay',
+    getRange: () => {
+      const today = new Date();
+      return {
+        fromDate: toDateInputValue(new Date(today.getFullYear(), 0, 1)),
+        toDate: toDateInputValue(today),
+      };
+    },
+  },
+  {
+    id: 'last-year',
+    label: 'Năm trước',
+    description: 'Trọn năm trước',
+    getRange: () => {
+      const today = new Date();
+      return {
+        fromDate: toDateInputValue(new Date(today.getFullYear() - 1, 0, 1)),
+        toDate: toDateInputValue(new Date(today.getFullYear() - 1, 11, 31)),
+      };
+    },
+  },
+];
+
+const normalizeFilter = (filter: DashboardFilter): DashboardFilter => ({
+  fromDate: filter.fromDate || undefined,
+  toDate: filter.toDate || undefined,
+  cinemaId: filter.cinemaId || undefined,
+});
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('vi-VN', {
@@ -72,16 +215,12 @@ const formatDateLabel = (value?: string) => {
     return '';
   }
 
-  const timestamp = Date.parse(`${value}T00:00:00`);
-  if (Number.isNaN(timestamp)) {
+  const [year, month, day] = value.split('-');
+  if (!year || !month || !day) {
     return value;
   }
 
-  return new Date(timestamp).toLocaleDateString('vi-VN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
+  return `${day}/${month}/${year}`;
 };
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -97,7 +236,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 
 const getRangeLabel = (filter: DashboardFilter) => {
   if (filter.fromDate && filter.toDate) {
-    return `${formatDateLabel(filter.fromDate)} - ${formatDateLabel(filter.toDate)}`;
+    return `Từ ${formatDateLabel(filter.fromDate)} đến ${formatDateLabel(filter.toDate)}`;
   }
 
   if (filter.fromDate) {
@@ -113,7 +252,7 @@ const getRangeLabel = (filter: DashboardFilter) => {
 
 const getFilterSummary = (filter: DashboardFilter, cinemas: CinemaResponse[]) => {
   const cinema = cinemas.find((item) => item.cinemaId === filter.cinemaId);
-  return `${cinema?.cinemaName || 'Tất cả chi nhánh'} - ${getRangeLabel(filter)}`;
+  return `${cinema?.cinemaName || 'Tất cả chi nhánh'} • ${getRangeLabel(filter)}`;
 };
 
 const getActiveFilterCount = (filter: DashboardFilter) =>
@@ -123,23 +262,15 @@ const getActiveFilterCount = (filter: DashboardFilter) =>
 
 const clampPercent = (value: number) => Math.min(100, Math.max(0, value || 0));
 
-type RevenueBar = {
-  label: string;
-  value: number;
-  colorClass: string;
-  note: string;
-};
+const openNativeDatePicker = (event: MouseEvent<HTMLInputElement>) => {
+  const input = event.currentTarget as DateInputElement;
+  input.focus();
 
-type ThemeAwareProps = {
-  isLightMode: boolean;
-};
-
-type PanelHeaderProps = ThemeAwareProps & {
-  icon: ReactNode;
-  eyebrow?: string;
-  title: string;
-  description: string;
-  action?: ReactNode;
+  try {
+    input.showPicker?.();
+  } catch {
+    // Browser fallback: focusing the native date input still keeps keyboard access intact.
+  }
 };
 
 const PanelHeader = ({
@@ -149,7 +280,13 @@ const PanelHeader = ({
   description,
   action,
   isLightMode,
-}: PanelHeaderProps) => (
+}: ThemeAwareProps & {
+  icon: ReactNode;
+  eyebrow?: string;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) => (
   <div
     className={`flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-start sm:justify-between ${
       isLightMode ? 'border-slate-200' : 'border-white/10'
@@ -161,16 +298,16 @@ const PanelHeader = ({
           {eyebrow}
         </p>
       ) : null}
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
         <span
-          className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${
+          className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${
             isLightMode ? 'bg-slate-100 text-slate-700' : 'bg-white/10 text-slate-200'
           }`}
         >
           {icon}
         </span>
         <div className="min-w-0">
-          <h2 className={`truncate text-base font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>
+          <h2 className={`text-base font-black leading-6 ${isLightMode ? 'text-slate-950' : 'text-white'}`}>
             {title}
           </h2>
           <p className={`mt-1 text-sm leading-6 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -183,15 +320,6 @@ const PanelHeader = ({
   </div>
 );
 
-type StatCardProps = ThemeAwareProps & {
-  label: string;
-  value: string;
-  meta: string;
-  icon: ReactNode;
-  accentClass: string;
-  loading: boolean;
-};
-
 const StatCard = ({
   label,
   value,
@@ -200,7 +328,14 @@ const StatCard = ({
   accentClass,
   loading,
   isLightMode,
-}: StatCardProps) => (
+}: ThemeAwareProps & {
+  label: string;
+  value: string;
+  meta: string;
+  icon: ReactNode;
+  accentClass: string;
+  loading: boolean;
+}) => (
   <article
     className={`rounded-lg border p-5 shadow-xl transition ${
       isLightMode
@@ -231,15 +366,24 @@ const StatCard = ({
   </article>
 );
 
-type MetricStripProps = ThemeAwareProps & {
+const MetricStrip = ({
+  label,
+  value,
+  icon,
+  isLightMode,
+}: ThemeAwareProps & {
   label: string;
   value: string;
   icon: ReactNode;
-};
-
-const MetricStrip = ({ label, value, icon, isLightMode }: MetricStripProps) => (
-  <div className={`flex items-center gap-3 border-t py-4 ${isLightMode ? 'border-slate-200' : 'border-white/10'}`}>
-    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${isLightMode ? 'bg-white text-slate-700' : 'bg-white/10 text-slate-200'}`}>
+}) => (
+  <div
+    className={`flex min-h-[72px] items-center gap-3 rounded-lg border px-3 py-3 shadow-sm ${
+      isLightMode
+        ? 'border-slate-200 bg-white shadow-slate-200/70'
+        : 'border-white/10 bg-white/[0.04] shadow-black/20'
+    }`}
+  >
+    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${isLightMode ? 'bg-white text-slate-700' : 'bg-white/10 text-slate-200'}`}>
       {icon}
     </span>
     <div className="min-w-0">
@@ -253,46 +397,44 @@ const MetricStrip = ({ label, value, icon, isLightMode }: MetricStripProps) => (
   </div>
 );
 
-const RevenueBarChart = ({
+const RevenueColumnChart = ({
   bars,
   isLightMode,
-}: {
+}: ThemeAwareProps & {
   bars: RevenueBar[];
-  isLightMode: boolean;
 }) => {
   const maxValue = Math.max(...bars.map((bar) => bar.value), 1);
 
   return (
-    <div className="grid gap-5 p-5">
+    <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
       {bars.map((bar) => {
-        const width = bar.value > 0 ? Math.max(6, (bar.value / maxValue) * 100) : 0;
+        const height = bar.value > 0 ? Math.max(8, Math.round((bar.value / maxValue) * 100)) : 0;
 
         return (
-          <div key={bar.label} className="grid gap-2">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-              <div className="min-w-0">
-                <p className={`text-sm font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>
-                  {bar.label}
-                </p>
-                <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                  {bar.note}
-                </p>
-              </div>
-              <p className={`shrink-0 text-sm font-black ${isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>
-                {formatCurrency(bar.value)}
-              </p>
-            </div>
+          <div key={bar.label} className="flex min-h-[285px] min-w-0 flex-col justify-end gap-3">
             <div
-              className={`h-3 overflow-hidden rounded-full ${
-                isLightMode ? 'bg-slate-200' : 'bg-white/10'
+              className={`flex min-h-[165px] flex-1 items-end rounded-lg border border-dashed p-2 ${
+                isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'
               }`}
               aria-label={`${bar.label}: ${formatCurrency(bar.value)}`}
               role="img"
             >
               <div
-                className={`h-full rounded-full bg-gradient-to-r ${bar.colorClass} transition-all duration-300`}
-                style={{ width: `${width}%` }}
+                className={`w-full rounded-t-md bg-gradient-to-t ${bar.colorClass} shadow-lg transition-all duration-300`}
+                style={{ height: `${height}%` }}
+                title={formatCurrency(bar.value)}
               />
+            </div>
+            <div className="min-h-[86px]">
+              <p className={`text-sm font-black leading-5 ${isLightMode ? 'text-slate-950' : 'text-white'}`}>
+                {bar.label}
+              </p>
+              <p className={`mt-1 text-sm font-black ${isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>
+                {formatCurrency(bar.value)}
+              </p>
+              <p className={`mt-1 text-xs font-semibold leading-5 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                {bar.note}
+              </p>
             </div>
           </div>
         );
@@ -305,10 +447,9 @@ const RevenuePieChart = ({
   ticketRevenue,
   fbRevenue,
   isLightMode,
-}: {
+}: ThemeAwareProps & {
   ticketRevenue: number;
   fbRevenue: number;
-  isLightMode: boolean;
 }) => {
   const total = ticketRevenue + fbRevenue;
   const ticketPercent = total > 0 ? (ticketRevenue / total) * 100 : 0;
@@ -322,7 +463,12 @@ const RevenuePieChart = ({
 
   return (
     <div className="grid gap-6 p-5 md:grid-cols-[190px_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[190px_minmax(0,1fr)]">
-      <div className="mx-auto grid h-44 w-44 place-items-center rounded-full shadow-xl" style={{ background }} role="img" aria-label={`Vé ${formatPercent(ticketPercent)}, F&B ${formatPercent(fbPercent)}`}>
+      <div
+        className="mx-auto grid h-44 w-44 place-items-center rounded-full shadow-xl"
+        style={{ background }}
+        role="img"
+        aria-label={`Doanh thu vé ${formatPercent(ticketPercent)}, doanh thu F&B ${formatPercent(fbPercent)}`}
+      >
         <div className={`grid h-24 w-24 place-items-center rounded-full text-center ${isLightMode ? 'bg-white' : 'bg-[#101826]'}`}>
           <div>
             <p className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -370,15 +516,6 @@ const RevenuePieChart = ({
   );
 };
 
-type ProgressRowProps = ThemeAwareProps & {
-  title: string;
-  subtitle: string;
-  value: string;
-  progress: number;
-  accentClass: string;
-  leading?: ReactNode;
-};
-
 const ProgressRow = ({
   title,
   subtitle,
@@ -387,7 +524,14 @@ const ProgressRow = ({
   accentClass,
   leading,
   isLightMode,
-}: ProgressRowProps) => {
+}: ThemeAwareProps & {
+  title: string;
+  subtitle: string;
+  value: string;
+  progress: number;
+  accentClass: string;
+  leading?: ReactNode;
+}) => {
   const width = progress > 0 ? Math.max(5, clampPercent(progress)) : 0;
 
   return (
@@ -445,6 +589,7 @@ export default function Dashboard() {
   const { isLightMode } = useOutletContext<AdminOutletContext>();
   const [draftFilter, setDraftFilter] = useState<DashboardFilter>({});
   const [appliedFilter, setAppliedFilter] = useState<DashboardFilter>({});
+  const [activeSection, setActiveSection] = useState<ReportSectionId>('revenue');
   const [cinemas, setCinemas] = useState<CinemaResponse[]>([]);
   const [overview, setOverview] = useState<DashboardOverview>(emptyOverview);
   const [movieRanking, setMovieRanking] = useState<MovieRankingItem[]>([]);
@@ -454,6 +599,17 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
+  const datePresets = useMemo(() => getDatePresets(), []);
+  const activeDraftPreset = datePresets.find((preset) => {
+    const range = preset.getRange();
+    return (
+      (range.fromDate || '') === (draftFilter.fromDate || '') &&
+      (range.toDate || '') === (draftFilter.toDate || '')
+    );
+  });
+  const activeFilterCount = getActiveFilterCount(appliedFilter);
+  const refundRate =
+    overview.grossRevenue > 0 ? (overview.totalRefunds / overview.grossRevenue) * 100 : 0;
   const panelClass = [
     'rounded-lg border shadow-xl transition-colors',
     isLightMode
@@ -461,7 +617,7 @@ export default function Dashboard() {
       : 'border-white/10 bg-[#101826] shadow-black/20',
   ].join(' ');
   const inputClass = [
-    'h-11 w-full rounded-lg border px-3 text-sm font-bold outline-none transition focus:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-400/70',
+    'h-11 w-full cursor-pointer rounded-lg border px-3 text-sm font-bold outline-none transition focus:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-400/70',
     isLightMode
       ? 'border-slate-200 bg-white text-slate-950'
       : 'border-white/10 bg-[#0B1220] text-white',
@@ -470,10 +626,32 @@ export default function Dashboard() {
   const mutedClass = isLightMode ? 'text-slate-500' : 'text-slate-400';
   const headingClass = isLightMode ? 'text-slate-950' : 'text-white';
   const rowBorderClass = isLightMode ? 'divide-slate-200' : 'divide-white/10';
-  const activeFilterCount = getActiveFilterCount(appliedFilter);
-  const refundRate =
-    overview.grossRevenue > 0 ? (overview.totalRefunds / overview.grossRevenue) * 100 : 0;
-  const occupancyWidth = clampPercent(occupancyAndFb.occupancyRate);
+
+  const reportSections: Array<{
+    id: ReportSectionId;
+    label: string;
+    description: string;
+    icon: ReactNode;
+  }> = [
+    {
+      id: 'revenue',
+      label: 'Dòng tiền & cơ cấu',
+      description: 'Doanh thu theo nhóm và tỷ trọng',
+      icon: <FaChartPie />,
+    },
+    {
+      id: 'performance',
+      label: 'Phim & F&B',
+      description: 'Xếp hạng phim, hiệu suất F&B',
+      icon: <FaTrophy />,
+    },
+    {
+      id: 'channels',
+      label: 'Kênh bán F&B',
+      description: 'Online, offline và tỷ trọng',
+      icon: <FaBuilding />,
+    },
+  ];
 
   useEffect(() => {
     let isMounted = true;
@@ -592,12 +770,21 @@ export default function Dashboard() {
     1,
   );
 
+  const applyFilter = (filter: DashboardFilter) => {
+    const nextFilter = normalizeFilter(filter);
+    setDraftFilter(nextFilter);
+    setAppliedFilter(nextFilter);
+  };
+
   const handleSubmitFilter = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setAppliedFilter({
-      fromDate: draftFilter.fromDate || undefined,
-      toDate: draftFilter.toDate || undefined,
-      cinemaId: draftFilter.cinemaId || undefined,
+    applyFilter(draftFilter);
+  };
+
+  const handleDatePreset = (preset: DatePreset) => {
+    applyFilter({
+      ...draftFilter,
+      ...preset.getRange(),
     });
   };
 
@@ -609,7 +796,7 @@ export default function Dashboard() {
   return (
     <div
       className={[
-        'min-h-screen p-4 transition-colors sm:p-6',
+        'min-h-full p-4 transition-colors sm:p-6',
         isLightMode ? 'bg-[#F6F8FB] text-slate-950' : 'bg-[#080B12] text-white',
       ].join(' ')}
       style={{
@@ -619,8 +806,8 @@ export default function Dashboard() {
       }}
     >
       <div className="mx-auto flex max-w-[1440px] flex-col gap-5">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)] xl:items-start">
-          <section className="py-2">
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(560px,720px)] xl:items-end">
+          <div className="min-w-0">
             <p className="text-sm font-black uppercase text-cyan-500">
               Phân tích doanh thu
             </p>
@@ -630,118 +817,29 @@ export default function Dashboard() {
             <p className={`mt-4 max-w-3xl text-sm leading-6 ${mutedClass}`}>
               {getFilterSummary(appliedFilter, cinemas)}
             </p>
+          </div>
 
-            <div className="mt-6 grid gap-3 md:grid-cols-3">
-              <MetricStrip
-                label="Bộ lọc"
-                value={activeFilterCount > 0 ? `${activeFilterCount} điều kiện` : 'Toàn hệ thống'}
-                icon={<FaFilter />}
-                isLightMode={isLightMode}
-              />
-              <MetricStrip
-                label="Lấp đầy"
-                value={formatPercent(occupancyAndFb.occupancyRate)}
-                icon={<FaPercent />}
-                isLightMode={isLightMode}
-              />
-              <MetricStrip
-                label="Trạng thái"
-                value={loading ? 'Đang cập nhật' : 'Dữ liệu mới nhất'}
-                icon={loading ? <FaSyncAlt className="animate-spin" /> : <FaChartLine />}
-                isLightMode={isLightMode}
-              />
-            </div>
-          </section>
-
-          <form onSubmit={handleSubmitFilter} className={`${panelClass} p-4`}>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className={labelClass}>Bộ lọc báo cáo</p>
-                <p className={`mt-1 text-sm font-semibold ${mutedClass}`}>
-                  Chọn thời gian và chi nhánh
-                </p>
-              </div>
-              <span className={`grid h-10 w-10 place-items-center rounded-lg ${isLightMode ? 'bg-cyan-50 text-cyan-700' : 'bg-cyan-500/10 text-cyan-200'}`}>
-                <FaCalendarAlt />
-              </span>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <label className="grid gap-2">
-                <span className={labelClass}>Từ ngày</span>
-                <input
-                  type="date"
-                  value={draftFilter.fromDate || ''}
-                  onChange={(event) =>
-                    setDraftFilter((current) => ({
-                      ...current,
-                      fromDate: event.target.value,
-                    }))
-                  }
-                  className={inputClass}
-                />
-              </label>
-
-              <label className="grid gap-2">
-                <span className={labelClass}>Đến ngày</span>
-                <input
-                  type="date"
-                  value={draftFilter.toDate || ''}
-                  onChange={(event) =>
-                    setDraftFilter((current) => ({
-                      ...current,
-                      toDate: event.target.value,
-                    }))
-                  }
-                  className={inputClass}
-                />
-              </label>
-
-              <label className="grid gap-2 sm:col-span-2 xl:col-span-1">
-                <span className={labelClass}>Chi nhánh</span>
-                <select
-                  value={draftFilter.cinemaId || ''}
-                  onChange={(event) =>
-                    setDraftFilter((current) => ({
-                      ...current,
-                      cinemaId: event.target.value,
-                    }))
-                  }
-                  className={inputClass}
-                >
-                  <option value="">Tất cả chi nhánh</option>
-                  {cinemas.map((cinema) => (
-                    <option key={cinema.cinemaId} value={cinema.cinemaId}>
-                      {cinema.cinemaName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <button
-                type="submit"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 text-sm font-black text-white transition hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
-              >
-                <FaFilter />
-                Lọc dữ liệu
-              </button>
-              <button
-                type="button"
-                onClick={handleResetFilter}
-                className={`inline-flex h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 ${
-                  isLightMode
-                    ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
-                }`}
-              >
-                <FaRedoAlt />
-                Đặt lại
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MetricStrip
+              label="Bộ lọc"
+              value={activeFilterCount > 0 ? `${activeFilterCount} điều kiện` : 'Toàn hệ thống'}
+              icon={<FaFilter />}
+              isLightMode={isLightMode}
+            />
+            <MetricStrip
+              label="Tỷ lệ ghế đã bán"
+              value={formatPercent(occupancyAndFb.occupancyRate)}
+              icon={<FaPercent />}
+              isLightMode={isLightMode}
+            />
+            <MetricStrip
+              label="Trạng thái"
+              value={loading ? 'Đang cập nhật' : 'Dữ liệu mới nhất'}
+              icon={loading ? <FaSyncAlt className="animate-spin" /> : <FaChartLine />}
+              isLightMode={isLightMode}
+            />
+          </div>
+        </section>
 
         {errorMessage ? (
           <div className="flex items-start gap-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm font-bold text-rose-200">
@@ -754,7 +852,7 @@ export default function Dashboard() {
           <StatCard
             label="Tổng doanh thu"
             value={formatCurrency(overview.grossRevenue)}
-            meta={`${formatNumber(overview.totalSuccessfulBookings)} lượt đặt thành công`}
+            meta={`${formatNumber(overview.totalSuccessfulBookings)} lượt đặt vé thành công`}
             icon={<FaMoneyBillWave />}
             accentClass="from-cyan-600 to-blue-500"
             loading={loading}
@@ -772,16 +870,16 @@ export default function Dashboard() {
           <StatCard
             label="Vé đã bán"
             value={formatNumber(overview.totalTicketsSold)}
-            meta={`${formatPercent(occupancyAndFb.occupancyRate)} công suất ghế`}
+            meta={`${formatPercent(occupancyAndFb.occupancyRate)} ghế đã bán / tổng sức chứa ghế`}
             icon={<FaTicketAlt />}
             accentClass="from-sky-600 to-cyan-400"
             loading={loading}
             isLightMode={isLightMode}
           />
           <StatCard
-            label="Giá trị đơn TB"
+            label="Giá trị đơn trung bình"
             value={formatCurrency(overview.averageOrderValue)}
-            meta="Theo lượt đặt vé thành công"
+            meta="Tính theo lượt đặt vé thành công"
             icon={<FaReceipt />}
             accentClass="from-amber-500 to-orange-400"
             loading={loading}
@@ -789,219 +887,389 @@ export default function Dashboard() {
           />
         </section>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-          <section className={panelClass}>
-            <PanelHeader
-              eyebrow="Revenue"
-              title="Dòng tiền theo nhóm"
-              description="So sánh các nguồn doanh thu chính trong bộ lọc hiện tại."
-              icon={<FaChartLine />}
-              isLightMode={isLightMode}
-              action={
-                <span className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-xs font-black ${
+        <section
+          className={`sticky top-0 z-20 rounded-lg border p-3 shadow-xl backdrop-blur-xl ${
+            isLightMode
+              ? 'border-slate-200 bg-white/90 shadow-slate-200/70'
+              : 'border-white/10 bg-[#0B1220]/90 shadow-black/30'
+          }`}
+        >
+          <div className="mb-3 flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className={labelClass}>Bộ lọc báo cáo</p>
+              <p className={`mt-1 text-sm font-semibold ${mutedClass}`}>
+                Chọn nhanh theo mốc thời gian hoặc bấm vào ô ngày để mở lịch.
+              </p>
+            </div>
+            <p className={`text-sm font-black ${headingClass}`}>
+              {getRangeLabel(appliedFilter)}
+            </p>
+          </div>
+
+          <form
+            onSubmit={handleSubmitFilter}
+            className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(150px,180px)_minmax(150px,180px)_minmax(190px,220px)_minmax(210px,1fr)_auto_auto]"
+          >
+              <label className="grid gap-2">
+                <span className={labelClass}>Từ ngày</span>
+                <input
+                  type="date"
+                  value={draftFilter.fromDate || ''}
+                  max={draftFilter.toDate || undefined}
+                  onClick={openNativeDatePicker}
+                  onChange={(event) =>
+                    setDraftFilter((current) => ({
+                      ...current,
+                      fromDate: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  aria-label="Từ ngày"
+                />
+              </label>
+
+              <label className="grid gap-2">
+                <span className={labelClass}>Đến ngày</span>
+                <input
+                  type="date"
+                  value={draftFilter.toDate || ''}
+                  min={draftFilter.fromDate || undefined}
+                  onClick={openNativeDatePicker}
+                  onChange={(event) =>
+                    setDraftFilter((current) => ({
+                      ...current,
+                      toDate: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  aria-label="Đến ngày"
+                />
+              </label>
+
+              <label className="grid gap-2">
+                <span className={labelClass}>Khoảng thời gian</span>
+                <select
+                  value={activeDraftPreset?.id ?? 'custom'}
+                  onChange={(event) => {
+                    const selectedPreset = datePresets.find(
+                      (preset) => preset.id === event.target.value,
+                    );
+
+                    if (selectedPreset) {
+                      handleDatePreset(selectedPreset);
+                    }
+                  }}
+                  className={inputClass}
+                  aria-label="Khoảng thời gian nhanh"
+                >
+                  <option value="custom">Tùy chỉnh</option>
+                  {datePresets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className={labelClass}>Chi nhánh</span>
+                <select
+                  value={draftFilter.cinemaId || ''}
+                  onChange={(event) =>
+                    setDraftFilter((current) => ({
+                      ...current,
+                      cinemaId: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                  aria-label="Chi nhánh"
+                >
+                  <option value="">Tất cả chi nhánh</option>
+                  {cinemas.map((cinema) => (
+                    <option key={cinema.cinemaId} value={cinema.cinemaId}>
+                      {cinema.cinemaName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button
+                type="submit"
+                className="mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 text-sm font-black text-white transition hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+              >
+                <FaFilter />
+                Áp dụng
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetFilter}
+                className={`mt-auto inline-flex h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 ${
                   isLightMode
-                    ? 'border-slate-200 bg-slate-50 text-slate-600'
-                    : 'border-white/10 bg-white/5 text-slate-300'
-                }`}>
-                  {loading ? <FaSyncAlt className="animate-spin" /> : <FaCalendarAlt />}
-                  {getRangeLabel(appliedFilter)}
-                </span>
-              }
-            />
-            <RevenueBarChart bars={revenueBars} isLightMode={isLightMode} />
-          </section>
+                    ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+                }`}
+              >
+                <FaRedoAlt />
+                Đặt lại
+              </button>
+          </form>
 
-          <section className={panelClass}>
-            <PanelHeader
-              eyebrow="Mix"
-              title="Cơ cấu doanh thu"
-              description="Tỷ lệ giữa vé và F&B để theo dõi sức mua phụ trợ."
-              icon={<FaChartPie />}
-              isLightMode={isLightMode}
-            />
-            <RevenuePieChart
-              ticketRevenue={occupancyAndFb.ticketRevenue}
-              fbRevenue={occupancyAndFb.fbRevenue}
-              isLightMode={isLightMode}
-            />
-          </section>
-        </div>
+          <nav
+            className={`mt-3 grid gap-2 border-t pt-3 lg:grid-cols-3 ${
+              isLightMode ? 'border-slate-200' : 'border-white/10'
+            }`}
+            aria-label="Điều hướng nhóm báo cáo"
+            role="tablist"
+          >
+            {reportSections.map((section) => {
+              const active = activeSection === section.id;
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <section className={panelClass}>
-            <PanelHeader
-              eyebrow="Top movies"
-              title="Xếp hạng phim"
-              description="Phim bán vé tốt nhất theo bộ lọc đang áp dụng."
-              icon={<FaTrophy />}
-              isLightMode={isLightMode}
-            />
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveSection(section.id)}
+                  className={`flex min-h-12 w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70 ${
+                    active
+                      ? 'border-cyan-500 bg-cyan-600 text-white shadow-lg shadow-cyan-600/20'
+                      : isLightMode
+                        ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+                  }`}
+                  aria-selected={active}
+                  role="tab"
+                >
+                  <span
+                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
+                      active
+                        ? 'bg-white/20 text-white'
+                        : isLightMode
+                          ? 'bg-slate-100 text-slate-600'
+                          : 'bg-white/10 text-slate-300'
+                    }`}
+                  >
+                    {section.icon}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-black">{section.label}</span>
+                    <span className={`mt-0.5 block truncate text-xs font-semibold ${active ? 'text-cyan-50' : mutedClass}`}>
+                      {section.description}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        </section>
 
-            {movieRanking.length === 0 ? (
-              <EmptyState
-                title="Chưa có dữ liệu phim"
-                description="Bộ lọc hiện tại chưa phát sinh lượt bán vé."
-                icon={<FaFilm />}
+        {activeSection === 'revenue' ? (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]" role="tabpanel">
+            <section className={panelClass}>
+              <PanelHeader
+                eyebrow="Revenue"
+                title="Dòng tiền theo nhóm"
+                description="Biểu đồ cột dọc so sánh tổng doanh thu, doanh thu thuần, vé và F&B."
+                icon={<FaChartLine />}
+                isLightMode={isLightMode}
+                action={
+                  <span className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-xs font-black ${
+                    isLightMode
+                      ? 'border-slate-200 bg-slate-50 text-slate-600'
+                      : 'border-white/10 bg-white/5 text-slate-300'
+                  }`}>
+                    {loading ? <FaSyncAlt className="animate-spin" /> : <FaCalendarAlt />}
+                    {getRangeLabel(appliedFilter)}
+                  </span>
+                }
+              />
+              <RevenueColumnChart bars={revenueBars} isLightMode={isLightMode} />
+            </section>
+
+            <section className={panelClass}>
+              <PanelHeader
+                eyebrow="Mix"
+                title="Cơ cấu doanh thu"
+                description="Tỷ lệ giữa vé đã bán và F&B đã bán trong bộ lọc hiện tại."
+                icon={<FaChartPie />}
                 isLightMode={isLightMode}
               />
-            ) : (
-              <div className={`divide-y ${rowBorderClass}`}>
-                {movieRanking.map((movie, index) => (
-                  <ProgressRow
-                    key={movie.movieId || movie.movieTitle}
-                    title={movie.movieTitle}
-                    subtitle={formatCurrency(movie.ticketRevenue)}
-                    value={`${formatNumber(movie.ticketsSold)} vé`}
-                    progress={(movie.ticketsSold / maxTicketsSold) * 100}
-                    accentClass="from-cyan-600 to-blue-500"
-                    isLightMode={isLightMode}
-                    leading={
-                      <span className={`grid h-9 w-9 place-items-center rounded-lg text-sm font-black ${
-                        index === 0
-                          ? 'bg-amber-500 text-white'
-                          : isLightMode
-                            ? 'bg-slate-100 text-slate-700'
-                            : 'bg-white/10 text-slate-200'
-                      }`}>
-                        {index + 1}
-                      </span>
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </section>
+              <RevenuePieChart
+                ticketRevenue={occupancyAndFb.ticketRevenue}
+                fbRevenue={occupancyAndFb.fbRevenue}
+                isLightMode={isLightMode}
+              />
+            </section>
+          </div>
+        ) : null}
 
-          <section className={panelClass}>
-            <PanelHeader
-              eyebrow="F&B"
-              title="Hiệu suất F&B"
-              description="Doanh thu, số lượng bán và mức đóng góp của từng món."
-              icon={<FaUtensils />}
-              isLightMode={isLightMode}
-            />
+        {activeSection === 'performance' ? (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" role="tabpanel">
+            <section className={panelClass}>
+              <PanelHeader
+                eyebrow="Top movies"
+                title="Xếp hạng phim"
+                description="Phim bán vé tốt nhất, sắp xếp giảm dần theo số vé đã bán."
+                icon={<FaTrophy />}
+                isLightMode={isLightMode}
+              />
 
-            <div className={`grid divide-y border-b sm:grid-cols-3 sm:divide-x sm:divide-y-0 ${rowBorderClass} ${isLightMode ? 'border-slate-200' : 'border-white/10'}`}>
-              {[
-                {
-                  label: 'Doanh thu F&B',
-                  value: formatCurrency(occupancyAndFb.fbRevenue),
-                },
-                {
-                  label: 'Ghế đã bán',
-                  value: formatNumber(occupancyAndFb.totalSoldSeats),
-                },
-                {
-                  label: 'Sức chứa',
-                  value: formatNumber(occupancyAndFb.totalAvailableSeatsCapacity),
-                },
-              ].map((item) => (
-                <div key={item.label} className="p-5">
-                  <p className={labelClass}>{item.label}</p>
-                  <p className={`mt-2 text-lg font-black ${headingClass}`}>{item.value}</p>
+              {movieRanking.length === 0 ? (
+                <EmptyState
+                  title="Chưa có dữ liệu phim"
+                  description="Bộ lọc hiện tại chưa phát sinh lượt bán vé."
+                  icon={<FaFilm />}
+                  isLightMode={isLightMode}
+                />
+              ) : (
+                <div className={`divide-y ${rowBorderClass}`}>
+                  {movieRanking.map((movie, index) => (
+                    <ProgressRow
+                      key={movie.movieId || movie.movieTitle}
+                      title={movie.movieTitle}
+                      subtitle={formatCurrency(movie.ticketRevenue)}
+                      value={`${formatNumber(movie.ticketsSold)} vé`}
+                      progress={(movie.ticketsSold / maxTicketsSold) * 100}
+                      accentClass="from-cyan-600 to-blue-500"
+                      isLightMode={isLightMode}
+                      leading={
+                        <span className={`grid h-9 w-9 place-items-center rounded-lg text-sm font-black ${
+                          index === 0
+                            ? 'bg-amber-500 text-white'
+                            : isLightMode
+                              ? 'bg-slate-100 text-slate-700'
+                              : 'bg-white/10 text-slate-200'
+                        }`}>
+                          {index + 1}
+                        </span>
+                      }
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </section>
 
-            {occupancyAndFb.fbItems.length === 0 ? (
-              <EmptyState
-                title="Chưa có F&B được bán"
-                description="Bộ lọc hiện tại chưa ghi nhận doanh thu đồ ăn hoặc thức uống."
+            <section className={panelClass}>
+              <PanelHeader
+                eyebrow="F&B"
+                title="Hiệu suất F&B"
+                description="Doanh thu, số lượng bán và mức đóng góp của từng món F&B."
                 icon={<FaUtensils />}
                 isLightMode={isLightMode}
               />
+
+              <div className={`grid divide-y border-b sm:grid-cols-3 sm:divide-x sm:divide-y-0 ${rowBorderClass} ${isLightMode ? 'border-slate-200' : 'border-white/10'}`}>
+                {[
+                  {
+                    label: 'Doanh thu F&B',
+                    value: formatCurrency(occupancyAndFb.fbRevenue),
+                    note: 'Tổng tiền F&B đã bán',
+                  },
+                  {
+                    label: 'Ghế đã bán',
+                    value: formatNumber(occupancyAndFb.totalSoldSeats),
+                    note: 'Số ghế đã thanh toán',
+                  },
+                  {
+                    label: 'Sức chứa ghế',
+                    value: formatNumber(occupancyAndFb.totalAvailableSeatsCapacity),
+                    note: 'Tổng ghế theo suất chiếu',
+                  },
+                ].map((item) => (
+                  <div key={item.label} className="p-5">
+                    <p className={labelClass}>{item.label}</p>
+                    <p className={`mt-2 text-lg font-black ${headingClass}`}>{item.value}</p>
+                    <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>{item.note}</p>
+                  </div>
+                ))}
+              </div>
+
+              {occupancyAndFb.fbItems.length === 0 ? (
+                <EmptyState
+                  title="Chưa có F&B được bán"
+                  description="Bộ lọc hiện tại chưa ghi nhận doanh thu đồ ăn hoặc thức uống."
+                  icon={<FaUtensils />}
+                  isLightMode={isLightMode}
+                />
+              ) : (
+                <div className={`divide-y ${rowBorderClass}`}>
+                  {occupancyAndFb.fbItems.map((item) => (
+                    <ProgressRow
+                      key={item.fbItemId || item.itemName}
+                      title={item.itemName}
+                      subtitle={formatCurrency(item.revenue)}
+                      value={`${formatNumber(item.quantitySold)} món`}
+                      progress={(item.quantitySold / maxFbQuantity) * 100}
+                      accentClass="from-amber-500 to-orange-400"
+                      isLightMode={isLightMode}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        ) : null}
+
+        {activeSection === 'channels' ? (
+          <section className={panelClass} role="tabpanel">
+            <PanelHeader
+              eyebrow="Channels"
+              title="F&B theo kênh bán"
+              description="Theo dõi tỷ trọng F&B từ từng kênh đặt vé online và offline."
+              icon={<FaBuilding />}
+              isLightMode={isLightMode}
+            />
+
+            {salesChannels.length === 0 ? (
+              <EmptyState
+                title="Chưa có dữ liệu kênh bán"
+                description="Bộ lọc hiện tại chưa phát sinh doanh thu F&B theo kênh."
+                icon={<FaReceipt />}
+                isLightMode={isLightMode}
+              />
             ) : (
               <div className={`divide-y ${rowBorderClass}`}>
-                {occupancyAndFb.fbItems.map((item) => (
-                  <ProgressRow
-                    key={item.fbItemId || item.itemName}
-                    title={item.itemName}
-                    subtitle={formatCurrency(item.revenue)}
-                    value={formatNumber(item.quantitySold)}
-                    progress={(item.quantitySold / maxFbQuantity) * 100}
-                    accentClass="from-amber-500 to-orange-400"
-                    isLightMode={isLightMode}
-                  />
+                {salesChannels.map((channel) => (
+                  <div
+                    key={channel.channel}
+                    className={`grid gap-4 px-5 py-4 transition lg:grid-cols-[minmax(0,1fr)_180px_180px] lg:items-center ${
+                      isLightMode ? 'hover:bg-slate-50' : 'hover:bg-white/[0.03]'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className={`truncate text-sm font-black ${headingClass}`}>
+                        {channel.channelLabel || channel.channel}
+                      </p>
+                      <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>
+                        {formatNumber(channel.bookingCount)} lượt đặt có F&B
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className={labelClass}>Doanh thu</p>
+                      <p className={`mt-1 text-sm font-black ${headingClass}`}>
+                        {formatCurrency(channel.totalRevenue)}
+                      </p>
+                    </div>
+                    <div className="grid gap-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className={labelClass}>Tỷ trọng</p>
+                        <p className="text-sm font-black text-emerald-500">
+                          {formatPercent(channel.percentage)}
+                        </p>
+                      </div>
+                      <div className={`h-2 overflow-hidden rounded-full ${isLightMode ? 'bg-slate-200' : 'bg-white/10'}`}>
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-teal-400"
+                          style={{ width: `${channel.percentage > 0 ? Math.max(5, clampPercent(channel.percentage)) : 0}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
           </section>
-        </div>
-
-        <section className={panelClass}>
-          <PanelHeader
-            eyebrow="Channels"
-            title="F&B theo kênh bán"
-            description="Theo dõi tỷ trọng F&B từ từng kênh đặt vé."
-            icon={<FaBuilding />}
-            isLightMode={isLightMode}
-            action={
-              <span className={`inline-flex min-h-10 items-center rounded-lg border px-3 text-xs font-black ${
-                isLightMode
-                  ? 'border-slate-200 bg-slate-50 text-slate-600'
-                  : 'border-white/10 bg-white/5 text-slate-300'
-              }`}>
-                Lấp đầy {formatPercent(occupancyAndFb.occupancyRate)}
-              </span>
-            }
-          />
-
-          <div className={`h-2 ${isLightMode ? 'bg-slate-100' : 'bg-white/5'}`}>
-            <div
-              className="h-full bg-gradient-to-r from-emerald-600 via-cyan-500 to-amber-400 transition-all duration-300"
-              style={{ width: `${occupancyWidth}%` }}
-            />
-          </div>
-
-          {salesChannels.length === 0 ? (
-            <EmptyState
-              title="Chưa có dữ liệu kênh bán"
-              description="Bộ lọc hiện tại chưa phát sinh doanh thu F&B theo kênh."
-              icon={<FaReceipt />}
-              isLightMode={isLightMode}
-            />
-          ) : (
-            <div className={`divide-y ${rowBorderClass}`}>
-              {salesChannels.map((channel) => (
-                <div
-                  key={channel.channel}
-                  className={`grid gap-4 px-5 py-4 transition lg:grid-cols-[minmax(0,1fr)_180px_180px] lg:items-center ${
-                    isLightMode ? 'hover:bg-slate-50' : 'hover:bg-white/[0.03]'
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p className={`truncate text-sm font-black ${headingClass}`}>
-                      {channel.channelLabel || channel.channel}
-                    </p>
-                    <p className={`mt-1 text-xs font-semibold ${mutedClass}`}>
-                      {formatNumber(channel.bookingCount)} lượt đặt có F&B
-                    </p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className={labelClass}>Doanh thu</p>
-                    <p className={`mt-1 text-sm font-black ${headingClass}`}>
-                      {formatCurrency(channel.totalRevenue)}
-                    </p>
-                  </div>
-                  <div className="grid gap-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className={labelClass}>Tỷ trọng</p>
-                      <p className="text-sm font-black text-emerald-500">
-                        {formatPercent(channel.percentage)}
-                      </p>
-                    </div>
-                    <div className={`h-2 overflow-hidden rounded-full ${isLightMode ? 'bg-slate-200' : 'bg-white/10'}`}>
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-teal-400"
-                        style={{ width: `${channel.percentage > 0 ? Math.max(5, clampPercent(channel.percentage)) : 0}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        ) : null}
       </div>
     </div>
   );

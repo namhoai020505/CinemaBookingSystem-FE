@@ -39,7 +39,7 @@ const AdminLayout = () => {
 
   return (
     <div
-      className={`flex min-h-screen font-['Urbanist'] transition-colors duration-300 ${
+      className={`flex h-screen overflow-hidden font-['Urbanist'] transition-colors duration-300 ${
         isLightMode
           ? 'bg-slate-100 text-slate-950'
           : 'bg-[#070B14] text-white'
@@ -47,7 +47,7 @@ const AdminLayout = () => {
     >
       <Sidebar collapsed={sidebarCollapsed} isLightMode={isLightMode} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Topbar
           sidebarCollapsed={sidebarCollapsed}
           isLightMode={isLightMode}
@@ -55,7 +55,7 @@ const AdminLayout = () => {
           onToggleTheme={toggleTheme}
         />
 
-        <main className="min-w-0 flex-1 overflow-auto">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
           <Outlet context={{ themeMode, isLightMode } satisfies AdminOutletContext} />
         </main>
       </div>
