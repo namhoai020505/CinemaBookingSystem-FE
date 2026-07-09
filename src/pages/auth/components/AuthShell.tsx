@@ -120,7 +120,7 @@ export const GoogleLoginButton = ({ onSuccess, isLoading = false }: GoogleLoginB
         theme="outline"
         size="large"
         shape="rectangular"
-        width="382"
+        width="398"
       />
     </div>
   );
