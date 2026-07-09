@@ -1,6 +1,6 @@
 import axiosInstance from '../lib/api';
 
-// Kiểu dữ liệu phim dùng cho form quản lý phim ở admin.
+// Định nghĩa Interface cấu trúc dữ liệu Phim khớp chuẩn Contract Backend
 export interface MovieData {
   movieId?: string;
   title: string;
@@ -75,7 +75,6 @@ interface ApiEnvelope<T> {
   errorCode?: string;
 }
 
-// Gom các API liên quan tới phim để component không gọi axios trực tiếp.
 export const movieService = {
   // Lấy danh sách phim cho người dùng (Đang chiếu + Sắp chiếu)
   getActiveMovies: async (): Promise<MovieResponse[]> => {

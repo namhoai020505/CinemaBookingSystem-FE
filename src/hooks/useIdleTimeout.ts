@@ -15,13 +15,11 @@ const ACTIVITY_EVENTS = [
   'click',
 ] as const;
 
-// Đọc thời điểm user thao tác gần nhất từ localStorage để đồng bộ giữa nhiều tab.
 const readLastActivity = () => {
   const storedValue = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
   return Number.isFinite(storedValue) && storedValue > 0 ? storedValue : 0;
 };
 
-// Hook tự logout khi user đăng nhập nhưng không thao tác trong timeoutMinutes.
 export const useIdleTimeout = (timeoutMinutes: number = 10) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,7 +37,6 @@ export const useIdleTimeout = (timeoutMinutes: number = 10) => {
     logoutStartedRef.current = false;
     const timeoutMs = Math.max(1, timeoutMinutes) * 60 * 1000;
 
-    // Ghi hoạt động mới nhưng throttle 1s để không spam localStorage khi di chuột.
     const writeActivity = (timestamp: number) => {
       lastActivityRef.current = timestamp;
 
@@ -49,11 +46,9 @@ export const useIdleTimeout = (timeoutMinutes: number = 10) => {
       }
     };
 
-    // Lấy mốc hoạt động mới nhất từ ref hiện tại và localStorage.
     const getLatestActivity = () =>
       Math.max(lastActivityRef.current, readLastActivity());
 
-    // Gọi logout backend, dọn localStorage và đưa user về trang chủ.
     const handleIdleLogout = () => {
       if (logoutStartedRef.current) {
         return;
@@ -67,7 +62,6 @@ export const useIdleTimeout = (timeoutMinutes: number = 10) => {
       });
     };
 
-    // Kiểm tra user đã idle quá thời gian cho phép chưa.
     const checkIdle = () => {
       if (!getAccessToken()) {
         return true;
@@ -83,7 +77,6 @@ export const useIdleTimeout = (timeoutMinutes: number = 10) => {
       return false;
     };
 
-    // Mỗi event thao tác sẽ đánh dấu user còn hoạt động.
     const markActive = () => {
       if (checkIdle()) {
         return;

@@ -12,7 +12,6 @@ import { ResetPasswordStep } from './components/ResetPasswordStep';
 import { VerifyEmailStep } from './components/VerifyEmailStep';
 import { useLoginController } from './useLoginController';
 
-// Trang auth tổng: chọn đúng step UI dựa trên state từ useLoginController.
 export default function Login() {
   const controller = useLoginController();
 
@@ -24,7 +23,6 @@ export default function Login() {
         <div className="w-full max-w-md">
           <AuthTabs authMode={controller.authMode} onSwitchMode={controller.switchMode} />
 
-          {/* Form dùng chung cho login, register, verify email, forgot/reset password. */}
           <div className="rounded-b-lg border-x border-b border-gray-700 bg-transparent p-6">
             <form onSubmit={controller.handleSubmit} className="flex flex-col gap-4">
               <AuthFeedback
@@ -32,7 +30,6 @@ export default function Login() {
                 error={controller.error}
               />
 
-              {/* Chọn component step theo flow hiện tại. */}
               {controller.isVerifyStep ? (
                 <VerifyEmailStep controller={controller} />
               ) : controller.isResetPasswordStep ? (
@@ -43,7 +40,6 @@ export default function Login() {
                 <CredentialsStep controller={controller} />
               )}
 
-              {/* Nút submit đổi text theo mode hiện tại. */}
               <AuthSubmitButton
                 isLoading={controller.isLoading}
                 isVerifyStep={controller.isVerifyStep}
@@ -52,7 +48,6 @@ export default function Login() {
                 isLoginMode={controller.isLoginMode}
               />
 
-              {/* Google login chỉ hiện ở form login/register chính, không hiện ở OTP/reset. */}
               {!controller.isVerifyStep &&
               !controller.isResetPasswordStep &&
               !controller.isForgotMode ? (
