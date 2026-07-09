@@ -379,7 +379,7 @@ export default function ManageSeatLayout() {
     for (let i = startCode; i <= endCode; i++) {
       const rowLabel = String.fromCharCode(i);
       const rowSeats = seats.filter(s => s.rowLabel === rowLabel && (s.isActive || showInactiveSeats));
-      
+
       const skipCols = new Set<number>();
       for (const s of rowSeats) {
         if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
@@ -430,12 +430,9 @@ export default function ManageSeatLayout() {
       setOtherRooms(filtered);
     } catch (err) {
     }
-    updateSelection(nextSelection, true);
   };
 
-  const clearSelection = () => {
-    updateSelection(new Set(), true);
-  };
+
 
   const handleCopyLayout = async () => {
     if (!roomId || !selectedSourceRoomId) return;
@@ -720,18 +717,6 @@ export default function ManageSeatLayout() {
       return;
     }
 
-    let capacityDiff = 0;
-    for (const seatId of Array.from(selectedSeatIds)) {
-      const seat = seats.find((s) => s.seatId === seatId);
-      if (!seat || seat.isActive) continue;
-      const cap = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-      capacityDiff += cap;
-    }
-    const newCapacity = seatStats.totalCapacity + capacityDiff;
-    if (newCapacity > (room?.capacity ?? 0)) {
-      toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_CAPACITY.replace('{0}', String(newCapacity)).replace('{1}', String(room?.capacity)));
-      return;
-    }
 
     // ── Validation riêng cho chuyển sang Sweetbox ──
     // Bắt buộc chọn đúng bội số 2, mỗi cặp phải liền kề (cùng hàng, số cột kề nhau),
@@ -1258,11 +1243,10 @@ export default function ManageSeatLayout() {
                           handleMouseDownVirtual(slotKey);
                         }}
                         onMouseEnter={() => handleMouseEnterVirtual(slotKey)}
-                        className={`flex-shrink-0 rounded-lg border border-dashed text-[9px] font-semibold transition flex items-center justify-center cursor-pointer ${
-                          isSelectedVirtual
-                            ? 'ring-2 ring-white scale-110 bg-blue-600/30 border-blue-400 text-blue-300 shadow-lg'
-                            : 'border-gray-800 bg-[#0F172A]/20 hover:bg-blue-500/10 text-gray-500'
-                        }`}
+                        className={`flex-shrink-0 rounded-lg border border-dashed text-[9px] font-semibold transition flex items-center justify-center cursor-pointer ${isSelectedVirtual
+                          ? 'ring-2 ring-white scale-110 bg-blue-600/30 border-blue-400 text-blue-300 shadow-lg'
+                          : 'border-gray-800 bg-[#0F172A]/20 hover:bg-blue-500/10 text-gray-500'
+                          }`}
                         style={{
                           width: blueprintMaxCol > 14 ? 32 : 40,
                           height: blueprintMaxCol > 14 ? 32 : 40,
