@@ -82,7 +82,13 @@ export default function ManageMovie() {
 
   const filteredMovies = React.useMemo(() => {
     return allMovies.filter(movie => {
-      if (selectedStatus && movie.movieStatus !== selectedStatus) return false;
+      // Khi chọn Tất cả (selectedStatus là rỗng): chỉ hiện phim Đang chiếu (NOW_SHOWING) và Sắp chiếu (COMING_SOON)
+      if (selectedStatus === "") {
+        if (movie.movieStatus !== "NOW_SHOWING" && movie.movieStatus !== "COMING_SOON") return false;
+      } else {
+        // Khi chọn một trạng thái cụ thể: chỉ hiện phim có trạng thái đó
+        if (movie.movieStatus !== selectedStatus) return false;
+      }
       if (searchGenres.length > 0 && (!movie.genres || !searchGenres.some(sg => movie.genres.includes(sg)))) return false;
       if (searchTerm && !movie.movieNameVn.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       return true;

@@ -304,8 +304,14 @@ export default function ManageShowtime() {
       // Chỉ thêm nếu phòng thuộc cinema đang chọn
       if (!newSchedule[st.roomId]) continue;
 
-      const durationMin = diffMinutes(st.startTime, st.endTime);
+      const CLEAN_UP_BUFFER = 15;
+      const durationMin = diffMinutes(st.startTime, st.endTime) - CLEAN_UP_BUFFER;
       const startMin = isoToMinutesFrom8AM(st.startTime);
+
+      // Khấu trừ 15 phút dọn phòng để tính endTime hiển thị thực tế của bộ phim
+      const endTimeDate = new Date(st.endTime);
+      endTimeDate.setMinutes(endTimeDate.getMinutes() - CLEAN_UP_BUFFER);
+      const endTimeISO = endTimeDate.toISOString();
 
       newSchedule[st.roomId].push({
         id: st.showtimeId,
@@ -316,7 +322,7 @@ export default function ManageShowtime() {
         duration: durationMin,
         color: getMovieColor(st.movieId),
         startTime: st.startTime,
-        endTime: st.endTime,
+        endTime: endTimeISO,
         basePrice: st.basePrice,
         status: st.status,
       });
@@ -505,8 +511,14 @@ export default function ManageShowtime() {
         if (stDateStr !== selectedDate) continue;
         if (!newSchedule[st.roomId]) continue;
 
-        const durationMin = diffMinutes(st.startTime, st.endTime);
+        const CLEAN_UP_BUFFER = 15;
+        const durationMin = diffMinutes(st.startTime, st.endTime) - CLEAN_UP_BUFFER;
         const startMin = isoToMinutesFrom8AM(st.startTime);
+
+        // Khấu trừ 15 phút dọn phòng để tính endTime hiển thị thực tế của bộ phim
+        const endTimeDate = new Date(st.endTime);
+        endTimeDate.setMinutes(endTimeDate.getMinutes() - CLEAN_UP_BUFFER);
+        const endTimeISO = endTimeDate.toISOString();
 
         newSchedule[st.roomId].push({
           id: st.showtimeId,
@@ -517,7 +529,7 @@ export default function ManageShowtime() {
           duration: durationMin,
           color: getMovieColor(st.movieId),
           startTime: st.startTime,
-          endTime: st.endTime,
+          endTime: endTimeISO,
           basePrice: st.basePrice,
           status: st.status,
         });
