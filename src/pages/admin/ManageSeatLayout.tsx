@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FaChair, FaCouch } from 'react-icons/fa';
@@ -40,8 +40,9 @@ export default function ManageSeatLayout() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawMode, setDrawMode] = useState<'select' | 'deselect' | null>(null);
 
-  // Undo/Redo history for selection
-  const [selectionHistory, setSelectionHistory] = useState<Set<string>[]>([new Set()]);
+  // Undo/Redo history for selection (tracks both real seats & virtual slots)
+  type HistoryEntry = { seatIds: Set<string>; virtualSlots: Set<string> };
+  const [selectionHistory, setSelectionHistory] = useState<HistoryEntry[]>([{ seatIds: new Set(), virtualSlots: new Set() }]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
   // Copy Layout states
@@ -56,6 +57,63 @@ export default function ManageSeatLayout() {
 
   // Batch edit
   const [batchType, setBatchType] = useState('SEAT_TYPE_VIP');
+
+  // Cấu hình Blueprint ảo cho phòng chiếu
+  const [blueprintMaxRow, setBlueprintMaxRow] = useState('J');
+  const [blueprintMaxCol, setBlueprintMaxCol] = useState(12);
+  const [selectedVirtualSlots, setSelectedVirtualSlots] = useState<Set<string>>(new Set());
+
+  const lastLoadedRoomIdRef = useRef<string | null>(null);
+  const selectedSeatIdsRef = useRef<Set<string>>(new Set());
+  const selectedVirtualSlotsRef = useRef<Set<string>>(new Set());
+  const selectionHistoryRef = useRef<HistoryEntry[]>([{ seatIds: new Set(), virtualSlots: new Set() }]);
+  const historyIndexRef = useRef<number>(0);
+
+  // Tự động tính toán kích thước lưới Blueprint mặc định dựa trên số ghế hiện có khi đổi phòng
+  useEffect(() => {
+    if (seats.length > 0 && lastLoadedRoomIdRef.current !== roomId) {
+      lastLoadedRoomIdRef.current = roomId;
+      let maxRCode = 74; // 'J'
+      let maxC = 12;
+      for (const seat of seats) {
+        const code = seat.rowLabel.charCodeAt(0);
+        if (code > maxRCode) maxRCode = code;
+        if (seat.seatNumber > maxC) maxC = seat.seatNumber;
+      }
+      const finalRCode = Math.min(90, maxRCode + 2); // Tối đa Z
+      const finalC = Math.min(30, maxC + 2);         // Tối đa 30 cột
+      setBlueprintMaxRow(String.fromCharCode(finalRCode));
+      setBlueprintMaxCol(finalC);
+
+      // Reset selection state, selection refs và selection history
+      const initialEntry = { seatIds: new Set<string>(), virtualSlots: new Set<string>() };
+      selectionHistoryRef.current = [initialEntry];
+      historyIndexRef.current = 0;
+      setSelectionHistory([initialEntry]);
+      setHistoryIndex(0);
+
+      selectedSeatIdsRef.current = new Set();
+      selectedVirtualSlotsRef.current = new Set();
+      setSelectedSeatIds(new Set());
+      setSelectedVirtualSlots(new Set());
+    } else if (seats.length === 0 && lastLoadedRoomIdRef.current !== roomId) {
+      lastLoadedRoomIdRef.current = roomId;
+      setBlueprintMaxRow('J');
+      setBlueprintMaxCol(12);
+
+      // Reset selection state, selection refs và selection history
+      const initialEntry = { seatIds: new Set<string>(), virtualSlots: new Set<string>() };
+      selectionHistoryRef.current = [initialEntry];
+      historyIndexRef.current = 0;
+      setSelectionHistory([initialEntry]);
+      setHistoryIndex(0);
+
+      selectedSeatIdsRef.current = new Set();
+      selectedVirtualSlotsRef.current = new Set();
+      setSelectedSeatIds(new Set());
+      setSelectedVirtualSlots(new Set());
+    }
+  }, [seats, roomId]);
 
   // Toggle hiển thị ghế vô hiệu (mặc định ẩn để lưới nhìn chuẩn)
   const [showInactiveSeats, setShowInactiveSeats] = useState(false);
@@ -129,12 +187,19 @@ export default function ManageSeatLayout() {
   // ──────────────────────────────────────────
   // Selection handlers
   // ──────────────────────────────────────────
-  // Helper to update selection and push to history
-  const updateSelection = (newSelection: Set<string>, pushToHistory = true) => {
-    setSelectedSeatIds(newSelection);
+  // Tiện ích đồng bộ hóa Refs, States và lịch sử selection
+  const syncAndSetSelection = (seatIds: Set<string>, virtualSlots: Set<string>, pushToHistory = false) => {
+    selectedSeatIdsRef.current = seatIds;
+    selectedVirtualSlotsRef.current = virtualSlots;
+    setSelectedSeatIds(seatIds);
+    setSelectedVirtualSlots(virtualSlots);
+
     if (pushToHistory) {
-      const nextHistory = selectionHistory.slice(0, historyIndex + 1);
-      nextHistory.push(new Set(newSelection));
+      const nextHistory = selectionHistoryRef.current.slice(0, historyIndexRef.current + 1);
+      nextHistory.push({ seatIds: new Set(seatIds), virtualSlots: new Set(virtualSlots) });
+      selectionHistoryRef.current = nextHistory;
+      historyIndexRef.current = nextHistory.length - 1;
+
       setSelectionHistory(nextHistory);
       setHistoryIndex(nextHistory.length - 1);
     }
@@ -146,40 +211,80 @@ export default function ManageSeatLayout() {
       return;
     }
     setIsDrawing(true);
-    const currentlySelected = selectedSeatIds.has(seatId);
+    const currentlySelected = selectedSeatIdsRef.current.has(seatId);
     const nextMode = currentlySelected ? 'deselect' : 'select';
     setDrawMode(nextMode);
 
-    const nextSelection = new Set(selectedSeatIds);
-    if (nextMode === 'select') {
-      nextSelection.add(seatId);
-    } else {
-      nextSelection.delete(seatId);
-    }
-    updateSelection(nextSelection, true);
+    const nextSeatIds = new Set(selectedSeatIdsRef.current);
+    if (nextMode === 'select') nextSeatIds.add(seatId);
+    else nextSeatIds.delete(seatId);
+
+    // Click chuột: cập nhật selection realtime, clear ô ảo, chưa push history (để mouseup push)
+    syncAndSetSelection(nextSeatIds, new Set(), false);
   };
 
   const handleMouseEnter = (seatId: string) => {
     if (!isDrawing || !drawMode || room?.roomStatus !== 'MAINTENANCE') return;
-    const nextSelection = new Set(selectedSeatIds);
-    if (drawMode === 'select') {
-      nextSelection.add(seatId);
-    } else {
-      nextSelection.delete(seatId);
-    }
-    setSelectedSeatIds(nextSelection);
+    const nextSelection = new Set(selectedSeatIdsRef.current);
+    if (drawMode === 'select') nextSelection.add(seatId);
+    else nextSelection.delete(seatId);
+    syncAndSetSelection(nextSelection, new Set(), false);
   };
+
+  // Virtual brush selection handlers
+  const [isDrawingVirtual, setIsDrawingVirtual] = useState(false);
+  const [drawModeVirtual, setDrawModeVirtual] = useState<'select' | 'deselect' | null>(null);
+
+  const handleMouseDownVirtual = (slotKey: string) => {
+    if (room?.roomStatus !== 'MAINTENANCE') {
+      toast.warn('Chỉ có thể chỉnh sửa sơ đồ ghế khi trạng thái phòng là BẢO TRÌ (MAINTENANCE).');
+      return;
+    }
+    setIsDrawingVirtual(true);
+    const currentlySelected = selectedVirtualSlotsRef.current.has(slotKey);
+    const nextMode = currentlySelected ? 'deselect' : 'select';
+    setDrawModeVirtual(nextMode);
+
+    const nextVirtual = new Set(selectedVirtualSlotsRef.current);
+    if (nextMode === 'select') nextVirtual.add(slotKey);
+    else nextVirtual.delete(slotKey);
+
+    // Click ô ảo: clear ghế thật, chưa push history (để mouseup push)
+    syncAndSetSelection(new Set(), nextVirtual, false);
+  };
+
+  const handleMouseEnterVirtual = (slotKey: string) => {
+    if (!isDrawingVirtual || !drawModeVirtual || room?.roomStatus !== 'MAINTENANCE') return;
+    const nextVirtual = new Set(selectedVirtualSlotsRef.current);
+    if (drawModeVirtual === 'select') nextVirtual.add(slotKey);
+    else nextVirtual.delete(slotKey);
+    syncAndSetSelection(new Set(), nextVirtual, false);
+  };
+
+  const handleMouseUpVirtual = useCallback(() => {
+    if (isDrawingVirtual) {
+      setIsDrawingVirtual(false);
+      setDrawModeVirtual(null);
+      // Thả chuột ở ô ảo: push trạng thái selection hiện tại vào history
+      syncAndSetSelection(selectedSeatIdsRef.current, selectedVirtualSlotsRef.current, true);
+    }
+  }, [isDrawingVirtual]);
+
+  useEffect(() => {
+    window.addEventListener('mouseup', handleMouseUpVirtual);
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUpVirtual);
+    };
+  }, [handleMouseUpVirtual]);
 
   const handleMouseUp = useCallback(() => {
     if (isDrawing) {
       setIsDrawing(false);
       setDrawMode(null);
-      const nextHistory = selectionHistory.slice(0, historyIndex + 1);
-      nextHistory.push(new Set(selectedSeatIds));
-      setSelectionHistory(nextHistory);
-      setHistoryIndex(nextHistory.length - 1);
+      // Thả chuột ở ghế thật: push trạng thái selection hiện tại vào history
+      syncAndSetSelection(selectedSeatIdsRef.current, selectedVirtualSlotsRef.current, true);
     }
-  }, [isDrawing, selectedSeatIds, historyIndex, selectionHistory]);
+  }, [isDrawing]);
 
   useEffect(() => {
     window.addEventListener('mouseup', handleMouseUp);
@@ -189,20 +294,34 @@ export default function ManageSeatLayout() {
   }, [handleMouseUp]);
 
   const undoSelection = useCallback(() => {
-    if (historyIndex > 0) {
-      const prevIndex = historyIndex - 1;
+    if (historyIndexRef.current > 0) {
+      const prevIndex = historyIndexRef.current - 1;
+      historyIndexRef.current = prevIndex;
       setHistoryIndex(prevIndex);
-      setSelectedSeatIds(new Set(selectionHistory[prevIndex]));
+
+      const entry = selectionHistoryRef.current[prevIndex];
+      selectedSeatIdsRef.current = new Set(entry.seatIds);
+      selectedVirtualSlotsRef.current = new Set(entry.virtualSlots);
+
+      setSelectedSeatIds(new Set(entry.seatIds));
+      setSelectedVirtualSlots(new Set(entry.virtualSlots));
     }
-  }, [historyIndex, selectionHistory]);
+  }, []);
 
   const redoSelection = useCallback(() => {
-    if (historyIndex < selectionHistory.length - 1) {
-      const nextIndex = historyIndex + 1;
+    if (historyIndexRef.current < selectionHistoryRef.current.length - 1) {
+      const nextIndex = historyIndexRef.current + 1;
+      historyIndexRef.current = nextIndex;
       setHistoryIndex(nextIndex);
-      setSelectedSeatIds(new Set(selectionHistory[nextIndex]));
+
+      const entry = selectionHistoryRef.current[nextIndex];
+      selectedSeatIdsRef.current = new Set(entry.seatIds);
+      selectedVirtualSlotsRef.current = new Set(entry.virtualSlots);
+
+      setSelectedSeatIds(new Set(entry.seatIds));
+      setSelectedVirtualSlots(new Set(entry.virtualSlots));
     }
-  }, [historyIndex, selectionHistory]);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -226,36 +345,81 @@ export default function ManageSeatLayout() {
       toast.warn('Chỉ có thể chỉnh sửa sơ đồ ghế khi trạng thái phòng là BẢO TRÌ (MAINTENANCE).');
       return;
     }
-    const rowSeats = seatGrid.find(([label]) => label === rowLabel)?.[1] || [];
-    const allSelected = rowSeats.every((s) => selectedSeatIds.has(s.seatId));
-    const nextSelection = new Set(selectedSeatIds);
+    const rowSeats = seats.filter(s => s.rowLabel === rowLabel && (s.isActive || showInactiveSeats));
+    const virtualInRow: string[] = [];
+    for (let c = 1; c <= blueprintMaxCol; c++) {
+      const hasSeat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === c && (s.isActive || showInactiveSeats));
+      if (!hasSeat) virtualInRow.push(`${rowLabel}-${c}`);
+    }
+
+    const allSeatsSelected = rowSeats.length > 0 && rowSeats.every(s => selectedSeatIdsRef.current.has(s.seatId));
+    const allVirtualSelected = virtualInRow.length > 0 && virtualInRow.every(k => selectedVirtualSlotsRef.current.has(k));
+    const allRowSelected = allSeatsSelected && allVirtualSelected && (rowSeats.length + virtualInRow.length > 0);
+
+    const newSeatIds = new Set(selectedSeatIdsRef.current);
+    const newVirtual = new Set(selectedVirtualSlotsRef.current);
+
     for (const s of rowSeats) {
-      if (allSelected) {
-        nextSelection.delete(s.seatId);
-      } else {
-        nextSelection.add(s.seatId);
+      if (allRowSelected) newSeatIds.delete(s.seatId);
+      else newSeatIds.add(s.seatId);
+    }
+    for (const k of virtualInRow) {
+      if (allRowSelected) newVirtual.delete(k);
+      else newVirtual.add(k);
+    }
+
+    syncAndSetSelection(newSeatIds, newVirtual, true);
+  };
+
+  // Tính chính xác số ô ảo trống thực tế hiển thị trên lưới (đã loại bỏ Sweetbox skipCols)
+  const getVisibleVirtualSlots = useCallback(() => {
+    const slots = new Set<string>();
+    const startCode = 65; // 'A'
+    const endCode = (blueprintMaxRow || 'J').toUpperCase().charCodeAt(0);
+    for (let i = startCode; i <= endCode; i++) {
+      const rowLabel = String.fromCharCode(i);
+      const rowSeats = seats.filter(s => s.rowLabel === rowLabel && (s.isActive || showInactiveSeats));
+      
+      const skipCols = new Set<number>();
+      for (const s of rowSeats) {
+        if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+          skipCols.add(s.seatNumber + 1);
+        }
+      }
+
+      for (let c = 1; c <= blueprintMaxCol; c++) {
+        if (skipCols.has(c)) continue;
+        const hasSeat = rowSeats.some(s => s.seatNumber === c);
+        if (!hasSeat) {
+          slots.add(`${rowLabel}-${c}`);
+        }
       }
     }
-    updateSelection(nextSelection, true);
-  };
+    return slots;
+  }, [seats, blueprintMaxRow, blueprintMaxCol, showInactiveSeats]);
 
   const selectAll = () => {
     if (room?.roomStatus !== 'MAINTENANCE') {
       toast.warn('Chỉ có thể chỉnh sửa sơ đồ ghế khi trạng thái phòng là BẢO TRÌ (MAINTENANCE).');
       return;
     }
-    let nextSelection: Set<string>;
-    if (selectedSeatIds.size === visibleSeats.length) {
-      nextSelection = new Set();
+    const virtualSlotsCount = getVisibleVirtualSlots().size;
+    const allSeatSelected = selectedSeatIdsRef.current.size === visibleSeats.length;
+    const allVirtualSelected = selectedVirtualSlotsRef.current.size === virtualSlotsCount;
+    const allSelected = allSeatSelected && allVirtualSelected && (visibleSeats.length + virtualSlotsCount > 0);
+
+    if (allSelected) {
+      syncAndSetSelection(new Set(), new Set(), true);
     } else {
-      nextSelection = new Set(visibleSeats.map((s) => s.seatId));
+      const newSeatIds = new Set(visibleSeats.map((s) => s.seatId));
+      const newVirtual = getVisibleVirtualSlots();
+      syncAndSetSelection(newSeatIds, newVirtual, true);
     }
-    updateSelection(nextSelection, true);
   };
 
   const clearSelection = () => {
     if (room?.roomStatus !== 'MAINTENANCE') return;
-    updateSelection(new Set(), true);
+    syncAndSetSelection(new Set(), new Set(), true);
   };
 
   // Copy Layout handlers
@@ -467,6 +631,79 @@ export default function ManageSeatLayout() {
       toast.error(axiosErr?.response?.data?.message ?? TEXT.SEAT_LAYOUT.ERR_GEN_FAIL);
 
       await fetchData();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleInstallSeats = async () => {
+    if (!roomId || selectedVirtualSlots.size === 0) return;
+    setActionLoading(true);
+
+    try {
+      // 1. Tính toán & kiểm tra sức chứa dự kiến
+      let addedCapacity = 0;
+      for (const slot of selectedVirtualSlots) {
+        addedCapacity += batchType === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
+      }
+      const currentCapacity = seats.filter(s => s.isActive).reduce((sum, s) => sum + (s.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1), 0);
+      if (currentCapacity + addedCapacity > (room?.capacity ?? 0)) {
+        toast.error(`Không thể lắp đặt! Sức chứa dự kiến (${currentCapacity + addedCapacity}) vượt quá sức chứa tối đa của phòng (${room?.capacity}).`);
+        setActionLoading(false);
+        return;
+      }
+
+      // 2. Tiến hành gọi API lắp đặt ghế tuần tự
+      let created = 0;
+      let failed = 0;
+      const slots = Array.from(selectedVirtualSlots);
+
+      for (const slot of slots) {
+        const [rowLabel, colStr] = slot.split('-');
+        const seatNumber = parseInt(colStr);
+
+        // Kiểm tra xem vị trí này thực chất đã có ghế inactive từ trước chưa
+        const existing = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber);
+        if (existing) {
+          if (!existing.isActive) {
+            try {
+              await roomService.updateSeat(existing.seatId, {
+                rowLabel: existing.rowLabel,
+                seatNumber: existing.seatNumber,
+                seatTypeId: batchType,
+                isActive: true,
+              });
+              created++;
+            } catch {
+              failed++;
+            }
+          }
+          continue;
+        }
+
+        try {
+          await roomService.createSeat({
+            roomId,
+            rowLabel,
+            seatNumber,
+            seatTypeId: batchType
+          });
+          created++;
+        } catch {
+          failed++;
+        }
+      }
+
+      if (failed > 0) {
+        toast.warn(`Đã lắp đặt thành công ${created} ghế, thất bại tại ${failed} vị trí.`);
+      } else {
+        toast.success(`Đã lắp đặt thành công ${created} ghế vào sơ đồ!`);
+      }
+
+      setSelectedVirtualSlots(new Set());
+      await fetchData(); // reload lại dữ liệu sau khi lắp đặt ghế
+    } catch (err) {
+      toast.error("Quá trình lắp đặt ghế gặp lỗi.");
     } finally {
       setActionLoading(false);
     }
@@ -844,388 +1081,563 @@ export default function ManageSeatLayout() {
       )}
 
       {/* MAIN LAYOUT: Grid + Control Panel */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_700px] gap-6">
 
         {/* ═══════════════════════════════════════ */}
         {/* LEFT: SEAT GRID                        */}
         {/* ═══════════════════════════════════════ */}
-        <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-6 shadow-2xl overflow-x-auto">
-          {seats.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-5xl mb-4">💺</div>
-              <p className="text-gray-400 text-sm mb-2">{TEXT.SEAT_LAYOUT.NO_SEATS}</p>
-              <p className="text-gray-500 text-xs">{TEXT.SEAT_LAYOUT.NO_SEATS_HINT}</p>
-            </div>
-          ) : (
-            <>
-              {/* Screen indicator */}
-              <div className="text-center mb-6">
-                <div className="mx-auto max-w-md h-2 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent rounded-full" />
-                <span className="text-[10px] uppercase tracking-[0.3em] text-gray-500 mt-1 block">{TEXT.SEAT_LAYOUT.SCREEN}</span>
-              </div>
+        <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-6 shadow-2xl overflow-x-auto max-w-[860px] mx-auto w-full">
+          {/* Screen indicator */}
+          <div className="text-center mb-6">
+            <div className="mx-auto max-w-md h-2 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent rounded-full" />
+            <span className="text-[10px] uppercase tracking-[0.3em] text-gray-500 mt-1 block">{TEXT.SEAT_LAYOUT.SCREEN}</span>
+          </div>
 
-              {/* Seat Grid */}
-              <div className="flex flex-col items-center gap-1.5 select-none">
-                {seatGrid.map(([rowLabel, rowSeats]) => {
-                  const allRowSelected = rowSeats.every((s) => selectedSeatIds.has(s.seatId));
-                  return (
-                    <div key={rowLabel} className="flex items-center gap-1.5">
-                      {/* Row label */}
+          {/* Seat Grid */}
+          <div className="flex flex-col items-center gap-1.5 select-none">
+            {(() => {
+              const startCode = 65; // 'A'
+              const endCode = (blueprintMaxRow || 'J').toUpperCase().charCodeAt(0);
+              const rows = [];
+              for (let i = startCode; i <= endCode; i++) {
+                rows.push(String.fromCharCode(i));
+              }
+
+              return rows.map((rowLabel) => {
+                const rowSeats = seats.filter(s => s.rowLabel === rowLabel && (s.isActive || showInactiveSeats));
+                // Tính ô ảo trong hàng
+                const virtualInRow: string[] = [];
+                for (let vc = 1; vc <= blueprintMaxCol; vc++) {
+                  const hasSeat = rowSeats.find(s => s.seatNumber === vc);
+                  if (!hasSeat) virtualInRow.push(`${rowLabel}-${vc}`);
+                }
+                const totalInRow = rowSeats.length + virtualInRow.length;
+                const selectedInRow = rowSeats.filter(s => selectedSeatIds.has(s.seatId)).length
+                  + virtualInRow.filter(k => selectedVirtualSlots.has(k)).length;
+                const allRowSelected = totalInRow > 0 && selectedInRow === totalInRow;
+
+                // Thuật toán skip cột chẵn của ghế Sweetbox
+                const skipCols = new Set<number>();
+                const renderedCols: React.ReactNode[] = [];
+
+                for (let c = 1; c <= blueprintMaxCol; c++) {
+                  if (skipCols.has(c)) continue;
+
+                  const seat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === c);
+                  const isRealSeatVisible = seat && (seat.isActive || showInactiveSeats);
+
+                  if (isRealSeatVisible) {
+                    if (seat.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+                      skipCols.add(c + 1);
+                    }
+
+                    const typeInfo = getSeatColor(seat.seatTypeId);
+                    const isSelected = selectedSeatIds.has(seat.seatId);
+                    const isInactive = !seat.isActive;
+
+                    renderedCols.push(
                       <button
-                        onClick={() => toggleRow(rowLabel)}
-                        className={`w-8 h-8 flex items-center justify-center rounded-md text-xs font-bold transition-all duration-150 ${allRowSelected
-                          ? 'bg-[#4318FF] text-white'
-                          : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-white'
-                          }`}
-                        title={TEXT.SEAT_LAYOUT.BTN_SELECT_ALL_ROW.replace('{0}', rowLabel)}
+                        key={seat.seatId}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleMouseDown(seat.seatId);
+                        }}
+                        onMouseEnter={() => handleMouseEnter(seat.seatId)}
+                        className="relative transition-all duration-150 group/seat flex-shrink-0"
+                        title={`${seat.seatCode} · ${typeInfo.label}${isInactive ? ' (Không HĐ)' : ''}`}
+                        style={{
+                          width: seat.seatTypeId === 'SEAT_TYPE_SWEETBOX'
+                            ? (blueprintMaxCol > 14 ? 70 : 86)
+                            : (blueprintMaxCol > 14 ? 32 : 40),
+                          height: blueprintMaxCol > 14 ? 32 : 40,
+                        }}
                       >
-                        {rowLabel}
-                      </button>
-
-                      {/* Seats */}
-                      {rowSeats.map((seat) => {
-                        const typeInfo = getSeatColor(seat.seatTypeId);
-                        const isSelected = selectedSeatIds.has(seat.seatId);
-                        const isInactive = !seat.isActive;
-
-                        return (
-                          <button
-                            key={seat.seatId}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              handleMouseDown(seat.seatId);
-                            }}
-                            onMouseEnter={() => handleMouseEnter(seat.seatId)}
-                            className="relative transition-all duration-150 group/seat"
-                            title={`${seat.seatCode} · ${typeInfo.label}${isInactive ? ' (Không HĐ)' : ''}`}
-                            style={{
-                              width: seat.seatTypeId === 'SEAT_TYPE_SWEETBOX'
-                                ? (maxCols > 14 ? 70 : 86)
-                                : (maxCols > 14 ? 32 : 40),
-                              height: maxCols > 14 ? 32 : 40,
-                            }}
-                          >
-                            <div
-                              className={`w-full h-full rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold transition-all duration-150 ${isSelected
-                                ? 'ring-2 ring-white scale-110 shadow-lg'
-                                : 'hover:scale-105'
-                                } ${isInactive ? 'opacity-30' : ''}`}
-                              style={{
-                                backgroundColor: isSelected ? typeInfo.hoverColor : typeInfo.color,
-                              }}
-                            >
-                              {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? (
-                                <FaCouch className="h-3.5 w-7 shrink-0 text-white/90" />
-                              ) : seat.seatTypeId === 'SEAT_TYPE_VIP' ? (
-                                <FaCouch className="h-3.5 w-3.5 shrink-0 text-white/90" />
-                              ) : (
-                                <FaChair className="h-3.5 w-3.5 shrink-0 text-white/90" />
-                              )}
-                              <span>{seat.seatNumber}</span>
-                              {isInactive && (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="w-full h-[2px] bg-red-500 rotate-45 absolute" />
-                                </div>
-                              )}
+                        <div
+                          className={`w-full h-full rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold transition-all duration-150 ${isSelected
+                            ? 'ring-2 ring-white scale-110 shadow-lg'
+                            : 'hover:scale-105'
+                            } ${isInactive ? 'opacity-30' : ''}`}
+                          style={{
+                            backgroundColor: isSelected ? typeInfo.hoverColor : typeInfo.color,
+                          }}
+                        >
+                          {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? (
+                            <FaCouch className="h-3.5 w-7 shrink-0 text-white/90" />
+                          ) : seat.seatTypeId === 'SEAT_TYPE_VIP' ? (
+                            <FaCouch className="h-3.5 w-3.5 shrink-0 text-white/90" />
+                          ) : (
+                            <FaChair className="h-3.5 w-3.5 shrink-0 text-white/90" />
+                          )}
+                          <span>{seat.seatNumber}</span>
+                          {isInactive && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-full h-[2px] bg-red-500 rotate-45 absolute" />
                             </div>
-                          </button>
-                        );
-                      })}
+                          )}
+                        </div>
+                      </button>
+                    );
+                  } else {
+                    // Ô trống ảo (Virtual Blueprint Slot)
+                    const slotKey = `${rowLabel}-${c}`;
+                    const isSelectedVirtual = selectedVirtualSlots.has(slotKey);
 
-                      {/* Right row label */}
-                      <span className="w-8 h-8 flex items-center justify-center text-xs font-bold text-gray-600">
-                        {rowLabel}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+                    renderedCols.push(
+                      <button
+                        key={slotKey}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleMouseDownVirtual(slotKey);
+                        }}
+                        onMouseEnter={() => handleMouseEnterVirtual(slotKey)}
+                        className={`flex-shrink-0 rounded-lg border border-dashed text-[9px] font-semibold transition flex items-center justify-center cursor-pointer ${
+                          isSelectedVirtual
+                            ? 'ring-2 ring-white scale-110 bg-blue-600/30 border-blue-400 text-blue-300 shadow-lg'
+                            : 'border-gray-800 bg-[#0F172A]/20 hover:bg-blue-500/10 text-gray-500'
+                        }`}
+                        style={{
+                          width: blueprintMaxCol > 14 ? 32 : 40,
+                          height: blueprintMaxCol > 14 ? 32 : 40,
+                        }}
+                        title={`Tọa độ trống: ${rowLabel}${c} (Click để chọn lắp ghế)`}
+                      >
+                        <span>{c}</span>
+                      </button>
+                    );
+                  }
+                }
 
-              {/* Select All / Clear */}
-              <div className="flex justify-center items-center gap-3 mt-5">
+                return (
+                  <div key={rowLabel} className="flex items-center gap-1.5">
+                    {/* Row label (Left) */}
+                    <button
+                      onClick={() => toggleRow(rowLabel)}
+                      className={`w-8 h-8 flex items-center justify-center rounded-md text-xs font-bold transition-all duration-150 ${allRowSelected
+                        ? 'bg-[#4318FF] text-white'
+                        : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-white'
+                        }`}
+                      title={TEXT.SEAT_LAYOUT.BTN_SELECT_ALL_ROW.replace('{0}', rowLabel)}
+                    >
+                      {rowLabel}
+                    </button>
+
+                    {/* Columns */}
+                    {renderedCols}
+
+                    {/* Row label (Right) */}
+                    <span className="w-8 h-8 flex items-center justify-center text-xs font-bold text-gray-600">
+                      {rowLabel}
+                    </span>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* Select All / Clear */}
+          <div className="flex justify-center items-center gap-3 mt-5">
+            {(() => {
+              const virtualCount = getVisibleVirtualSlots().size;
+              const totalItems = visibleSeats.length + virtualCount;
+              const isAllSelected = selectedSeatIds.size === visibleSeats.length
+                && selectedVirtualSlots.size === virtualCount
+                && totalItems > 0;
+              return (
                 <button
                   onClick={selectAll}
                   className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
                 >
-                  {selectedSeatIds.size === seats.length ? TEXT.SEAT_LAYOUT.BTN_DESELECT_ALL : TEXT.SEAT_LAYOUT.BTN_SELECT_ALL}
+                  {isAllSelected ? TEXT.SEAT_LAYOUT.BTN_DESELECT_ALL : TEXT.SEAT_LAYOUT.BTN_SELECT_ALL}
                 </button>
-                {selectedSeatIds.size > 0 && (
-                  <button
-                    onClick={clearSelection}
-                    className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
-                  >
-                    {TEXT.SEAT_LAYOUT.BTN_DESELECT.replace('{0}', String(selectedSeatIds.size))}
-                  </button>
-                )}
-                <div className="h-4 w-[1px] bg-gray-800 mx-1" />
+              );
+            })()}
+            {(() => {
+              const virtualCount = getVisibleVirtualSlots().size;
+              const totalItems = visibleSeats.length + virtualCount;
+              const isAllSelected = selectedSeatIds.size === visibleSeats.length
+                && selectedVirtualSlots.size === virtualCount
+                && totalItems > 0;
+              const hasAnySelected = selectedSeatIds.size > 0 || selectedVirtualSlots.size > 0;
+              // Chỉ hiện nút bỏ chọn riêng khi có selection nhưng chưa chọn tất cả
+              return hasAnySelected && !isAllSelected ? (
                 <button
-                  onClick={undoSelection}
-                  disabled={historyIndex === 0}
-                  className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
-                  title={TEXT.SEAT_LAYOUT.TOOLTIP_UNDO}
+                  onClick={clearSelection}
+                  className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
                 >
-                  <span>↩️</span> {TEXT.SEAT_LAYOUT.BTN_UNDO}
+                  {TEXT.SEAT_LAYOUT.BTN_DESELECT.replace('{0}', String(selectedSeatIds.size + selectedVirtualSlots.size))}
                 </button>
-                <button
-                  onClick={redoSelection}
-                  disabled={historyIndex >= selectionHistory.length - 1}
-                  className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
-                  title={TEXT.SEAT_LAYOUT.TOOLTIP_REDO}
-                >
-                  {TEXT.SEAT_LAYOUT.BTN_REDO} <span>↪️</span>
-                </button>
+              ) : null;
+            })()}
+            <div className="h-4 w-[1px] bg-gray-800 mx-1" />
+            <button
+              onClick={undoSelection}
+              disabled={historyIndex === 0}
+              className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
+              title={TEXT.SEAT_LAYOUT.TOOLTIP_UNDO}
+            >
+              <span>↩️</span> {TEXT.SEAT_LAYOUT.BTN_UNDO}
+            </button>
+            <button
+              onClick={redoSelection}
+              disabled={historyIndex >= selectionHistory.length - 1}
+              className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
+              title={TEXT.SEAT_LAYOUT.TOOLTIP_REDO}
+            >
+              {TEXT.SEAT_LAYOUT.BTN_REDO} <span>↪️</span>
+            </button>
+          </div>
+
+          {/* Legend (Chia làm 2 hàng đều và đẹp) */}
+          <div className="mt-6 pt-5 border-t border-gray-800 flex flex-col items-center gap-3">
+            {/* Hàng 1: Các loại ghế */}
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+              {SEAT_TYPES.map((t) => (
+                <div key={t.id} className="flex items-center gap-2">
+                  <div
+                    className="w-4 h-4 rounded"
+                    style={{ backgroundColor: t.color }}
+                  />
+                  <span className="text-xs text-gray-400">{t.label}</span>
+                  {t.id === 'SEAT_TYPE_NORMAL' && <span className="text-[10px] text-gray-500 font-semibold">{TEXT.SEAT_LAYOUT.LEGEND_FEE_0}</span>}
+                  {t.id === 'SEAT_TYPE_VIP' && <span className="text-[10px] text-blue-500 font-semibold">{TEXT.SEAT_LAYOUT.LEGEND_FEE_30}</span>}
+                  {t.id === 'SEAT_TYPE_SWEETBOX' && <span className="text-[10px] text-pink-500 font-semibold">{TEXT.SEAT_LAYOUT.LEGEND_FEE_50}</span>}
+                </div>
+              ))}
+            </div>
+
+            {/* Hàng 2: Trạng thái hiển thị */}
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pt-2.5 border-t border-gray-800/30 w-full max-w-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-gray-600 ring-2 ring-white" />
+                <span className="text-xs text-gray-400">{TEXT.SEAT_LAYOUT.LEGEND_SELECTED}</span>
               </div>
-            </>
-          )}
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-gray-600 opacity-30 relative overflow-hidden">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-full h-[1px] bg-red-500 rotate-45" />
+                  </div>
+                </div>
+                <span className="text-xs text-gray-400">{TEXT.SEAT_LAYOUT.LEGEND_INACTIVE}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded border border-dashed border-gray-600 bg-[#0F172A]/20" />
+                <span className="text-xs text-gray-400">Ô trống (click để lắp ghế)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded border border-dashed border-blue-400 bg-blue-600/30 ring-2 ring-white" />
+                <span className="text-xs text-gray-400">Vị trí đang chọn lắp</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* ═══════════════════════════════════════ */}
         {/* RIGHT: CONTROL PANEL                   */}
         {/* ═══════════════════════════════════════ */}
-        <div className="space-y-5">
-          {/* ── Stats ── */}
-          <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">{TEXT.SEAT_LAYOUT.TITLE_STATS}</h3>
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800 col-span-2">
-                <div className="text-xl font-bold text-white">
-                  {seatStats.totalCapacity} / {room?.capacity ?? 0}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 self-start w-full">
+          {/* COLUMN 1: Stats, Batch Editor */}
+          <div className="space-y-5">
+            {/* ── Stats ── */}
+            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">{TEXT.SEAT_LAYOUT.TITLE_STATS}</h3>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800 col-span-2">
+                  <div className="text-xl font-bold text-white">
+                    {seatStats.totalCapacity} / {room?.capacity ?? 0}
+                  </div>
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">
+                    {TEXT.SEAT_LAYOUT.STATS_CAPACITY}
+                  </div>
                 </div>
-                <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">
-                  {TEXT.SEAT_LAYOUT.STATS_CAPACITY}
+                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
+                  <div className="text-xl font-bold text-white">{seatStats.total}</div>
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_TOTAL}</div>
+                </div>
+                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
+                  <div className={`text-xl font-bold ${totalInactiveCount > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
+                    {totalInactiveCount}
+                  </div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_INACTIVE}</div>
+                </div>
+                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
+                  <div className="text-xl font-bold text-gray-400">{seatStats.normal}</div>
+                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Normal</div>
+                </div>
+                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
+                  <div className="text-xl font-bold text-blue-400">{seatStats.vip}</div>
+                  <div className="text-[10px] text-blue-500 uppercase tracking-wider mt-0.5">VIP</div>
+                </div>
+                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800 col-span-2">
+                  <div className="text-xl font-bold text-pink-400">{seatStats.sweetbox}</div>
+                  <div className="text-[10px] text-pink-500 uppercase tracking-wider mt-0.5">Sweetbox</div>
                 </div>
               </div>
-              <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
-                <div className="text-xl font-bold text-white">{seatStats.total}</div>
-                <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_TOTAL}</div>
-              </div>
-              <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
-                <div className={`text-xl font-bold ${totalInactiveCount > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
-                  {totalInactiveCount}
-                </div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_INACTIVE}</div>
-              </div>
-              <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
-                <div className="text-xl font-bold text-gray-400">{seatStats.normal}</div>
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Normal</div>
-              </div>
-              <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
-                <div className="text-xl font-bold text-blue-400">{seatStats.vip}</div>
-                <div className="text-[10px] text-blue-500 uppercase tracking-wider mt-0.5">VIP</div>
-              </div>
-              <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800 col-span-2">
-                <div className="text-xl font-bold text-pink-400">{seatStats.sweetbox}</div>
-                <div className="text-[10px] text-pink-500 uppercase tracking-wider mt-0.5">Sweetbox</div>
-              </div>
+
+              {/* Toggle hiển thị ghế vô hiệu */}
+              {totalInactiveCount > 0 && (
+                <button
+                  onClick={() => setShowInactiveSeats((v) => !v)}
+                  className={`mt-3 w-full py-2 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-2 ${showInactiveSeats
+                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25'
+                    : 'bg-gray-800/50 text-gray-400 border-gray-700 hover:bg-gray-700'
+                    }`}
+                >
+                  {showInactiveSeats ? TEXT.SEAT_LAYOUT.BTN_HIDE_INACTIVE : TEXT.SEAT_LAYOUT.BTN_SHOW_INACTIVE.replace('{0}', String(totalInactiveCount))}
+                </button>
+              )}
             </div>
 
-            {/* Toggle hiển thị ghế vô hiệu */}
-            {totalInactiveCount > 0 && (
-              <button
-                onClick={() => setShowInactiveSeats((v) => !v)}
-                className={`mt-3 w-full py-2 rounded-xl text-xs font-semibold border transition flex items-center justify-center gap-2 ${showInactiveSeats
-                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25'
-                  : 'bg-gray-800/50 text-gray-400 border-gray-700 hover:bg-gray-700'
-                  }`}
-              >
-                {showInactiveSeats ? TEXT.SEAT_LAYOUT.BTN_HIDE_INACTIVE : TEXT.SEAT_LAYOUT.BTN_SHOW_INACTIVE.replace('{0}', String(totalInactiveCount))}
-              </button>
+            {/* ── Batch Editor ── */}
+            {selectedSeatIds.size > 0 ? (
+              <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
+                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
+                  {TEXT.SEAT_LAYOUT.TITLE_BATCH}
+                </h3>
+                <p className="text-[10px] text-gray-500 mb-3">
+                  {TEXT.SEAT_LAYOUT.BATCH_SELECTED} <span className="text-white font-bold">{selectedSeatIds.size}</span> {TEXT.SEAT_LAYOUT.BATCH_SEATS}
+                </p>
+
+                {(() => {
+                  const selectedActive = Array.from(selectedSeatIds).filter(
+                    (id) => seats.find((s) => s.seatId === id)?.isActive
+                  );
+                  const selectedInactive = Array.from(selectedSeatIds).filter(
+                    (id) => !seats.find((s) => s.seatId === id)?.isActive
+                  );
+                  return (
+                    <div className="space-y-3">
+                      {selectedActive.length > 0 && (
+                        <>
+                          <div>
+                            <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">
+                              {TEXT.SEAT_LAYOUT.BATCH_CHANGE_TYPE.replace('{0}', String(selectedActive.length))}
+                            </label>
+                            <div className="flex gap-2">
+                              <select
+                                value={batchType}
+                                onChange={(e) => setBatchType(e.target.value)}
+                                disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                                className="flex-1 px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                              >
+                                {SEAT_TYPES.map((t) => (
+                                  <option key={t.id} value={t.id}>{t.label}</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={handleBatchChangeType}
+                                disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {TEXT.SEAT_LAYOUT.BTN_APPLY}
+                              </button>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={handleBatchDeactivate}
+                            disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                            className="w-full py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {TEXT.SEAT_LAYOUT.BTN_BATCH_DEACTIVATE.replace('{0}', String(selectedActive.length))}
+                          </button>
+                        </>
+                      )}
+
+                      {selectedInactive.length > 0 && (
+                        <button
+                          onClick={handleBatchReactivate}
+                          disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                          className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {TEXT.SEAT_LAYOUT.BTN_BATCH_REACTIVATE.replace('{0}', String(selectedInactive.length))}
+                        </button>
+                      )}
+
+                      {selectedActive.length > 0 && selectedInactive.length > 0 && (
+                        <p className="text-[10px] text-gray-500 text-center">{TEXT.SEAT_LAYOUT.BATCH_MIXED_HINT}</p>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : selectedVirtualSlots.size > 0 ? (
+              /* Form lắp đặt ghế mới cho các ô ảo */
+              <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
+                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
+                  Lắp đặt ghế
+                </h3>
+                <p className="text-[10px] text-gray-500 mb-3">
+                  Đang chọn <span className="text-white font-bold">{selectedVirtualSlots.size}</span> vị trí trống trên blueprint.
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">
+                      Chọn loại ghế lắp đặt
+                    </label>
+                    <select
+                      value={batchType}
+                      onChange={(e) => setBatchType(e.target.value)}
+                      disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                      className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                    >
+                      {SEAT_TYPES.map((t) => (
+                        <option key={t.id} value={t.id}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleInstallSeats}
+                    disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Lắp đặt {selectedVirtualSlots.size} ghế
+                  </button>
+                  <button
+                    onClick={clearSelection}
+                    className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs font-semibold rounded-lg transition"
+                  >
+                    Bỏ chọn tất cả vị trí trống
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
+                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
+                  {TEXT.SEAT_LAYOUT.TITLE_BATCH}
+                </h3>
+                <div className="bg-[#0F172A] rounded-xl p-4 text-center border border-gray-800">
+                  <span className="text-xs text-gray-500">
+                    Hãy quét chuột chọn các ghế thực tế trên sơ đồ để sửa đổi, hoặc chọn các ô trống để lắp đặt ghế mới.
+                  </span>
+                </div>
+              </div>
             )}
           </div>
 
-          {/* ── Batch Editor ── */}
-          <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
-              {TEXT.SEAT_LAYOUT.TITLE_BATCH}
-            </h3>
-            <p className="text-[10px] text-gray-500 mb-3">
-              {TEXT.SEAT_LAYOUT.BATCH_SELECTED} <span className="text-white font-bold">{selectedSeatIds.size}</span> {TEXT.SEAT_LAYOUT.BATCH_SEATS}
-            </p>
-
-            {selectedSeatIds.size === 0 ? (
-              <div className="bg-[#0F172A] rounded-xl p-4 text-center border border-gray-800">
-                <span className="text-xs text-gray-500">{TEXT.SEAT_LAYOUT.BATCH_HINT}</span>
-              </div>
-            ) : (() => {
-              // Phân loại ghế đang chọn
-              const selectedActive = Array.from(selectedSeatIds).filter(
-                (id) => seats.find((s) => s.seatId === id)?.isActive
-              );
-              const selectedInactive = Array.from(selectedSeatIds).filter(
-                (id) => !seats.find((s) => s.seatId === id)?.isActive
-              );
-              return (
-                <div className="space-y-3">
-                  {/* Chỉ hiện đổi loại và vô hiệu hóa nếu có ghế active được chọn */}
-                  {selectedActive.length > 0 && (
-                    <>
-                      <div>
-                        <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">
-                          {TEXT.SEAT_LAYOUT.BATCH_CHANGE_TYPE.replace('{0}', String(selectedActive.length))}
-                        </label>
-                        <div className="flex gap-2">
-                          <select
-                            value={batchType}
-                            onChange={(e) => setBatchType(e.target.value)}
-                            disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                            className="flex-1 px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
-                          >
-                            {SEAT_TYPES.map((t) => (
-                              <option key={t.id} value={t.id}>{t.label}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={handleBatchChangeType}
-                            disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {TEXT.SEAT_LAYOUT.BTN_APPLY}
-                          </button>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={handleBatchDeactivate}
-                        disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                        className="w-full py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {TEXT.SEAT_LAYOUT.BTN_BATCH_DEACTIVATE.replace('{0}', String(selectedActive.length))}
-                      </button>
-                    </>
-                  )}
-
-                  {/* Chỉ hiện tái kích hoạt nếu có ghế inactive được chọn */}
-                  {selectedInactive.length > 0 && (
-                    <button
-                      onClick={handleBatchReactivate}
-                      disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                      className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {TEXT.SEAT_LAYOUT.BTN_BATCH_REACTIVATE.replace('{0}', String(selectedInactive.length))}
-                    </button>
-                  )}
-
-                  {/* Gợi ý nếu chọn lẫn lộn */}
-                  {selectedActive.length > 0 && selectedInactive.length > 0 && (
-                    <p className="text-[10px] text-gray-500 text-center">{TEXT.SEAT_LAYOUT.BATCH_MIXED_HINT}</p>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* ── Auto Generator ── */}
-          <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
-              {TEXT.SEAT_LAYOUT.TITLE_GEN}
-            </h3>
-            <div className="space-y-3">
+          {/* COLUMN 2: Blueprint settings, Auto generator, Copy Layout */}
+          <div className="space-y-5">
+            {/* ── Blueprint Grid Settings ── */}
+            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
+                Khung rạp (Lưới Blueprint)
+              </h3>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_ROWS}</label>
+                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Hàng Tối Đa</label>
                   <input
-                    type="number"
-                    min={1}
-                    max={26}
-                    value={genRows}
+                    type="text"
+                    maxLength={1}
+                    value={blueprintMaxRow}
                     disabled={room?.roomStatus !== 'MAINTENANCE'}
-                    onChange={(e) => setGenRows(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+                      if (val) setBlueprintMaxRow(val);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition text-center disabled:opacity-50"
+                    placeholder="L"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_COLS}</label>
+                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Cột Tối Đa</label>
                   <input
                     type="number"
                     min={1}
                     max={30}
-                    value={genCols}
+                    value={blueprintMaxCol}
                     disabled={room?.roomStatus !== 'MAINTENANCE'}
-                    onChange={(e) => setGenCols(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                    onChange={(e) => setBlueprintMaxCol(Math.max(1, Math.min(30, Number(e.target.value))))}
+                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition text-center disabled:opacity-50"
+                    placeholder="16"
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_TYPE}</label>
-                <select
-                  value={genType}
-                  disabled={room?.roomStatus !== 'MAINTENANCE'}
-                  onChange={(e) => setGenType(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
-                >
-                  {SEAT_TYPES.map((t) => (
-                    <option key={t.id} value={t.id}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="bg-[#0F172A] rounded-lg p-2.5 border border-gray-800">
-                <span className="text-xs text-gray-400">
-                  {TEXT.SEAT_LAYOUT.GEN_INFO_1} <span className="text-white font-bold">{genRows * genCols}</span> {TEXT.SEAT_LAYOUT.GEN_INFO_2}
-                  {TEXT.SEAT_LAYOUT.GEN_INFO_3.replace('{0}', String(genRows)).replace('{1}', String(genCols))}
-                </span>
-              </div>
-              <button
-                onClick={handleGenerateSeats}
-                disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                className={`w-full py-2.5 rounded-xl text-sm font-semibold transition shadow-lg ${room?.roomStatus !== 'MAINTENANCE' || actionLoading
-                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed shadow-none'
-                  : 'bg-[#4318FF] hover:bg-blue-700 text-white shadow-[#4318FF]/20'
-                  }`}
-              >
-                {actionLoading ? TEXT.SEAT_LAYOUT.LOADING_PROCESS : TEXT.SEAT_LAYOUT.BTN_GENERATE}
-              </button>
+              <p className="text-[10px] text-gray-500 mt-2">
+                Thay đổi kích thước lưới để mở rộng hoặc thu hẹp diện tích lắp đặt ghế của phòng chiếu.
+              </p>
             </div>
-          </div>
 
-          {/* ── Copy Layout ── */}
-          <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
-              {TEXT.SEAT_LAYOUT.TITLE_COPY}
-            </h3>
-            <p className="text-[10px] text-gray-500 mb-3">
-              {TEXT.SEAT_LAYOUT.COPY_DESC}
-            </p>
-            <button
-              onClick={() => {
-                void loadOtherRooms();
-                setShowCopyModal(true);
-              }}
-              disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-              className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-xl transition border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {TEXT.SEAT_LAYOUT.BTN_COPY}
-            </button>
-          </div>
-
-          {/* ── Legend ── */}
-          <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">{TEXT.SEAT_LAYOUT.TITLE_LEGEND}</h3>
-            <div className="space-y-2">
-              {SEAT_TYPES.map((t) => (
-                <div key={t.id} className="flex items-center gap-2.5">
-                  <div
-                    className="w-5 h-5 rounded-md"
-                    style={{ backgroundColor: t.color }}
-                  />
-                  <span className="text-xs text-gray-300">{t.label}</span>
-                  {t.id === 'SEAT_TYPE_NORMAL' && <span className="text-[10px] text-gray-500 ml-auto">{TEXT.SEAT_LAYOUT.LEGEND_FEE_0}</span>}
-                  {t.id === 'SEAT_TYPE_VIP' && <span className="text-[10px] text-blue-500 ml-auto">{TEXT.SEAT_LAYOUT.LEGEND_FEE_30}</span>}
-                  {t.id === 'SEAT_TYPE_SWEETBOX' && <span className="text-[10px] text-pink-500 ml-auto">{TEXT.SEAT_LAYOUT.LEGEND_FEE_50}</span>}
-                </div>
-              ))}
-              <div className="flex items-center gap-2.5 pt-1 border-t border-gray-800">
-                <div className="w-5 h-5 rounded-md bg-gray-600 opacity-30 relative overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-full h-[2px] bg-red-500 rotate-45" />
+            {/* ── Auto Generator ── */}
+            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
+                {TEXT.SEAT_LAYOUT.TITLE_GEN}
+              </h3>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_ROWS}</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={26}
+                      value={genRows}
+                      disabled={room?.roomStatus !== 'MAINTENANCE'}
+                      onChange={(e) => setGenRows(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_COLS}</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={genCols}
+                      disabled={room?.roomStatus !== 'MAINTENANCE'}
+                      onChange={(e) => setGenCols(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                    />
                   </div>
                 </div>
-                <span className="text-xs text-gray-500">{TEXT.SEAT_LAYOUT.LEGEND_INACTIVE}</span>
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_TYPE}</label>
+                  <select
+                    value={genType}
+                    disabled={room?.roomStatus !== 'MAINTENANCE'}
+                    onChange={(e) => setGenType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                  >
+                    {SEAT_TYPES.map((t) => (
+                      <option key={t.id} value={t.id}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="bg-[#0F172A] rounded-lg p-2.5 border border-gray-800">
+                  <span className="text-xs text-gray-400">
+                    {TEXT.SEAT_LAYOUT.GEN_INFO_1} <span className="text-white font-bold">{genRows * genCols}</span> {TEXT.SEAT_LAYOUT.GEN_INFO_2}
+                    {TEXT.SEAT_LAYOUT.GEN_INFO_3.replace('{0}', String(genRows)).replace('{1}', String(genCols))}
+                  </span>
+                </div>
+                <button
+                  onClick={handleGenerateSeats}
+                  disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                  className={`w-full py-2.5 rounded-xl text-sm font-semibold transition shadow-lg ${room?.roomStatus !== 'MAINTENANCE' || actionLoading
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed shadow-none'
+                    : 'bg-[#4318FF] hover:bg-blue-700 text-white shadow-[#4318FF]/20'
+                    }`}
+                >
+                  {actionLoading ? TEXT.SEAT_LAYOUT.LOADING_PROCESS : TEXT.SEAT_LAYOUT.BTN_GENERATE}
+                </button>
               </div>
-              <div className="flex items-center gap-2.5">
-                <div className="w-5 h-5 rounded-md bg-gray-600 ring-2 ring-white" />
-                <span className="text-xs text-gray-500">{TEXT.SEAT_LAYOUT.LEGEND_SELECTED}</span>
-              </div>
+            </div>
+
+            {/* ── Copy Layout ── */}
+            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
+                {TEXT.SEAT_LAYOUT.TITLE_COPY}
+              </h3>
+              <p className="text-[10px] text-gray-500 mb-3">
+                {TEXT.SEAT_LAYOUT.COPY_DESC}
+              </p>
+              <button
+                onClick={() => {
+                  void loadOtherRooms();
+                  setShowCopyModal(true);
+                }}
+                disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-xl transition border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {TEXT.SEAT_LAYOUT.BTN_COPY}
+              </button>
             </div>
           </div>
         </div>

@@ -44,6 +44,7 @@ export interface SeatResponse {
   seatNumber: number;
   seatCode: string;
   seatTypeId: string;   // SEAT_TYPE_NORMAL | SEAT_TYPE_VIP | SEAT_TYPE_SWEETBOX
+  seatStatus?: string;  // ACTIVE | INACTIVE
   isActive: boolean;
 }
 
@@ -61,6 +62,7 @@ export interface UpdateSeatPayload {
   seatNumber: number;
   seatTypeId: string;
   isActive?: boolean;
+  seatStatus?: string;  // ACTIVE | INACTIVE
 }
 
 /** Khớp CinemaSystem.Contracts.Cinemas.CinemaResponse */
@@ -133,19 +135,41 @@ export const roomService = {
   /** GET /api/seats/room/{roomId} – Lấy sơ đồ ghế */
   getSeatMap: async (roomId: string): Promise<SeatResponse[]> => {
     const envelope = await axiosInstance.get(`/api/seats/room/${roomId}`) as unknown as ApiEnvelope<SeatResponse[]>;
-    return envelope?.data ?? [];
+    const seats = envelope?.data ?? [];
+    return seats.map(s => ({
+      ...s,
+      isActive: s.seatStatus !== 'INACTIVE'
+    }));
   },
 
   /** POST /api/seats – Tạo ghế đơn */
   createSeat: async (payload: CreateSeatPayload): Promise<SeatResponse> => {
     const envelope = await axiosInstance.post('/api/seats', payload) as unknown as ApiEnvelope<SeatResponse>;
-    return envelope.data;
+    const seat = envelope.data;
+    return {
+      ...seat,
+      isActive: seat?.seatStatus !== 'INACTIVE'
+    };
   },
 
   /** PUT /api/seats/{seatId} – Cập nhật ghế */
   updateSeat: async (seatId: string, payload: UpdateSeatPayload): Promise<SeatResponse> => {
-    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, { seatId, ...payload }) as unknown as ApiEnvelope<SeatResponse>;
-    return envelope.data;
+    const { isActive, ...rest } = payload;
+    const seatStatus = isActive !== undefined 
+      ? (isActive ? 'ACTIVE' : 'INACTIVE') 
+      : (payload.seatStatus || 'ACTIVE');
+
+    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, { 
+      seatId, 
+      ...rest, 
+      seatStatus 
+    }) as unknown as ApiEnvelope<SeatResponse>;
+
+    const seat = envelope.data;
+    return {
+      ...seat,
+      isActive: seat?.seatStatus !== 'INACTIVE'
+    };
   },
 
   /** DELETE /api/seats/{seatId} – Xóa ghế */
