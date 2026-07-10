@@ -1382,8 +1382,13 @@ export default function ManageSeatLayout() {
                 const renderedCols: React.ReactNode[] = [];
 
                 for (let c = 1; c <= blueprintMaxCol; c++) {
+                  if (skipCols.has(c)) continue;
+
+                  const seat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === c);
                   const isAisle = aisleCols.includes(c);
-                  if (isAisle) {
+                  const hasHiddenSeatHere = seat && !seat.isActive;
+
+                  if (isAisle && !(showInactiveSeats && hasHiddenSeatHere)) {
                     const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
                     renderedCols.push(
                       <div
@@ -1397,13 +1402,9 @@ export default function ManageSeatLayout() {
                     );
                     continue;
                   }
-
-                  const seat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === c);
                   if (seat && seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' && (seat.isActive || showInactiveSeats)) {
                     skipCols.add(c + 1);
                   }
-
-                  if (skipCols.has(c)) continue;
 
                   const isRealSeatVisible = seat && (seat.isActive || showInactiveSeats);
 

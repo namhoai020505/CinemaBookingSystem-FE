@@ -1141,6 +1141,8 @@ export default function SeatSelection() {
                     const renderedCols: React.ReactNode[] = [];
 
                     for (let c = 1; c <= blueprintMaxCol; c++) {
+                      if (skipCols.has(c)) continue;
+
                       const isAisle = aisleCols.includes(c);
                       if (isAisle) {
                         renderedCols.push(
@@ -1151,8 +1153,6 @@ export default function SeatSelection() {
                         );
                         continue;
                       }
-
-                      if (skipCols.has(c)) continue;
 
                       const seat = seatsInRow.find((s) => s.column === c);
                       if (seat) {
