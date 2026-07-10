@@ -434,6 +434,7 @@ export default function ManageSeatLayout() {
 
       for (let c = 1; c <= blueprintMaxCol; c++) {
         if (skipCols.has(c)) continue;
+        if (aisleCols.includes(c)) continue; // Lối đi dọc không có ô ảo để chọn lắp ghế
         const hasSeat = rowSeats.some(s => s.seatNumber === c);
         if (!hasSeat) {
           slots.add(`${rowLabel}-${c}`);
@@ -441,7 +442,7 @@ export default function ManageSeatLayout() {
       }
     }
     return slots;
-  }, [seats, blueprintMaxRow, blueprintMaxCol, showInactiveSeats]);
+  }, [seats, blueprintMaxRow, blueprintMaxCol, showInactiveSeats, aisleCols]);
 
   const selectAll = () => {
     if (room?.roomStatus !== 'MAINTENANCE') {
@@ -637,6 +638,21 @@ export default function ManageSeatLayout() {
         }
       }
 
+      // Kiểm tra chặn lắp đặt trên các cột lối đi dọc
+      const aisleViolations: string[] = [];
+      for (const coord of Array.from(targetCoordinates)) {
+        const [rowLabel, colStr] = coord.split('-');
+        const col = parseInt(colStr);
+        if (aisleCols.includes(col)) {
+          aisleViolations.push(`${rowLabel}${col}`);
+        }
+      }
+      if (aisleViolations.length > 0) {
+        toast.error(`Không thể lắp đặt! Các vị trí sau đang nằm trên cột lối đi dọc: ${aisleViolations.join(', ')}. Vui lòng hủy lối đi dọc trên các cột này trước.`);
+        setActionLoading(false);
+        return;
+      }
+
       // Kiểm tra rule số chẵn và liền kề trên từng hàng đối với Sweetbox
       if (batchType === 'SEAT_TYPE_SWEETBOX') {
         const rowGroups = new Map<string, number[]>();
@@ -822,6 +838,8 @@ export default function ManageSeatLayout() {
         }
       }
 
+
+
       if (failed > 0) {
         toast.warn(`Đã lắp đặt thành công ${created} ghế, thất bại tại ${failed} vị trí.`);
       } else {
@@ -866,6 +884,18 @@ export default function ManageSeatLayout() {
 
     if (inactiveSeatsToReactivate.length === 0) {
       toast.info("Không có ghế nào đang vô hiệu hóa để kích hoạt lại.");
+      return;
+    }
+
+    // Kiểm tra chặn kích hoạt lại trên các cột lối đi dọc
+    const aisleViolations: string[] = [];
+    for (const seat of inactiveSeatsToReactivate) {
+      if (aisleCols.includes(seat.seatNumber)) {
+        aisleViolations.push(seat.seatCode);
+      }
+    }
+    if (aisleViolations.length > 0) {
+      toast.error(`Không thể kích hoạt! Các ghế sau đang nằm trên cột lối đi dọc: ${aisleViolations.join(', ')}. Vui lòng hủy lối đi dọc trên các cột này trước.`);
       return;
     }
 
