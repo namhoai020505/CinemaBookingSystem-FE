@@ -1222,6 +1222,8 @@ export default function ManageSeatLayout() {
   // (cả hai đều gọi soft-delete API — giữ 1 hàm tránh nhầm lẫn)
 
   // ──────────────────────────────────────────
+  void handleBatchDelete;
+
   // Stats
   // ──────────────────────────────────────────
   const seatStats = (() => {

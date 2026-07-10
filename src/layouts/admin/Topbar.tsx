@@ -19,20 +19,12 @@ const Topbar = ({ onToggle }: TopbarProps) => {
 
   return (
     <header
-      style={{
-        height: '64px',
-        background: '#ffffff',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 24px',
-        borderBottom: '1px solid #e2e8f0',
-        gap: '12px',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-        flexShrink: 0,
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-      }}
+      className={[
+        'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-4 border-b px-6 backdrop-blur-xl transition-colors',
+        isLightMode
+          ? 'border-slate-200 bg-white/90 text-slate-950'
+          : 'border-white/10 bg-[#0B1220]/90 text-white',
+      ].join(' ')}
     >
       {/* Hamburger toggle (visible on all sizes as a secondary trigger) */}
       <button

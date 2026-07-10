@@ -88,6 +88,16 @@ const navItems = [
 const Sidebar = ({ collapsed }: SidebarProps) => {
   const location = useLocation();
 
+  const asideClass = [
+    'fixed inset-y-0 left-0 z-40 flex h-dvh shrink-0 flex-col overflow-hidden border-r transition-all duration-200 lg:relative lg:inset-auto lg:h-screen',
+    isLightMode
+      ? 'border-slate-200 bg-slate-950 shadow-[12px_0_34px_rgba(15,23,42,0.16)]'
+      : 'border-white/10 bg-[#08111F] shadow-[12px_0_34px_rgba(0,0,0,0.34)]',
+    collapsed
+      ? 'w-0 -translate-x-full lg:w-20 lg:translate-x-0'
+      : 'w-72 translate-x-0',
+  ].join(' ');
+
   return (
     <aside
       style={{
@@ -148,8 +158,7 @@ const Sidebar = ({ collapsed }: SidebarProps) => {
 
       </div>
 
-      {/* Navigation */}
-      <nav style={{ flex: 1, padding: '16px 8px', overflowY: 'auto', overflowX: 'hidden' }}>
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-4" aria-label="Admin navigation">
         {!collapsed && (
           <div
             style={{
@@ -246,40 +255,15 @@ const Sidebar = ({ collapsed }: SidebarProps) => {
         })}
       </nav>
 
-      {/* Bottom user section */}
-      <div
-        style={{
-          padding: collapsed ? '12px 8px' : '12px',
-          borderTop: '1px solid rgba(255,255,255,0.08)',
-        }}
-      >
-        {!collapsed ? (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '8px',
-              borderRadius: '10px',
-              background: 'rgba(255,255,255,0.05)',
-            }}
-          >
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'white',
-                fontSize: '13px',
-                fontWeight: 700,
-                flexShrink: 0,
-              }}
-            >
-              A
+      <div className="shrink-0 border-t border-white/10 p-3">
+        <div className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-2.5">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
+            <FaChair />
+          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <div className="truncate text-sm font-black text-white">Admin</div>
+              <div className="mt-0.5 text-[11px] font-bold text-slate-400">System operator</div>
             </div>
             <div style={{ overflow: 'hidden' }}>
               <div style={{ color: '#e2e8f0', fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' }}>
