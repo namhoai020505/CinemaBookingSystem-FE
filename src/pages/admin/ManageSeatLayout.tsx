@@ -50,17 +50,14 @@ export default function ManageSeatLayout() {
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [selectedSourceRoomId, setSelectedSourceRoomId] = useState('');
 
-  // Generator form
-  const [genRows, setGenRows] = useState(8);
-  const [genCols, setGenCols] = useState(12);
-  const [genType, setGenType] = useState('SEAT_TYPE_NORMAL');
-
   // Batch edit
   const [batchType, setBatchType] = useState('SEAT_TYPE_VIP');
 
   // Cấu hình Blueprint ảo cho phòng chiếu
   const [blueprintMaxRow, setBlueprintMaxRow] = useState('J');
   const [blueprintMaxCol, setBlueprintMaxCol] = useState(12);
+  const [tempMaxRow, setTempMaxRow] = useState('J');
+  const [tempMaxCol, setTempMaxCol] = useState(12);
   const [selectedVirtualSlots, setSelectedVirtualSlots] = useState<Set<string>>(new Set());
 
   const lastLoadedRoomIdRef = useRef<string | null>(null);
@@ -84,6 +81,8 @@ export default function ManageSeatLayout() {
       const finalC = Math.min(30, maxC + 2);         // Tối đa 30 cột
       setBlueprintMaxRow(String.fromCharCode(finalRCode));
       setBlueprintMaxCol(finalC);
+      setTempMaxRow(String.fromCharCode(finalRCode));
+      setTempMaxCol(finalC);
 
       // Reset selection state, selection refs và selection history
       const initialEntry = { seatIds: new Set<string>(), virtualSlots: new Set<string>() };
@@ -118,6 +117,43 @@ export default function ManageSeatLayout() {
   // Toggle hiển thị ghế vô hiệu (mặc định ẩn để lưới nhìn chuẩn)
   const [showInactiveSeats, setShowInactiveSeats] = useState(false);
 
+  // Đo đạc kích thước khung sơ đồ ghế thực tế để tự động co giãn ô ghế
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(600);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Hàm tính toán kích thước ô ghế động để vừa khít 100% chiều rộng của khung
+  const getDynamicSeatDims = useCallback((seatTypeId: string) => {
+    const gapSize = blueprintMaxCol > 24 ? 2 : blueprintMaxCol > 18 ? 4 : 6;
+    const remainingW = containerWidth - 110; // Trừ đi 2 nhãn cột (64px) và khoảng cách gap an toàn
+    const totalGaps = (blueprintMaxCol - 1) * gapSize;
+    let seatW = (remainingW - totalGaps) / blueprintMaxCol;
+    
+    // Giới hạn kích thước ghế đơn (Normal/VIP) tối thiểu 10px, tối đa 40px
+    seatW = Math.max(10, Math.min(40, seatW));
+    
+    if (seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+      return {
+        width: seatW * 2 + gapSize,
+        height: seatW,
+      };
+    }
+    return {
+      width: seatW,
+      height: seatW,
+    };
+  }, [containerWidth, blueprintMaxCol]);
+
   // ──────────────────────────────────────────
   // Data fetching
   // ──────────────────────────────────────────
@@ -151,8 +187,7 @@ export default function ManageSeatLayout() {
   const seatGrid = (() => {
     const rowMap = new Map<string, SeatResponse[]>();
     for (const seat of seats) {
-      // Nếu đang ẩn ghế inactive → bỏ qua ghế không hoạt động
-      if (!showInactiveSeats && !seat.isActive) continue;
+      // Luôn luôn đưa tất cả ghế vào sơ đồ Grid để giữ cấu trúc phẳng 1-1 với DB
       const existing = rowMap.get(seat.rowLabel) || [];
       existing.push(seat);
       rowMap.set(seat.rowLabel, existing);
@@ -164,6 +199,10 @@ export default function ManageSeatLayout() {
       const filtered: SeatResponse[] = [];
       const skipCols = new Set<number>();
       for (const seat of rowSeats) {
+        // Chỉ xét các ghế thực tế được hiển thị
+        const isVisible = seat.isActive || showInactiveSeats;
+        if (!isVisible) continue;
+
         if (skipCols.has(seat.seatNumber)) {
           continue;
         }
@@ -174,7 +213,7 @@ export default function ManageSeatLayout() {
       }
       rowMap.set(rowLabel, filtered);
     }
-    // Loại bỏ hàng rỗng (có thể xảy ra khi ẩn ghế inactive)
+    // Loại bỏ hàng rỗng
     const sortedRows = Array.from(rowMap.entries())
       .filter(([, rowSeats]) => rowSeats.length > 0)
       .sort((a, b) => a[0].localeCompare(b[0]));
@@ -345,15 +384,18 @@ export default function ManageSeatLayout() {
       toast.warn('Chỉ có thể chỉnh sửa sơ đồ ghế khi trạng thái phòng là BẢO TRÌ (MAINTENANCE).');
       return;
     }
-    const rowSeats = seats.filter(s => s.rowLabel === rowLabel && (s.isActive || showInactiveSeats));
+    const rowSeats = seats.filter(s => s.rowLabel === rowLabel);
     const virtualInRow: string[] = [];
     for (let c = 1; c <= blueprintMaxCol; c++) {
-      const hasSeat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === c && (s.isActive || showInactiveSeats));
+      const hasSeat = seats.some(s => s.rowLabel === rowLabel && s.seatNumber === c);
       if (!hasSeat) virtualInRow.push(`${rowLabel}-${c}`);
     }
 
-    const allSeatsSelected = rowSeats.length > 0 && rowSeats.every(s => selectedSeatIdsRef.current.has(s.seatId));
-    const allVirtualSelected = virtualInRow.length > 0 && virtualInRow.every(k => selectedVirtualSlotsRef.current.has(k));
+    const hasSeats = rowSeats.length > 0;
+    const hasVirtual = virtualInRow.length > 0;
+
+    const allSeatsSelected = !hasSeats || rowSeats.every(s => selectedSeatIdsRef.current.has(s.seatId));
+    const allVirtualSelected = !hasVirtual || virtualInRow.every(k => selectedVirtualSlotsRef.current.has(k));
     const allRowSelected = allSeatsSelected && allVirtualSelected && (rowSeats.length + virtualInRow.length > 0);
 
     const newSeatIds = new Set(selectedSeatIdsRef.current);
@@ -378,11 +420,11 @@ export default function ManageSeatLayout() {
     const endCode = (blueprintMaxRow || 'J').toUpperCase().charCodeAt(0);
     for (let i = startCode; i <= endCode; i++) {
       const rowLabel = String.fromCharCode(i);
-      const rowSeats = seats.filter(s => s.rowLabel === rowLabel && (s.isActive || showInactiveSeats));
+      const rowSeats = seats.filter(s => s.rowLabel === rowLabel);
 
       const skipCols = new Set<number>();
       for (const s of rowSeats) {
-        if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+        if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX' && (s.isActive || showInactiveSeats)) {
           skipCols.add(s.seatNumber + 1);
         }
       }
@@ -524,130 +566,160 @@ export default function ManageSeatLayout() {
     }
   };
 
-  // ──────────────────────────────────────────
-  // Auto generate seats
-  // ──────────────────────────────────────────
-  const handleGenerateSeats = async () => {
-    if (!roomId) return;
 
-    if (seats.length > 0) {
-      const confirmed = window.confirm(TEXT.SEAT_LAYOUT.MSG_GEN_CONFIRM.replace('{0}', String(genRows)).replace('{1}', String(genCols)));
-      if (!confirmed) return;
-    }
-
-    try {
-      setActionLoading(true);
-
-      // Mô phỏng tính toán sức chứa phòng chiếu sau khi sinh ghế mới
-      let projectedCapacity = 0;
-      for (const s of seats) {
-        if (!s.isActive) continue;
-        const rIndex = s.rowLabel.charCodeAt(0) - 65;
-        const inGrid = rIndex >= 0 && rIndex < genRows && s.seatNumber >= 1 && s.seatNumber <= genCols;
-        if (!inGrid) {
-          projectedCapacity += s.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-        }
-      }
-      for (let r = 0; r < genRows; r++) {
-        const rowLabel = String.fromCharCode(65 + r);
-        for (let c = 1; c <= genCols; c++) {
-          if (genType === 'SEAT_TYPE_SWEETBOX' && c % 2 === 0) {
-            const existing = seats.find((s) => s.rowLabel === rowLabel && s.seatNumber === c && s.isActive);
-            if (existing) {
-              projectedCapacity += existing.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-            }
-            continue;
-          }
-          const existing = seats.find((s) => s.rowLabel === rowLabel && s.seatNumber === c);
-          if (existing) {
-            const type = existing.isActive ? existing.seatTypeId : genType;
-            projectedCapacity += type === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-          } else {
-            projectedCapacity += genType === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-          }
-        }
-      }
-
-      if (projectedCapacity > (room?.capacity ?? 0)) {
-        toast.error(TEXT.SEAT_LAYOUT.ERR_GEN_CAPACITY.replace('{0}', String(projectedCapacity)).replace('{1}', String(room?.capacity)));
-        setActionLoading(false);
-        return;
-      }
-
-      let created = 0;
-      let skipped = 0;
-      const createFailed: string[] = [];
-
-      for (let r = 0; r < genRows; r++) {
-        const rowLabel = String.fromCharCode(65 + r); // A, B, C, ...
-        for (let c = 1; c <= genCols; c++) {
-          if (genType === 'SEAT_TYPE_SWEETBOX' && c % 2 === 0) {
-            continue;
-          }
-          const existing = seats.find(
-            (s) => s.rowLabel === rowLabel && s.seatNumber === c
-          );
-          if (existing) {
-            if (!existing.isActive) {
-              try {
-                await roomService.updateSeat(existing.seatId, {
-                  rowLabel: existing.rowLabel,
-                  seatNumber: existing.seatNumber,
-                  seatTypeId: genType,
-                  isActive: true,
-                });
-                created++;
-              } catch {
-                createFailed.push(`${rowLabel}${c}`);
-              }
-            } else {
-              skipped++;
-            }
-            continue;
-          }
-
-          try {
-            await roomService.createSeat({
-              roomId,
-              rowLabel,
-              seatNumber: c,
-              seatTypeId: genType,
-            });
-            created++;
-          } catch {
-            createFailed.push(`${rowLabel}${c}`);
-          }
-        }
-      }
-
-      if (createFailed.length > 0) {
-        toast.warn(TEXT.SEAT_LAYOUT.MSG_GEN_WARN.replace('{0}', String(created)).replace('{1}', String(skipped)).replace('{2}', createFailed.slice(0, 8).join(', ')).replace('{3}', createFailed.length > 8 ? ` (+${createFailed.length - 8} nữa)` : ''), { autoClose: 8000 });
-      } else {
-        toast.success(TEXT.SEAT_LAYOUT.MSG_GEN_SUCCESS.replace('{0}', String(created)).replace('{1}', String(skipped)));
-      }
-
-      setSelectedSeatIds(new Set());
-      await fetchData();
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string } } };
-      toast.error(axiosErr?.response?.data?.message ?? TEXT.SEAT_LAYOUT.ERR_GEN_FAIL);
-
-      await fetchData();
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   const handleInstallSeats = async () => {
-    if (!roomId || selectedVirtualSlots.size === 0) return;
+    const selectedInactive = Array.from(selectedSeatIds).filter(
+      (id) => !seats.find((s) => s.seatId === id)?.isActive
+    );
+    if (!roomId || (selectedVirtualSlots.size === 0 && selectedInactive.length === 0)) return;
     setActionLoading(true);
 
     try {
-      // 1. Tính toán & kiểm tra sức chứa dự kiến
-      let addedCapacity = 0;
-      for (const slot of selectedVirtualSlots) {
-        addedCapacity += batchType === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
+      // 1. Phân tích các vị trí lắp đặt (Gộp cả ô ảo và tọa độ ghế inactive được chọn)
+      const targetCoordinates = new Set<string>();
+      for (const slot of Array.from(selectedVirtualSlots)) {
+        targetCoordinates.add(slot);
       }
+      for (const id of selectedInactive) {
+        const seat = seats.find(s => s.seatId === id);
+        if (seat) {
+          targetCoordinates.add(`${seat.rowLabel}-${seat.seatNumber}`);
+        }
+      }
+
+      // Kiểm tra rule số chẵn và liền kề trên từng hàng đối với Sweetbox
+      if (batchType === 'SEAT_TYPE_SWEETBOX') {
+        const rowGroups = new Map<string, number[]>();
+        for (const coord of Array.from(targetCoordinates)) {
+          const [rowLabel, colStr] = coord.split('-');
+          const col = parseInt(colStr);
+          if (!rowGroups.has(rowLabel)) {
+            rowGroups.set(rowLabel, []);
+          }
+          rowGroups.get(rowLabel)!.push(col);
+        }
+
+        const invalidRows: string[] = [];
+        const nonAdjacentPairs: string[] = [];
+
+        for (const [rowLabel, cols] of Array.from(rowGroups.entries())) {
+          // 1. Kiểm tra số lượng chẵn
+          if (cols.length % 2 !== 0) {
+            invalidRows.push(`${rowLabel} (đang chọn ${cols.length} ô)`);
+            continue;
+          }
+
+          // 2. Kiểm tra liền kề từng cặp
+          const sortedCols = [...cols].sort((a, b) => a - b);
+          for (let i = 0; i < sortedCols.length; i += 2) {
+            const left = sortedCols[i];
+            const right = sortedCols[i + 1];
+            if (right !== left + 1) {
+              nonAdjacentPairs.push(`${rowLabel}${left} & ${rowLabel}${right}`);
+            }
+          }
+        }
+
+        if (invalidRows.length > 0) {
+          toast.error(`Không thể lắp đặt Sweetbox! Số lượng vị trí chọn trên các hàng sau phải là số chẵn: ${invalidRows.join(', ')}.`);
+          setActionLoading(false);
+          return;
+        }
+
+        if (nonAdjacentPairs.length > 0) {
+          toast.error(`Không thể lắp đặt Sweetbox! Các cặp vị trí sau không nằm sát cạnh nhau để ghép đôi: ${nonAdjacentPairs.join(', ')}.`);
+          setActionLoading(false);
+          return;
+        }
+      }
+
+      const slots = Array.from(targetCoordinates).sort((a, b) => {
+        const [rowA, colA] = a.split('-');
+        const [rowB, colB] = b.split('-');
+        if (rowA !== rowB) return rowA.localeCompare(rowB);
+        return parseInt(colA) - parseInt(colB);
+      });
+
+      const processedSlots = new Set<string>();
+      const validSlots: { 
+        rowLabel: string; 
+        seatNumber: number; 
+        existingSeat?: SeatResponse;
+        needsCleanupSeatId?: string; // ID của ghế inactive cũ ở cột c+1 cần xóa
+      }[] = [];
+      let addedCapacity = 0;
+
+      for (const slot of slots) {
+        if (processedSlots.has(slot)) continue;
+
+        const [rowLabel, colStr] = slot.split('-');
+        const seatNumber = parseInt(colStr);
+
+        // Kiểm tra xem vị trí này có bị chiếm bởi Sweetbox hoạt động ở cột kế trước không
+        const leftNeighbor = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber - 1 && s.isActive);
+        if (leftNeighbor && leftNeighbor.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+          continue;
+        }
+
+        const existing = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber);
+
+        if (batchType === 'SEAT_TYPE_SWEETBOX') {
+          // Rule cho Sweetbox:
+          // a. Không được nằm ở cột cuối cùng
+          if (seatNumber + 1 > blueprintMaxCol) {
+            toast.error(`Không thể lắp đặt Sweetbox tại ${rowLabel}${seatNumber} vì đây là cột cuối cùng của hàng.`);
+            setActionLoading(false);
+            return;
+          }
+          // b. Cột tiếp theo (c+1) không được chứa ghế active khác
+          const rightActiveSeat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber + 1 && s.isActive);
+          if (rightActiveSeat) {
+            toast.error(`Không thể lắp đặt Sweetbox tại ${rowLabel}${seatNumber} vì vị trí bên cạnh (${rowLabel}${seatNumber + 1}) đang có ghế hoạt động.`);
+            setActionLoading(false);
+            return;
+          }
+
+          // Kiểm tra xem cột tiếp theo có ghế inactive cũ không để dọn dẹp
+          const rightInactiveSeat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber + 1 && !s.isActive);
+          const needsCleanupSeatId = rightInactiveSeat?.seatId;
+
+          validSlots.push({
+            rowLabel,
+            seatNumber,
+            existingSeat: existing,
+            needsCleanupSeatId
+          });
+
+          // Đánh dấu slot hiện tại và slot tiếp theo đã xử lý
+          processedSlots.add(slot);
+          processedSlots.add(`${rowLabel}-${seatNumber + 1}`);
+
+          if (existing) {
+            if (!existing.isActive) {
+              addedCapacity += 2;
+            } else {
+              addedCapacity += 1;
+            }
+          } else {
+            addedCapacity += 2;
+          }
+        } else {
+          // Ghế đơn (Normal/VIP)
+          validSlots.push({ rowLabel, seatNumber, existingSeat: existing });
+          processedSlots.add(slot);
+
+          if (existing) {
+            if (!existing.isActive) {
+              addedCapacity += 1;
+            }
+          } else {
+            addedCapacity += 1;
+          }
+        }
+      }
+
+      // 2. Kiểm tra sức chứa
       const currentCapacity = seats.filter(s => s.isActive).reduce((sum, s) => sum + (s.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1), 0);
       if (currentCapacity + addedCapacity > (room?.capacity ?? 0)) {
         toast.error(`Không thể lắp đặt! Sức chứa dự kiến (${currentCapacity + addedCapacity}) vượt quá sức chứa tối đa của phòng (${room?.capacity}).`);
@@ -655,44 +727,49 @@ export default function ManageSeatLayout() {
         return;
       }
 
-      // 2. Tiến hành gọi API lắp đặt ghế tuần tự
+      // 3. Thực thi gọi API
       let created = 0;
       let failed = 0;
-      const slots = Array.from(selectedVirtualSlots);
 
-      for (const slot of slots) {
-        const [rowLabel, colStr] = slot.split('-');
-        const seatNumber = parseInt(colStr);
+      for (const item of validSlots) {
+        const { rowLabel, seatNumber, existingSeat } = item;
 
-        // Kiểm tra xem vị trí này thực chất đã có ghế inactive từ trước chưa
-        const existing = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber);
-        if (existing) {
-          if (!existing.isActive) {
+        // Nếu lắp Sweetbox, dọn dẹp triệt để tất cả ghế (cả active lẫn inactive) tại cột tiếp theo c+1
+        if (batchType === 'SEAT_TYPE_SWEETBOX') {
+          const duplicateSeats = seats.filter(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber + 1);
+          for (const ds of duplicateSeats) {
             try {
-              await roomService.updateSeat(existing.seatId, {
-                rowLabel: existing.rowLabel,
-                seatNumber: existing.seatNumber,
-                seatTypeId: batchType,
-                isActive: true,
-              });
-              created++;
-            } catch {
-              failed++;
+              await roomService.deleteSeat(ds.seatId);
+            } catch (e) {
+              console.error("Lỗi khi dọn dẹp ghế tại cột tiếp theo: ", e);
             }
           }
-          continue;
         }
 
-        try {
-          await roomService.createSeat({
-            roomId,
-            rowLabel,
-            seatNumber,
-            seatTypeId: batchType
-          });
-          created++;
-        } catch {
-          failed++;
+        if (existingSeat) {
+          try {
+            await roomService.updateSeat(existingSeat.seatId, {
+              rowLabel: existingSeat.rowLabel,
+              seatNumber: existingSeat.seatNumber,
+              seatTypeId: batchType,
+              isActive: true,
+            });
+            created++;
+          } catch {
+            failed++;
+          }
+        } else {
+          try {
+            await roomService.createSeat({
+              roomId,
+              rowLabel,
+              seatNumber,
+              seatTypeId: batchType
+            });
+            created++;
+          } catch {
+            failed++;
+          }
         }
       }
 
@@ -702,9 +779,10 @@ export default function ManageSeatLayout() {
         toast.success(`Đã lắp đặt thành công ${created} ghế vào sơ đồ!`);
       }
 
-      setSelectedVirtualSlots(new Set());
-      await fetchData(); // reload lại dữ liệu sau khi lắp đặt ghế
+      syncAndSetSelection(new Set(), new Set(), true);
+      await fetchData();
     } catch (err) {
+      console.error(err);
       toast.error("Quá trình lắp đặt ghế gặp lỗi.");
     } finally {
       setActionLoading(false);
@@ -712,72 +790,45 @@ export default function ManageSeatLayout() {
   };
 
   const handleBatchReactivate = async () => {
-    if (selectedSeatIds.size === 0) {
+    if (selectedSeatIds.size === 0 && selectedVirtualSlots.size === 0) {
       toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_EMPTY);
       return;
     }
 
+    const inactiveSeatsToReactivate: SeatResponse[] = [];
 
-    // ── Validation riêng cho chuyển sang Sweetbox ──
-    // Bắt buộc chọn đúng bội số 2, mỗi cặp phải liền kề (cùng hàng, số cột kề nhau),
-    // và tất cả phải là ghế Normal hoặc VIP (không phải sweetbox).
-    if (batchType === 'SEAT_TYPE_SWEETBOX') {
-      const selectedList = Array.from(selectedSeatIds)
-        .map((id) => seats.find((s) => s.seatId === id))
-        .filter((s): s is SeatResponse => !!s);
-
-      // Kiểm tra tất cả đều không phải sweetbox
-      const hasSweetbox = selectedList.some((s) => s.seatTypeId === 'SEAT_TYPE_SWEETBOX');
-      if (hasSweetbox) {
-        toast.error('Không thể chuyển ghế Sweetbox sang Sweetbox. Vui lòng chỉ chọn ghế Normal hoặc VIP.');
-        return;
-      }
-
-      // Kiểm tra số lượng phải là bội số 2
-      if (selectedList.length % 2 !== 0) {
-        toast.error('Để chuyển sang Sweetbox, hãy chọn số chẵn ghế (mỗi 2 ghế liền kề = 1 Sweetbox).');
-        return;
-      }
-
-      // Kiểm tra từng cặp phải liền kề nhau (cùng hàng, seatNumber kề)
-      const sorted = [...selectedList].sort((a, b) => {
-        const rowCmp = a.rowLabel.localeCompare(b.rowLabel);
-        return rowCmp !== 0 ? rowCmp : a.seatNumber - b.seatNumber;
-      });
-
-      const invalidPairs: string[] = [];
-      for (let i = 0; i < sorted.length; i += 2) {
-        const left = sorted[i];
-        const right = sorted[i + 1];
-        const isAdjacent =
-          left.rowLabel === right.rowLabel &&
-          right.seatNumber === left.seatNumber + 1;
-        if (!isAdjacent) {
-          invalidPairs.push(`${left.seatCode} & ${right.seatCode}`);
-        }
-      }
-
-      if (invalidPairs.length > 0) {
-        toast.error(
-          `Các ghế sau không liền kề nhau nên không thể ghép thành Sweetbox: ${invalidPairs.join(', ')}. ` +
-          'Hãy chọn các cặp ghế nằm sát nhau cùng hàng.',
-          { autoClose: 8000 }
-        );
-        return;
+    // 1. Lấy từ selectedSeatIds
+    for (const seatId of Array.from(selectedSeatIds)) {
+      const seat = seats.find((s) => s.seatId === seatId);
+      if (seat && !seat.isActive) {
+        inactiveSeatsToReactivate.push(seat);
       }
     }
 
+    // 2. Lấy từ selectedVirtualSlots (nếu ô ảo đó thực chất đã có ghế inactive trong DB)
+    for (const slotKey of Array.from(selectedVirtualSlots)) {
+      const [rowLabel, colStr] = slotKey.split('-');
+      const seatNumber = parseInt(colStr);
+      const seat = seats.find((s) => s.rowLabel === rowLabel && s.seatNumber === seatNumber);
+      if (seat && !seat.isActive) {
+        inactiveSeatsToReactivate.push(seat);
+      }
+    }
+
+    if (inactiveSeatsToReactivate.length === 0) {
+      toast.info("Không có ghế nào đang vô hiệu hóa để kích hoạt lại.");
+      return;
+    }
+
+    // Kiểm tra giới hạn sức chứa (capacity) của phòng
     let capacityDiff = 0;
-    for (const seatId of Array.from(selectedSeatIds)) {
-      const seat = seats.find((s) => s.seatId === seatId);
-      if (!seat || !seat.isActive) continue;
-      const oldCap = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-      const newCap = batchType === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-      capacityDiff += (newCap - oldCap);
+    for (const seat of inactiveSeatsToReactivate) {
+      const cap = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
+      capacityDiff += cap;
     }
     const newCapacity = seatStats.totalCapacity + capacityDiff;
     if (newCapacity > (room?.capacity ?? 0)) {
-      toast.error(`Không thể đổi loại ghế vì tổng số chỗ ngồi sau khi đổi (${newCapacity}) sẽ vượt quá sức chứa tối đa của phòng (${room?.capacity} chỗ).`);
+      toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_CAPACITY.replace('{0}', String(newCapacity)).replace('{1}', String(room?.capacity)));
       return;
     }
 
@@ -786,12 +837,9 @@ export default function ManageSeatLayout() {
       let reactivated = 0;
       const failed: string[] = [];
 
-      for (const seatId of Array.from(selectedSeatIds)) {
-        const seat = seats.find((s) => s.seatId === seatId);
-        if (!seat) continue;
-
+      for (const seat of inactiveSeatsToReactivate) {
         try {
-          await roomService.updateSeat(seatId, {
+          await roomService.updateSeat(seat.seatId, {
             rowLabel: seat.rowLabel,
             seatNumber: seat.seatNumber,
             seatTypeId: seat.seatTypeId,
@@ -804,15 +852,56 @@ export default function ManageSeatLayout() {
       }
 
       if (failed.length > 0) {
-        toast.warn(TEXT.SEAT_LAYOUT.MSG_REACTIVATE_WARN.replace('{0}', String(reactivated)).replace('{1}', String(selectedSeatIds.size)).replace('{2}', failed.slice(0, 6).join(', ')).replace('{3}', failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''), { autoClose: 8000 });
+        toast.warn(TEXT.SEAT_LAYOUT.MSG_REACTIVATE_WARN.replace('{0}', String(reactivated)).replace('{1}', String(inactiveSeatsToReactivate.length)).replace('{2}', failed.slice(0, 6).join(', ')).replace('{3}', failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''), { autoClose: 8000 });
       } else {
         toast.success(TEXT.SEAT_LAYOUT.MSG_REACTIVATE_SUCCESS.replace('{0}', String(reactivated)));
       }
 
       setSelectedSeatIds(new Set());
+      setSelectedVirtualSlots(new Set());
       await fetchData();
     } catch (err) {
       toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_FAIL);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResetLayout = async () => {
+    if (!roomId) return;
+    const confirmed = window.confirm(
+      "CẢNH BÁO: Bạn có chắc chắn muốn xóa toàn bộ sơ đồ ghế của phòng chiếu này?\n" +
+      "Hành động này sẽ vô hiệu hóa tất cả ghế hiện tại và đặt kích thước khung rạp về mặc định (Hàng J x 12 Cột)."
+    );
+    if (!confirmed) return;
+
+    try {
+      setActionLoading(true);
+      // Xóa tất cả các ghế hiện tại của rạp
+      for (const seat of seats) {
+        try {
+          await roomService.deleteSeat(seat.seatId);
+        } catch (e) {
+          // Bỏ qua lỗi cục bộ trên từng ghế để hoàn tất xóa
+        }
+      }
+      
+      // Reset Ref đổi phòng để kích hoạt lại logic useEffect căn chỉnh Grid mặc định
+      lastLoadedRoomIdRef.current = null;
+      
+      // Reset kích thước lưới Grid về mặc định
+      setBlueprintMaxRow('J');
+      setBlueprintMaxCol(12);
+      setTempMaxRow('J');
+      setTempMaxCol(12);
+      
+      setSelectedSeatIds(new Set());
+      setSelectedVirtualSlots(new Set());
+      
+      toast.success("Đã reset toàn bộ sơ đồ ghế và kích thước khung rạp về mặc định thành công!");
+      await fetchData();
+    } catch (err) {
+      toast.error("Gặp lỗi trong quá trình reset sơ đồ ghế.");
     } finally {
       setActionLoading(false);
     }
@@ -930,6 +1019,21 @@ export default function ManageSeatLayout() {
         const wasSweetbox = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX';
         const becomingSweetbox = batchType === 'SEAT_TYPE_SWEETBOX';
 
+        // 3. Normal/VIP → Sweetbox: dọn dẹp triệt để tất cả ghế (cả active lẫn inactive) tại cột tiếp theo c+1
+        if (!wasSweetbox && becomingSweetbox) {
+          const neighborNumber = seat.seatNumber + 1;
+          const duplicateSeats = seats.filter(
+            (s) => s.rowLabel === seat.rowLabel && s.seatNumber === neighborNumber
+          );
+          for (const ds of duplicateSeats) {
+            try {
+              await roomService.deleteSeat(ds.seatId);
+            } catch (e) {
+              console.error("Lỗi khi dọn dẹp ghế tại cột tiếp theo: ", e);
+            }
+          }
+        }
+
         try {
           // 1. Cập nhật loại của ghế gốc
           await roomService.updateSeat(seatId, {
@@ -964,18 +1068,7 @@ export default function ManageSeatLayout() {
             }
           }
 
-          // 3. Normal/VIP → Sweetbox: chỉ vô hiệu ghế kề nếu nó nằm trong selection
-          //    (đã được đánh dấu consumed ở bước tiền xử lý).
-          //    KHÔNG tự động vô hiệu ghế kề ngoài selection.
-          if (!wasSweetbox && becomingSweetbox) {
-            const neighborNumber = seat.seatNumber + 1;
-            const neighborSeat = seats.find(
-              (s) => s.rowLabel === seat.rowLabel && s.seatNumber === neighborNumber
-            );
-            if (neighborSeat && consumedSeatIds.has(neighborSeat.seatId) && neighborSeat.isActive) {
-              await roomService.deleteSeat(neighborSeat.seatId);
-            }
-          }
+
 
           changed++;
         } catch {
@@ -1133,35 +1226,39 @@ export default function ManageSeatLayout() {
         </div>
       )}
 
-      {/* MAIN LAYOUT: Grid + Control Panel */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_700px] gap-6">
+      {/* MAIN LAYOUT: Grid + Control Panel (Căn giữa và dịch nhẹ sang trái) */}
+      <div className="grid grid-cols-1 xl:grid-cols-[720px_1fr] gap-6 justify-center xl:-translate-x-6 max-w-[1300px] mx-auto w-full transition-transform duration-150">
 
         {/* ═══════════════════════════════════════ */}
         {/* LEFT: SEAT GRID                        */}
         {/* ═══════════════════════════════════════ */}
-        <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-6 shadow-2xl overflow-x-auto max-w-[860px] mx-auto w-full">
-          {/* Screen indicator */}
+        <div ref={containerRef} className="bg-[#111C44] border border-gray-800 rounded-2xl p-6 shadow-2xl w-full max-w-[720px] overflow-hidden relative">
+          {/* Screen indicator (Nằm ngoài cùng, trên hết) */}
           <div className="text-center mb-6">
             <div className="mx-auto max-w-md h-2 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent rounded-full" />
             <span className="text-[10px] uppercase tracking-[0.3em] text-gray-500 mt-1 block">{TEXT.SEAT_LAYOUT.SCREEN}</span>
           </div>
 
-          {/* Seat Grid */}
-          <div className="flex flex-col items-center gap-1.5 select-none">
+          {/* Grid Layout: Phân chia 3 cột cố định và cuộn */}
+          <div className="flex gap-4 items-start select-none">
             {(() => {
               const startCode = 65; // 'A'
               const endCode = (blueprintMaxRow || 'J').toUpperCase().charCodeAt(0);
-              const rows = [];
+              const rows: string[] = [];
               for (let i = startCode; i <= endCode; i++) {
                 rows.push(String.fromCharCode(i));
               }
 
-              return rows.map((rowLabel) => {
-                const rowSeats = seats.filter(s => s.rowLabel === rowLabel && (s.isActive || showInactiveSeats));
-                // Tính ô ảo trong hàng
+              // Lấy kích thước chuẩn của 1 hàng (chiều cao h) để đồng bộ cho nhãn
+              const normalSeatDims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+              const rowHeight = normalSeatDims.height;
+
+              // Pre-calculate all rows data
+              const rowsData = rows.map((rowLabel) => {
+                const rowSeats = seats.filter(s => s.rowLabel === rowLabel);
                 const virtualInRow: string[] = [];
                 for (let vc = 1; vc <= blueprintMaxCol; vc++) {
-                  const hasSeat = rowSeats.find(s => s.seatNumber === vc);
+                  const hasSeat = rowSeats.some(s => s.seatNumber === vc);
                   if (!hasSeat) virtualInRow.push(`${rowLabel}-${vc}`);
                 }
                 const totalInRow = rowSeats.length + virtualInRow.length;
@@ -1169,24 +1266,25 @@ export default function ManageSeatLayout() {
                   + virtualInRow.filter(k => selectedVirtualSlots.has(k)).length;
                 const allRowSelected = totalInRow > 0 && selectedInRow === totalInRow;
 
-                // Thuật toán skip cột chẵn của ghế Sweetbox
+                // Render seats
                 const skipCols = new Set<number>();
                 const renderedCols: React.ReactNode[] = [];
 
                 for (let c = 1; c <= blueprintMaxCol; c++) {
+                  const seat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === c);
+                  if (seat && seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' && (seat.isActive || showInactiveSeats)) {
+                    skipCols.add(c + 1);
+                  }
+
                   if (skipCols.has(c)) continue;
 
-                  const seat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === c);
                   const isRealSeatVisible = seat && (seat.isActive || showInactiveSeats);
 
-                  if (isRealSeatVisible) {
-                    if (seat.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
-                      skipCols.add(c + 1);
-                    }
-
-                    const typeInfo = getSeatColor(seat.seatTypeId);
+                  if (isRealSeatVisible && seat) {
                     const isSelected = selectedSeatIds.has(seat.seatId);
                     const isInactive = !seat.isActive;
+                    const dims = getDynamicSeatDims(seat.seatTypeId);
+                    const typeInfo = getSeatColor(seat.seatTypeId);
 
                     renderedCols.push(
                       <button
@@ -1196,13 +1294,11 @@ export default function ManageSeatLayout() {
                           handleMouseDown(seat.seatId);
                         }}
                         onMouseEnter={() => handleMouseEnter(seat.seatId)}
-                        className="relative transition-all duration-150 group/seat flex-shrink-0"
+                        className="relative z-0 transition-all duration-150 group/seat flex-shrink-0"
                         title={`${seat.seatCode} · ${typeInfo.label}${isInactive ? ' (Không HĐ)' : ''}`}
                         style={{
-                          width: seat.seatTypeId === 'SEAT_TYPE_SWEETBOX'
-                            ? (blueprintMaxCol > 14 ? 70 : 86)
-                            : (blueprintMaxCol > 14 ? 32 : 40),
-                          height: blueprintMaxCol > 14 ? 32 : 40,
+                          width: dims.width,
+                          height: dims.height,
                         }}
                       >
                         <div
@@ -1221,7 +1317,11 @@ export default function ManageSeatLayout() {
                           ) : (
                             <FaChair className="h-3.5 w-3.5 shrink-0 text-white/90" />
                           )}
-                          <span>{seat.seatNumber}</span>
+                          <span>
+                            {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX'
+                              ? `${seat.seatNumber}-${seat.seatNumber + 1}`
+                              : seat.seatNumber}
+                          </span>
                           {isInactive && (
                             <div className="absolute inset-0 flex items-center justify-center">
                               <div className="w-full h-[2px] bg-red-500 rotate-45 absolute" />
@@ -1231,27 +1331,42 @@ export default function ManageSeatLayout() {
                       </button>
                     );
                   } else {
-                    // Ô trống ảo (Virtual Blueprint Slot)
                     const slotKey = `${rowLabel}-${c}`;
-                    const isSelectedVirtual = selectedVirtualSlots.has(slotKey);
+                    const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+                    
+                    const hiddenSeat = seat; // seat ở đây có isActive = false (do isRealSeatVisible = false)
+                    const isSelected = hiddenSeat ? selectedSeatIds.has(hiddenSeat.seatId) : selectedVirtualSlots.has(slotKey);
 
                     renderedCols.push(
                       <button
                         key={slotKey}
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          handleMouseDownVirtual(slotKey);
+                          if (hiddenSeat) {
+                            handleMouseDown(hiddenSeat.seatId);
+                          } else {
+                            handleMouseDownVirtual(slotKey);
+                          }
                         }}
-                        onMouseEnter={() => handleMouseEnterVirtual(slotKey)}
-                        className={`flex-shrink-0 rounded-lg border border-dashed text-[9px] font-semibold transition flex items-center justify-center cursor-pointer ${isSelectedVirtual
+                        onMouseEnter={() => {
+                          if (hiddenSeat) {
+                            handleMouseEnter(hiddenSeat.seatId);
+                          } else {
+                            handleMouseEnterVirtual(slotKey);
+                          }
+                        }}
+                        className={`flex-shrink-0 rounded-lg border border-dashed text-[9px] font-semibold transition flex items-center justify-center cursor-pointer relative z-0 ${isSelected
                           ? 'ring-2 ring-white scale-110 bg-blue-600/30 border-blue-400 text-blue-300 shadow-lg'
                           : 'border-gray-800 bg-[#0F172A]/20 hover:bg-blue-500/10 text-gray-500'
                           }`}
                         style={{
-                          width: blueprintMaxCol > 14 ? 32 : 40,
-                          height: blueprintMaxCol > 14 ? 32 : 40,
+                          width: dims.width,
+                          height: dims.height,
                         }}
-                        title={`Tọa độ trống: ${rowLabel}${c} (Click để chọn lắp ghế)`}
+                        title={hiddenSeat 
+                          ? `Ghế cũ ${hiddenSeat.seatCode} đang ẩn · Click để chọn kích hoạt lại` 
+                          : `Tọa độ trống: ${rowLabel}${c} · Click để chọn lắp ghế`
+                        }
                       >
                         <span>{c}</span>
                       </button>
@@ -1259,30 +1374,48 @@ export default function ManageSeatLayout() {
                   }
                 }
 
-                return (
-                  <div key={rowLabel} className="flex items-center gap-1.5">
-                    {/* Row label (Left) */}
-                    <button
-                      onClick={() => toggleRow(rowLabel)}
-                      className={`w-8 h-8 flex items-center justify-center rounded-md text-xs font-bold transition-all duration-150 ${allRowSelected
-                        ? 'bg-[#4318FF] text-white'
-                        : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-white'
-                        }`}
-                      title={TEXT.SEAT_LAYOUT.BTN_SELECT_ALL_ROW.replace('{0}', rowLabel)}
-                    >
-                      {rowLabel}
-                    </button>
-
-                    {/* Columns */}
-                    {renderedCols}
-
-                    {/* Row label (Right) */}
-                    <span className="w-8 h-8 flex items-center justify-center text-xs font-bold text-gray-600">
-                      {rowLabel}
-                    </span>
-                  </div>
-                );
+                return {
+                  rowLabel,
+                  allRowSelected,
+                  renderedCols,
+                };
               });
+
+              const gapSize = blueprintMaxCol > 24 ? 2 : blueprintMaxCol > 18 ? 4 : 6;
+
+              return (
+                <div className="flex flex-col w-full select-none" style={{ gap: `${gapSize}px` }}>
+                  {rowsData.map((row) => (
+                    <div key={row.rowLabel} style={{ height: rowHeight }} className="flex items-center justify-center gap-3">
+                      {/* Row label (Left) */}
+                      <button
+                        onClick={() => toggleRow(row.rowLabel)}
+                        style={{ height: rowHeight }}
+                        className={`w-8 flex-shrink-0 flex items-center justify-center rounded-md text-xs font-bold transition-all duration-150 ${row.allRowSelected
+                          ? 'bg-[#4318FF] text-white'
+                          : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-white'
+                          }`}
+                        title={TEXT.SEAT_LAYOUT.BTN_SELECT_ALL_ROW.replace('{0}', row.rowLabel)}
+                      >
+                        {row.rowLabel}
+                      </button>
+
+                      {/* Columns */}
+                      <div className="flex items-center" style={{ gap: `${gapSize}px` }}>
+                        {row.renderedCols}
+                      </div>
+
+                      {/* Row label (Right) */}
+                      <div
+                        style={{ height: rowHeight }}
+                        className="w-8 flex-shrink-0 flex items-center justify-center text-xs font-bold text-gray-600"
+                      >
+                        {row.rowLabel}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
             })()}
           </div>
 
@@ -1386,42 +1519,44 @@ export default function ManageSeatLayout() {
         {/* ═══════════════════════════════════════ */}
         {/* RIGHT: CONTROL PANEL                   */}
         {/* ═══════════════════════════════════════ */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 self-start w-full">
-          {/* COLUMN 1: Stats, Batch Editor */}
-          <div className="space-y-5">
+        <div className="flex flex-col gap-5 self-start w-full max-w-[580px]">
+          {/* Hàng 1: Stats & Blueprint Settings song song */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 w-full">
             {/* ── Stats ── */}
-            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">{TEXT.SEAT_LAYOUT.TITLE_STATS}</h3>
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800 col-span-2">
-                  <div className="text-xl font-bold text-white">
-                    {seatStats.totalCapacity} / {room?.capacity ?? 0}
+            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">{TEXT.SEAT_LAYOUT.TITLE_STATS}</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800 col-span-2">
+                    <div className="text-lg font-bold text-white">
+                      {seatStats.totalCapacity} / {room?.capacity ?? 0}
+                    </div>
+                    <div className="text-[9px] text-gray-400 uppercase tracking-wider mt-0.5">
+                      {TEXT.SEAT_LAYOUT.STATS_CAPACITY}
+                    </div>
                   </div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">
-                    {TEXT.SEAT_LAYOUT.STATS_CAPACITY}
+                  <div className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800">
+                    <div className="text-lg font-bold text-white">{seatStats.total}</div>
+                    <div className="text-[9px] text-gray-400 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_TOTAL}</div>
                   </div>
-                </div>
-                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
-                  <div className="text-xl font-bold text-white">{seatStats.total}</div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_TOTAL}</div>
-                </div>
-                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
-                  <div className={`text-xl font-bold ${totalInactiveCount > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
-                    {totalInactiveCount}
+                  <div className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800">
+                    <div className={`text-lg font-bold ${totalInactiveCount > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
+                      {totalInactiveCount}
+                    </div>
+                    <div className="text-[9px] text-gray-500 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_INACTIVE}</div>
                   </div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_INACTIVE}</div>
-                </div>
-                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
-                  <div className="text-xl font-bold text-gray-400">{seatStats.normal}</div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">Normal</div>
-                </div>
-                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800">
-                  <div className="text-xl font-bold text-blue-400">{seatStats.vip}</div>
-                  <div className="text-[10px] text-blue-500 uppercase tracking-wider mt-0.5">VIP</div>
-                </div>
-                <div className="bg-[#0F172A] rounded-xl p-3 text-center border border-gray-800 col-span-2">
-                  <div className="text-xl font-bold text-pink-400">{seatStats.sweetbox}</div>
-                  <div className="text-[10px] text-pink-500 uppercase tracking-wider mt-0.5">Sweetbox</div>
+                  <div className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800">
+                    <div className="text-lg font-bold text-gray-400">{seatStats.normal}</div>
+                    <div className="text-[9px] text-gray-500 uppercase tracking-wider mt-0.5">Normal</div>
+                  </div>
+                  <div className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800">
+                    <div className="text-lg font-bold text-blue-400">{seatStats.vip}</div>
+                    <div className="text-[9px] text-blue-500 uppercase tracking-wider mt-0.5">VIP</div>
+                  </div>
+                  <div className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800 col-span-2">
+                    <div className="text-lg font-bold text-pink-400">{seatStats.sweetbox}</div>
+                    <div className="text-[9px] text-pink-500 uppercase tracking-wider mt-0.5">Sweetbox</div>
+                  </div>
                 </div>
               </div>
 
@@ -1439,258 +1574,276 @@ export default function ManageSeatLayout() {
               )}
             </div>
 
-            {/* ── Batch Editor ── */}
-            {selectedSeatIds.size > 0 ? (
-              <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
-                  {TEXT.SEAT_LAYOUT.TITLE_BATCH}
-                </h3>
-                <p className="text-[10px] text-gray-500 mb-3">
-                  {TEXT.SEAT_LAYOUT.BATCH_SELECTED} <span className="text-white font-bold">{selectedSeatIds.size}</span> {TEXT.SEAT_LAYOUT.BATCH_SEATS}
-                </p>
-
-                {(() => {
-                  const selectedActive = Array.from(selectedSeatIds).filter(
-                    (id) => seats.find((s) => s.seatId === id)?.isActive
-                  );
-                  const selectedInactive = Array.from(selectedSeatIds).filter(
-                    (id) => !seats.find((s) => s.seatId === id)?.isActive
-                  );
-                  return (
-                    <div className="space-y-3">
-                      {selectedActive.length > 0 && (
-                        <>
-                          <div>
-                            <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">
-                              {TEXT.SEAT_LAYOUT.BATCH_CHANGE_TYPE.replace('{0}', String(selectedActive.length))}
-                            </label>
-                            <div className="flex gap-2">
-                              <select
-                                value={batchType}
-                                onChange={(e) => setBatchType(e.target.value)}
-                                disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                                className="flex-1 px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
-                              >
-                                {SEAT_TYPES.map((t) => (
-                                  <option key={t.id} value={t.id}>{t.label}</option>
-                                ))}
-                              </select>
-                              <button
-                                onClick={handleBatchChangeType}
-                                disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {TEXT.SEAT_LAYOUT.BTN_APPLY}
-                              </button>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={handleBatchDeactivate}
-                            disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                            className="w-full py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {TEXT.SEAT_LAYOUT.BTN_BATCH_DEACTIVATE.replace('{0}', String(selectedActive.length))}
-                          </button>
-                        </>
-                      )}
-
-                      {selectedInactive.length > 0 && (
-                        <button
-                          onClick={handleBatchReactivate}
-                          disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                          className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {TEXT.SEAT_LAYOUT.BTN_BATCH_REACTIVATE.replace('{0}', String(selectedInactive.length))}
-                        </button>
-                      )}
-
-                      {selectedActive.length > 0 && selectedInactive.length > 0 && (
-                        <p className="text-[10px] text-gray-500 text-center">{TEXT.SEAT_LAYOUT.BATCH_MIXED_HINT}</p>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            ) : selectedVirtualSlots.size > 0 ? (
-              /* Form lắp đặt ghế mới cho các ô ảo */
-              <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
-                  Lắp đặt ghế
-                </h3>
-                <p className="text-[10px] text-gray-500 mb-3">
-                  Đang chọn <span className="text-white font-bold">{selectedVirtualSlots.size}</span> vị trí trống trên blueprint.
-                </p>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">
-                      Chọn loại ghế lắp đặt
-                    </label>
-                    <select
-                      value={batchType}
-                      onChange={(e) => setBatchType(e.target.value)}
-                      disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                      className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
-                    >
-                      {SEAT_TYPES.map((t) => (
-                        <option key={t.id} value={t.id}>{t.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <button
-                    onClick={handleInstallSeats}
-                    disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Lắp đặt {selectedVirtualSlots.size} ghế
-                  </button>
-                  <button
-                    onClick={clearSelection}
-                    className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs font-semibold rounded-lg transition"
-                  >
-                    Bỏ chọn tất cả vị trí trống
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
-                  {TEXT.SEAT_LAYOUT.TITLE_BATCH}
-                </h3>
-                <div className="bg-[#0F172A] rounded-xl p-4 text-center border border-gray-800">
-                  <span className="text-xs text-gray-500">
-                    Hãy quét chuột chọn các ghế thực tế trên sơ đồ để sửa đổi, hoặc chọn các ô trống để lắp đặt ghế mới.
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* COLUMN 2: Blueprint settings, Auto generator, Copy Layout */}
-          <div className="space-y-5">
             {/* ── Blueprint Grid Settings ── */}
-            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
-                Khung rạp (Lưới Blueprint)
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Hàng Tối Đa</label>
-                  <input
-                    type="text"
-                    maxLength={1}
-                    value={blueprintMaxRow}
-                    disabled={room?.roomStatus !== 'MAINTENANCE'}
-                    onChange={(e) => {
-                      const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
-                      if (val) setBlueprintMaxRow(val);
-                    }}
-                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition text-center disabled:opacity-50"
-                    placeholder="L"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Cột Tối Đa</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={blueprintMaxCol}
-                    disabled={room?.roomStatus !== 'MAINTENANCE'}
-                    onChange={(e) => setBlueprintMaxCol(Math.max(1, Math.min(30, Number(e.target.value))))}
-                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition text-center disabled:opacity-50"
-                    placeholder="16"
-                  />
-                </div>
-              </div>
-              <p className="text-[10px] text-gray-500 mt-2">
-                Thay đổi kích thước lưới để mở rộng hoặc thu hẹp diện tích lắp đặt ghế của phòng chiếu.
-              </p>
-            </div>
-
-            {/* ── Auto Generator ── */}
-            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
-                {TEXT.SEAT_LAYOUT.TITLE_GEN}
-              </h3>
-              <div className="space-y-3">
+            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
+                  Khung rạp (Lưới Blueprint)
+                </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_ROWS}</label>
+                    <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Hàng Tối Đa</label>
                     <input
-                      type="number"
-                      min={1}
-                      max={26}
-                      value={genRows}
+                      type="text"
+                      maxLength={1}
+                      value={tempMaxRow}
                       disabled={room?.roomStatus !== 'MAINTENANCE'}
-                      onChange={(e) => setGenRows(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+                        if (val) {
+                          setTempMaxRow(val);
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition text-center disabled:opacity-50"
+                      placeholder="L"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_COLS}</label>
+                    <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Cột Tối Đa</label>
                     <input
                       type="number"
                       min={1}
                       max={30}
-                      value={genCols}
+                      value={tempMaxCol}
                       disabled={room?.roomStatus !== 'MAINTENANCE'}
-                      onChange={(e) => setGenCols(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                      onChange={(e) => {
+                        const newCol = Math.max(1, Math.min(30, Number(e.target.value)));
+                        setTempMaxCol(newCol);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition text-center disabled:opacity-50"
+                      placeholder="16"
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">{TEXT.SEAT_LAYOUT.GEN_TYPE}</label>
-                  <select
-                    value={genType}
-                    disabled={room?.roomStatus !== 'MAINTENANCE'}
-                    onChange={(e) => setGenType(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                <p className="text-[10px] text-gray-500 mt-2">
+                  Thay đổi kích thước lưới để mở rộng hoặc thu hẹp diện tích lắp đặt ghế của phòng chiếu.
+                </p>
+              </div>
+
+              {/* Nút bấm tác vụ */}
+              <div className="space-y-2 mt-3">
+                {/* Chỉ hiện nút Confirm khi giá trị tạm thời khác giá trị đang áp dụng */}
+                {(tempMaxRow !== blueprintMaxRow || tempMaxCol !== blueprintMaxCol) && (
+                  <button
+                    onClick={async () => {
+                      const rCount = tempMaxRow.charCodeAt(0) - 64;
+                      const maxCap = room?.capacity ?? 0;
+                      const area = rCount * tempMaxCol;
+                      if (maxCap > 0 && area > maxCap) {
+                        toast.error(`Kích thước lưới (${rCount} hàng x ${tempMaxCol} cột = ${area} ô) vượt quá sức chứa tối đa của phòng (${maxCap} ghế)!`);
+                        return;
+                      }
+
+                      // 1. Quét tìm các ghế lọt ra ngoài lưới mới
+                      const seatsToOrphan = seats.filter(s => {
+                        const seatRCount = s.rowLabel.charCodeAt(0) - 64;
+                        if (seatRCount > rCount) return true;
+                        
+                        if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+                          return (s.seatNumber + 1) > tempMaxCol;
+                        }
+                        return s.seatNumber > tempMaxCol;
+                      });
+
+                      // 2. Cảnh báo và xóa ghế lọt ra ngoài
+                      if (seatsToOrphan.length > 0) {
+                        const confirmMsg = `CẢNH BÁO: Việc thu nhỏ lưới sẽ làm biến mất và XÓA (vô hiệu hóa) ${seatsToOrphan.length} ghế hiện tại nằm ngoài phạm vi lưới mới trong database.\n\nBạn có chắc chắn muốn tiếp tục?`;
+                        const confirmed = window.confirm(confirmMsg);
+                        if (!confirmed) return;
+
+                        try {
+                          setActionLoading(true);
+                          for (const seat of seatsToOrphan) {
+                            try {
+                              await roomService.deleteSeat(seat.seatId);
+                            } catch (e) {
+                              console.error("Lỗi khi xóa ghế ngoài phạm vi: ", e);
+                            }
+                          }
+                        } catch (err) {
+                          toast.error("Gặp lỗi trong quá trình dọn dẹp ghế ngoài phạm vi.");
+                        } finally {
+                          setActionLoading(false);
+                        }
+                      }
+
+                      // 3. Áp dụng kích thước mới
+                      setBlueprintMaxRow(tempMaxRow);
+                      setBlueprintMaxCol(tempMaxCol);
+                      toast.success(`Đã áp dụng kích thước lưới mới: ${tempMaxRow} hàng x ${tempMaxCol} cột!`);
+                      await fetchData();
+                    }}
+                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition"
                   >
-                    {SEAT_TYPES.map((t) => (
-                      <option key={t.id} value={t.id}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="bg-[#0F172A] rounded-lg p-2.5 border border-gray-800">
-                  <span className="text-xs text-gray-400">
-                    {TEXT.SEAT_LAYOUT.GEN_INFO_1} <span className="text-white font-bold">{genRows * genCols}</span> {TEXT.SEAT_LAYOUT.GEN_INFO_2}
-                    {TEXT.SEAT_LAYOUT.GEN_INFO_3.replace('{0}', String(genRows)).replace('{1}', String(genCols))}
-                  </span>
-                </div>
+                    ✓ Áp dụng kích thước mới
+                  </button>
+                )}
+
                 <button
-                  onClick={handleGenerateSeats}
+                  onClick={handleResetLayout}
                   disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                  className={`w-full py-2.5 rounded-xl text-sm font-semibold transition shadow-lg ${room?.roomStatus !== 'MAINTENANCE' || actionLoading
-                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed shadow-none'
-                    : 'bg-[#4318FF] hover:bg-blue-700 text-white shadow-[#4318FF]/20'
-                    }`}
+                  className="w-full py-2 bg-red-950/20 hover:bg-red-900/30 text-red-400 border border-red-500/25 hover:border-red-500/40 text-xs font-semibold rounded-lg transition disabled:opacity-50"
                 >
-                  {actionLoading ? TEXT.SEAT_LAYOUT.LOADING_PROCESS : TEXT.SEAT_LAYOUT.BTN_GENERATE}
+                  ⚠️ Reset Sơ Đồ & Khung Rạp
                 </button>
               </div>
             </div>
+          </div>
 
-            {/* ── Copy Layout ── */}
-            <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-3">
+          {/* Hàng 2: Selection / Batch Action Panel */}
+          {(() => {
+            const selectedActive = Array.from(selectedSeatIds).filter(
+              (id) => seats.find((s) => s.seatId === id)?.isActive
+            );
+            const selectedInactive = Array.from(selectedSeatIds).filter(
+              (id) => !seats.find((s) => s.seatId === id)?.isActive
+            );
+            const hasActiveSelected = selectedActive.length > 0;
+            const hasInstallableSelected = selectedVirtualSlots.size > 0 || selectedInactive.length > 0;
+
+            const isDoublePanel = hasActiveSelected && hasInstallableSelected;
+
+            return (
+              <div className={`w-full ${isDoublePanel ? 'grid grid-cols-1 sm:grid-cols-2 gap-5' : 'space-y-5'}`}>
+                {/* ── Batch Editor cho ghế hoạt động ── */}
+                {hasActiveSelected && (
+                  <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
+                        Sửa đổi ghế hoạt động
+                      </h3>
+                      <p className="text-[10px] text-gray-500 mb-3">
+                        Đang chọn <span className="text-white font-bold">{selectedActive.length}</span> ghế đang hoạt động.
+                      </p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">
+                            {TEXT.SEAT_LAYOUT.BATCH_CHANGE_TYPE.replace('{0}', String(selectedActive.length))}
+                          </label>
+                          <div className="flex gap-2">
+                            <select
+                              value={batchType}
+                              onChange={(e) => setBatchType(e.target.value)}
+                              disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                              className="flex-1 px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                            >
+                              {SEAT_TYPES.map((t) => (
+                                <option key={t.id} value={t.id}>{t.label}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={handleBatchChangeType}
+                              disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {TEXT.SEAT_LAYOUT.BTN_APPLY}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleBatchDeactivate}
+                      disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                      className="w-full mt-3 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {TEXT.SEAT_LAYOUT.BTN_BATCH_DEACTIVATE.replace('{0}', String(selectedActive.length))}
+                    </button>
+                  </div>
+                )}
+
+                {/* ── Lắp đặt & Kích hoạt ghế mới/ẩn ── */}
+                {hasInstallableSelected && (
+                  <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
+                        Lắp đặt & Kích hoạt ghế
+                      </h3>
+                      <div className="text-[10px] text-gray-500 mb-3 space-y-0.5">
+                        {selectedVirtualSlots.size > 0 && (
+                          <div>
+                            • Chọn <span className="text-white font-bold">{selectedVirtualSlots.size}</span> vị trí ô trống.
+                          </div>
+                        )}
+                        {selectedInactive.length > 0 && (
+                          <div>
+                            • Chọn <span className="text-white font-bold">{selectedInactive.length}</span> vị trí ghế cũ đang ẩn.
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">
+                            Chọn loại ghế lắp đặt
+                          </label>
+                          <select
+                            value={batchType}
+                            onChange={(e) => setBatchType(e.target.value)}
+                            disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                            className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
+                          >
+                            {SEAT_TYPES.map((t) => (
+                              <option key={t.id} value={t.id}>{t.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2 mt-3">
+                      <button
+                        onClick={handleInstallSeats}
+                        disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+                        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Lắp đặt & Kích hoạt {selectedVirtualSlots.size + selectedInactive.length} ghế
+                      </button>
+                      <button
+                        onClick={clearSelection}
+                        className="w-full py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs font-semibold rounded-lg transition"
+                      >
+                        Bỏ chọn tất cả
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Hướng dẫn trống khi không chọn gì ── */}
+                {!hasActiveSelected && !hasInstallableSelected && (
+                  <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl">
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
+                      {TEXT.SEAT_LAYOUT.TITLE_BATCH}
+                    </h3>
+                    <div className="bg-[#0F172A] rounded-xl p-4 text-center border border-gray-800">
+                      <span className="text-xs text-gray-500">
+                        Hãy quét chuột chọn các ghế thực tế trên sơ đồ để sửa đổi, hoặc chọn các vị trí trống/ẩn để tiến hành lắp đặt ghế mới.
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Hàng 3: Copy Layout Card */}
+          <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
                 {TEXT.SEAT_LAYOUT.TITLE_COPY}
               </h3>
-              <p className="text-[10px] text-gray-500 mb-3">
+              <p className="text-[10px] text-gray-500">
                 {TEXT.SEAT_LAYOUT.COPY_DESC}
               </p>
-              <button
-                onClick={() => {
-                  void loadOtherRooms();
-                  setShowCopyModal(true);
-                }}
-                disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-xl transition border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {TEXT.SEAT_LAYOUT.BTN_COPY}
-              </button>
             </div>
+            <button
+              onClick={() => {
+                void loadOtherRooms();
+                setShowCopyModal(true);
+              }}
+              disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+              className="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-xl transition border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            >
+              {TEXT.SEAT_LAYOUT.BTN_COPY}
+            </button>
           </div>
         </div>
       </div>
@@ -1741,51 +1894,7 @@ export default function ManageSeatLayout() {
         </div>
       )}
 
-      {/* COPY LAYOUT MODAL */}
-      {showCopyModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-6 shadow-2xl w-full max-w-md mx-4">
-            <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-              <span>📋</span> Sao chép sơ đồ ghế
-            </h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Lấy toàn bộ thiết kế ghế từ một phòng chiếu khác và áp dụng cho phòng hiện tại. Ghế hiện tại của phòng này sẽ được đồng bộ/vô hiệu hóa tương ứng.
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1.5">Chọn phòng chiếu nguồn</label>
-                <select
-                  value={selectedSourceRoomId}
-                  onChange={(e) => setSelectedSourceRoomId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
-                >
-                  <option value="">-- Chọn phòng --</option>
-                  {otherRooms.map((r) => (
-                    <option key={r.roomId} value={r.roomId}>
-                      {r.roomName} ({r.cinemaName}) - {r.seatCount} ghế
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-3 justify-end pt-2">
-                <button
-                  onClick={() => setShowCopyModal(false)}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold rounded-lg transition"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  onClick={handleCopyLayout}
-                  disabled={!selectedSourceRoomId || actionLoading}
-                  className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
-                >
-                  Xác nhận sao chép
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Loading overlay */}
       {actionLoading && (
