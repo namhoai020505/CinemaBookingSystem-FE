@@ -116,6 +116,24 @@ export default function ManageSeatLayout() {
 
   // Toggle hiển thị ghế vô hiệu (mặc định ẩn để lưới nhìn chuẩn)
   const [showInactiveSeats, setShowInactiveSeats] = useState(false);
+  const [isCustomerPreview, setIsCustomerPreview] = useState(false);
+  const [aisleCols, setAisleCols] = useState<number[]>([]);
+
+  // Tải cấu hình lối đi khi đổi phòng chiếu
+  useEffect(() => {
+    if (roomId) {
+      const saved = localStorage.getItem(`aisles-${roomId}`);
+      if (saved) {
+        try {
+          setAisleCols(JSON.parse(saved));
+        } catch (e) {
+          setAisleCols([]);
+        }
+      } else {
+        setAisleCols([]);
+      }
+    }
+  }, [roomId]);
 
   // Đo đạc kích thước khung sơ đồ ghế thực tế để tự động co giãn ô ghế
   const containerRef = useRef<HTMLDivElement>(null);
@@ -258,8 +276,8 @@ export default function ManageSeatLayout() {
     if (nextMode === 'select') nextSeatIds.add(seatId);
     else nextSeatIds.delete(seatId);
 
-    // Click chuột: cập nhật selection realtime, clear ô ảo, chưa push history (để mouseup push)
-    syncAndSetSelection(nextSeatIds, new Set(), false);
+    // Giữ nguyên các ô ảo đã chọn
+    syncAndSetSelection(nextSeatIds, new Set(selectedVirtualSlotsRef.current), false);
   };
 
   const handleMouseEnter = (seatId: string) => {
@@ -267,60 +285,45 @@ export default function ManageSeatLayout() {
     const nextSelection = new Set(selectedSeatIdsRef.current);
     if (drawMode === 'select') nextSelection.add(seatId);
     else nextSelection.delete(seatId);
-    syncAndSetSelection(nextSelection, new Set(), false);
+    
+    // Giữ nguyên các ô ảo đã chọn
+    syncAndSetSelection(nextSelection, new Set(selectedVirtualSlotsRef.current), false);
   };
 
   // Virtual brush selection handlers
-  const [isDrawingVirtual, setIsDrawingVirtual] = useState(false);
-  const [drawModeVirtual, setDrawModeVirtual] = useState<'select' | 'deselect' | null>(null);
-
   const handleMouseDownVirtual = (slotKey: string) => {
     if (room?.roomStatus !== 'MAINTENANCE') {
       toast.warn('Chỉ có thể chỉnh sửa sơ đồ ghế khi trạng thái phòng là BẢO TRÌ (MAINTENANCE).');
       return;
     }
-    setIsDrawingVirtual(true);
+    setIsDrawing(true);
     const currentlySelected = selectedVirtualSlotsRef.current.has(slotKey);
     const nextMode = currentlySelected ? 'deselect' : 'select';
-    setDrawModeVirtual(nextMode);
+    setDrawMode(nextMode);
 
     const nextVirtual = new Set(selectedVirtualSlotsRef.current);
     if (nextMode === 'select') nextVirtual.add(slotKey);
     else nextVirtual.delete(slotKey);
 
-    // Click ô ảo: clear ghế thật, chưa push history (để mouseup push)
-    syncAndSetSelection(new Set(), nextVirtual, false);
+    // Giữ nguyên các ghế thật đã chọn
+    syncAndSetSelection(new Set(selectedSeatIdsRef.current), nextVirtual, false);
   };
 
   const handleMouseEnterVirtual = (slotKey: string) => {
-    if (!isDrawingVirtual || !drawModeVirtual || room?.roomStatus !== 'MAINTENANCE') return;
+    if (!isDrawing || !drawMode || room?.roomStatus !== 'MAINTENANCE') return;
     const nextVirtual = new Set(selectedVirtualSlotsRef.current);
-    if (drawModeVirtual === 'select') nextVirtual.add(slotKey);
+    if (drawMode === 'select') nextVirtual.add(slotKey);
     else nextVirtual.delete(slotKey);
-    syncAndSetSelection(new Set(), nextVirtual, false);
+    
+    // Giữ nguyên các ghế thật đã chọn
+    syncAndSetSelection(new Set(selectedSeatIdsRef.current), nextVirtual, false);
   };
-
-  const handleMouseUpVirtual = useCallback(() => {
-    if (isDrawingVirtual) {
-      setIsDrawingVirtual(false);
-      setDrawModeVirtual(null);
-      // Thả chuột ở ô ảo: push trạng thái selection hiện tại vào history
-      syncAndSetSelection(selectedSeatIdsRef.current, selectedVirtualSlotsRef.current, true);
-    }
-  }, [isDrawingVirtual]);
-
-  useEffect(() => {
-    window.addEventListener('mouseup', handleMouseUpVirtual);
-    return () => {
-      window.removeEventListener('mouseup', handleMouseUpVirtual);
-    };
-  }, [handleMouseUpVirtual]);
 
   const handleMouseUp = useCallback(() => {
     if (isDrawing) {
       setIsDrawing(false);
       setDrawMode(null);
-      // Thả chuột ở ghế thật: push trạng thái selection hiện tại vào history
+      // Thả chuột: push trạng thái selection hiện tại vào history
       syncAndSetSelection(selectedSeatIdsRef.current, selectedVirtualSlotsRef.current, true);
     }
   }, [isDrawing]);
@@ -462,6 +465,52 @@ export default function ManageSeatLayout() {
   const clearSelection = () => {
     if (room?.roomStatus !== 'MAINTENANCE') return;
     syncAndSetSelection(new Set(), new Set(), true);
+  };
+
+  // Aisle handlers
+  const toggleAisleCol = async (colNumber: number) => {
+    if (room?.roomStatus !== 'MAINTENANCE') {
+      toast.warn('Chỉ có thể thay đổi lối đi khi phòng ở trạng thái BẢO TRÌ (MAINTENANCE).');
+      return;
+    }
+
+    let nextAisles = [...aisleCols];
+    if (nextAisles.includes(colNumber)) {
+      // Hủy lối đi -> Trở về cột ghế bình thường
+      nextAisles = nextAisles.filter(c => c !== colNumber);
+      toast.success(`Cột ${colNumber} đã được chuyển lại thành cột lắp ghế.`);
+    } else {
+      // Đặt làm lối đi -> Phát hiện ghế active đang nằm trên cột này
+      const activeSeatsOnCol = seats.filter(s => s.seatNumber === colNumber && s.isActive);
+      if (activeSeatsOnCol.length > 0) {
+        const confirmed = window.confirm(
+          `CẢNH BÁO: Cột ${colNumber} đang chứa ${activeSeatsOnCol.length} ghế đang hoạt động.\n` +
+          `Thiết lập lối đi sẽ tự động XÓA (vô hiệu hóa) toàn bộ ghế trên cột này. Bạn có chắc chắn muốn tiếp tục?`
+        );
+        if (!confirmed) return;
+
+        try {
+          setActionLoading(true);
+          for (const seat of activeSeatsOnCol) {
+            try {
+              await roomService.deleteSeat(seat.seatId);
+            } catch (e) {
+              console.error("Lỗi khi xóa ghế khi tạo lối đi: ", e);
+            }
+          }
+        } catch (err) {
+          toast.error("Gặp lỗi trong quá trình dọn dẹp ghế trên cột lối đi.");
+        } finally {
+          setActionLoading(false);
+        }
+        await fetchData();
+      }
+      nextAisles.push(colNumber);
+      toast.success(`Đã thiết lập cột ${colNumber} làm lối đi dọc.`);
+    }
+
+    setAisleCols(nextAisles);
+    localStorage.setItem(`aisles-${roomId}`, JSON.stringify(nextAisles));
   };
 
   // Copy Layout handlers
@@ -1232,12 +1281,73 @@ export default function ManageSeatLayout() {
         {/* ═══════════════════════════════════════ */}
         {/* LEFT: SEAT GRID                        */}
         {/* ═══════════════════════════════════════ */}
-        <div ref={containerRef} className="bg-[#111C44] border border-gray-800 rounded-2xl p-6 shadow-2xl w-full max-w-[720px] overflow-hidden relative">
+        <div ref={containerRef} className={`bg-[#111C44] border border-gray-800 rounded-2xl p-6 shadow-2xl w-full max-w-[720px] overflow-hidden relative transition-all duration-300 ${isCustomerPreview ? 'ring-1 ring-blue-500/30' : ''}`}>
+          {/* Header điều khiển Chế độ xem trước */}
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-800/55">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+              {isCustomerPreview ? '👁️ Giao diện khách hàng (Xem trước)' : '🛠️ Sơ đồ thiết kế (Admin)'}
+            </span>
+            <button
+              onClick={() => {
+                setIsCustomerPreview(prev => !prev);
+                if (!isCustomerPreview) {
+                  setSelectedSeatIds(new Set());
+                  setSelectedVirtualSlots(new Set());
+                }
+              }}
+              className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition flex items-center gap-1.5 ${
+                isCustomerPreview
+                  ? 'bg-blue-500/15 text-blue-400 border-blue-500/30 hover:bg-blue-500/25'
+                  : 'bg-gray-800/60 text-gray-400 border-gray-700 hover:bg-gray-700 hover:text-white'
+              }`}
+            >
+              <span>{isCustomerPreview ? '⚙️ Chế độ thiết kế' : '👁️ Xem trước khách đặt'}</span>
+            </button>
+          </div>
+
           {/* Screen indicator (Nằm ngoài cùng, trên hết) */}
           <div className="text-center mb-6">
             <div className="mx-auto max-w-md h-2 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent rounded-full" />
             <span className="text-[10px] uppercase tracking-[0.3em] text-gray-500 mt-1 block">{TEXT.SEAT_LAYOUT.SCREEN}</span>
           </div>
+
+          {/* Thanh chỉ số cột kiêm nút Toggle lối đi (Chỉ hiện ở chế độ thiết kế Admin) */}
+          {!isCustomerPreview && (
+            <div className="flex items-center justify-center gap-3 mb-4 pl-12 pr-12 select-none">
+              {/* Căn lề thẳng với cột nhãn hàng bên trái */}
+              <div className="w-8 flex-shrink-0" />
+              
+              <div className="flex items-center" style={{ gap: `${blueprintMaxCol > 24 ? 2 : blueprintMaxCol > 18 ? 4 : 6}px` }}>
+                {Array.from({ length: blueprintMaxCol }).map((_, idx) => {
+                  const colNum = idx + 1;
+                  const isAisle = aisleCols.includes(colNum);
+                  const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+                  
+                  return (
+                    <button
+                      key={`col-header-${colNum}`}
+                      onClick={() => toggleAisleCol(colNum)}
+                      className={`flex-shrink-0 text-[8px] font-extrabold rounded flex items-center justify-center transition border ${
+                        isAisle
+                          ? 'bg-blue-600/20 text-blue-400 border-blue-500/30 hover:bg-blue-600/30'
+                          : 'bg-gray-800/40 text-gray-500 border-gray-800 hover:bg-gray-700 hover:text-white'
+                      }`}
+                      style={{
+                        width: isAisle ? dims.width * 0.4 : dims.width,
+                        height: 20,
+                      }}
+                      title={isAisle ? `Cột ${colNum} là lối đi · Click để hủy` : `Click để đặt cột ${colNum} làm lối đi`}
+                    >
+                      {isAisle ? '🚶' : colNum}
+                    </button>
+                  );
+                })}
+              </div>
+              
+              {/* Căn lề thẳng với cột nhãn hàng bên phải */}
+              <div className="w-8 flex-shrink-0" />
+            </div>
+          )}
 
           {/* Grid Layout: Phân chia 3 cột cố định và cuộn */}
           <div className="flex gap-4 items-start select-none">
@@ -1267,10 +1377,27 @@ export default function ManageSeatLayout() {
                 const allRowSelected = totalInRow > 0 && selectedInRow === totalInRow;
 
                 // Render seats
+                let currentDisplayNum = 0;
                 const skipCols = new Set<number>();
                 const renderedCols: React.ReactNode[] = [];
 
                 for (let c = 1; c <= blueprintMaxCol; c++) {
+                  const isAisle = aisleCols.includes(c);
+                  if (isAisle) {
+                    const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+                    renderedCols.push(
+                      <div
+                        key={`aisle-${rowLabel}-${c}`}
+                        className="flex-shrink-0 bg-transparent transition-all duration-300"
+                        style={{
+                          width: dims.width * 0.4,
+                          height: dims.height,
+                        }}
+                      />
+                    );
+                    continue;
+                  }
+
                   const seat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === c);
                   if (seat && seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' && (seat.isActive || showInactiveSeats)) {
                     skipCols.add(c + 1);
@@ -1280,97 +1407,156 @@ export default function ManageSeatLayout() {
 
                   const isRealSeatVisible = seat && (seat.isActive || showInactiveSeats);
 
-                  if (isRealSeatVisible && seat) {
-                    const isSelected = selectedSeatIds.has(seat.seatId);
-                    const isInactive = !seat.isActive;
-                    const dims = getDynamicSeatDims(seat.seatTypeId);
-                    const typeInfo = getSeatColor(seat.seatTypeId);
+                  if (isCustomerPreview) {
+                    // --- GIAO DIỆN KHÁCH HÀNG (CUSTOMER VIEW PREVIEW) ---
+                    if (seat && seat.isActive) {
+                      const dims = getDynamicSeatDims(seat.seatTypeId);
+                      const typeInfo = getSeatColor(seat.seatTypeId);
+                      const displayNum = currentDisplayNum + 1;
+                      const isSweetbox = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX';
+                      
+                      // Tăng số ghế hiển thị
+                      currentDisplayNum += isSweetbox ? 2 : 1;
 
-                    renderedCols.push(
-                      <button
-                        key={seat.seatId}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          handleMouseDown(seat.seatId);
-                        }}
-                        onMouseEnter={() => handleMouseEnter(seat.seatId)}
-                        className="relative z-0 transition-all duration-150 group/seat flex-shrink-0"
-                        title={`${seat.seatCode} · ${typeInfo.label}${isInactive ? ' (Không HĐ)' : ''}`}
-                        style={{
-                          width: dims.width,
-                          height: dims.height,
-                        }}
-                      >
+                      renderedCols.push(
                         <div
-                          className={`w-full h-full rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold transition-all duration-150 ${isSelected
-                            ? 'ring-2 ring-white scale-110 shadow-lg'
-                            : 'hover:scale-105'
-                            } ${isInactive ? 'opacity-30' : ''}`}
+                          key={seat.seatId}
+                          className="relative z-0 flex-shrink-0 transition-all duration-300 shadow-md"
+                          title={`${rowLabel}${displayNum}${isSweetbox ? `-${displayNum + 1}` : ''} · ${typeInfo.label}`}
                           style={{
-                            backgroundColor: isSelected ? typeInfo.hoverColor : typeInfo.color,
+                            width: dims.width,
+                            height: dims.height,
                           }}
                         >
-                          {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? (
-                            <FaCouch className="h-3.5 w-7 shrink-0 text-white/90" />
-                          ) : seat.seatTypeId === 'SEAT_TYPE_VIP' ? (
-                            <FaCouch className="h-3.5 w-3.5 shrink-0 text-white/90" />
-                          ) : (
-                            <FaChair className="h-3.5 w-3.5 shrink-0 text-white/90" />
-                          )}
-                          <span>
-                            {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX'
-                              ? `${seat.seatNumber}-${seat.seatNumber + 1}`
-                              : seat.seatNumber}
-                          </span>
-                          {isInactive && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="w-full h-[2px] bg-red-500 rotate-45 absolute" />
-                            </div>
-                          )}
+                          <div
+                            className="w-full h-full rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold"
+                            style={{
+                              backgroundColor: typeInfo.color,
+                            }}
+                          >
+                            {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? (
+                              <FaCouch className="h-3.5 w-7 shrink-0 text-white/90" />
+                            ) : seat.seatTypeId === 'SEAT_TYPE_VIP' ? (
+                              <FaCouch className="h-3.5 w-3.5 shrink-0 text-white/90" />
+                            ) : (
+                              <FaChair className="h-3.5 w-3.5 shrink-0 text-white/90" />
+                            )}
+                            <span>
+                              {isSweetbox
+                                ? `${displayNum}-${displayNum + 1}`
+                                : displayNum}
+                            </span>
+                          </div>
                         </div>
-                      </button>
-                    );
+                      );
+                    } else {
+                      // Ghế inactive hoặc ô ảo biến thành khoảng trống trong suốt, không tương tác và không tăng số ghế hiển thị
+                      const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+                      renderedCols.push(
+                        <div
+                          key={`${rowLabel}-${c}`}
+                          className="flex-shrink-0 bg-transparent"
+                          style={{
+                            width: dims.width,
+                            height: dims.height,
+                          }}
+                        />
+                      );
+                    }
                   } else {
-                    const slotKey = `${rowLabel}-${c}`;
-                    const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
-                    
-                    const hiddenSeat = seat; // seat ở đây có isActive = false (do isRealSeatVisible = false)
-                    const isSelected = hiddenSeat ? selectedSeatIds.has(hiddenSeat.seatId) : selectedVirtualSlots.has(slotKey);
+                    // --- GIAO DIỆN THIẾT KẾ ADMIN (ADMIN EDIT VIEW) ---
+                    if (isRealSeatVisible && seat) {
+                      const isSelected = selectedSeatIds.has(seat.seatId);
+                      const isInactive = !seat.isActive;
+                      const dims = getDynamicSeatDims(seat.seatTypeId);
+                      const typeInfo = getSeatColor(seat.seatTypeId);
 
-                    renderedCols.push(
-                      <button
-                        key={slotKey}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          if (hiddenSeat) {
-                            handleMouseDown(hiddenSeat.seatId);
-                          } else {
-                            handleMouseDownVirtual(slotKey);
+                      renderedCols.push(
+                        <button
+                          key={seat.seatId}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleMouseDown(seat.seatId);
+                          }}
+                          onMouseEnter={() => handleMouseEnter(seat.seatId)}
+                          className="relative z-0 transition-all duration-150 group/seat flex-shrink-0"
+                          title={`${seat.seatCode} · ${typeInfo.label}${isInactive ? ' (Không HĐ)' : ''}`}
+                          style={{
+                            width: dims.width,
+                            height: dims.height,
+                          }}
+                        >
+                          <div
+                            className={`w-full h-full rounded-lg flex items-center justify-center gap-1 text-[10px] font-bold transition-all duration-150 ${isSelected
+                              ? 'ring-2 ring-white scale-110 shadow-lg'
+                              : 'hover:scale-105'
+                              } ${isInactive ? 'opacity-30' : ''}`}
+                            style={{
+                              backgroundColor: isSelected ? typeInfo.hoverColor : typeInfo.color,
+                            }}
+                          >
+                            {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? (
+                              <FaCouch className="h-3.5 w-7 shrink-0 text-white/90" />
+                            ) : seat.seatTypeId === 'SEAT_TYPE_VIP' ? (
+                              <FaCouch className="h-3.5 w-3.5 shrink-0 text-white/90" />
+                            ) : (
+                              <FaChair className="h-3.5 w-3.5 shrink-0 text-white/90" />
+                            )}
+                            <span>
+                              {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX'
+                                ? `${seat.seatNumber}-${seat.seatNumber + 1}`
+                                : seat.seatNumber}
+                            </span>
+                            {isInactive && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-full h-[2px] bg-red-500 rotate-45 absolute" />
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    } else {
+                      const slotKey = `${rowLabel}-${c}`;
+                      const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+                      
+                      const hiddenSeat = seat; // seat ở đây có isActive = false (do isRealSeatVisible = false)
+                      const isSelected = hiddenSeat ? selectedSeatIds.has(hiddenSeat.seatId) : selectedVirtualSlots.has(slotKey);
+
+                      renderedCols.push(
+                        <button
+                          key={slotKey}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            if (hiddenSeat) {
+                              handleMouseDown(hiddenSeat.seatId);
+                            } else {
+                              handleMouseDownVirtual(slotKey);
+                            }
+                          }}
+                          onMouseEnter={() => {
+                            if (hiddenSeat) {
+                              handleMouseEnter(hiddenSeat.seatId);
+                            } else {
+                              handleMouseEnterVirtual(slotKey);
+                            }
+                          }}
+                          className={`flex-shrink-0 rounded-lg border border-dashed text-[9px] font-semibold transition flex items-center justify-center cursor-pointer relative z-0 ${isSelected
+                            ? 'ring-2 ring-white scale-110 bg-blue-600/30 border-blue-400 text-blue-300 shadow-lg'
+                            : 'border-gray-800 bg-[#0F172A]/20 hover:bg-blue-500/10 text-gray-500'
+                            }`}
+                          style={{
+                            width: dims.width,
+                            height: dims.height,
+                          }}
+                          title={hiddenSeat 
+                            ? `Ghế cũ ${hiddenSeat.seatCode} đang ẩn · Click để chọn kích hoạt lại` 
+                            : `Tọa độ trống: ${rowLabel}${c} · Click để chọn lắp ghế`
                           }
-                        }}
-                        onMouseEnter={() => {
-                          if (hiddenSeat) {
-                            handleMouseEnter(hiddenSeat.seatId);
-                          } else {
-                            handleMouseEnterVirtual(slotKey);
-                          }
-                        }}
-                        className={`flex-shrink-0 rounded-lg border border-dashed text-[9px] font-semibold transition flex items-center justify-center cursor-pointer relative z-0 ${isSelected
-                          ? 'ring-2 ring-white scale-110 bg-blue-600/30 border-blue-400 text-blue-300 shadow-lg'
-                          : 'border-gray-800 bg-[#0F172A]/20 hover:bg-blue-500/10 text-gray-500'
-                          }`}
-                        style={{
-                          width: dims.width,
-                          height: dims.height,
-                        }}
-                        title={hiddenSeat 
-                          ? `Ghế cũ ${hiddenSeat.seatCode} đang ẩn · Click để chọn kích hoạt lại` 
-                          : `Tọa độ trống: ${rowLabel}${c} · Click để chọn lắp ghế`
-                        }
-                      >
-                        <span>{c}</span>
-                      </button>
-                    );
+                        >
+                          <span>{c}</span>
+                        </button>
+                      );
+                    }
                   }
                 }
 
@@ -1388,17 +1574,26 @@ export default function ManageSeatLayout() {
                   {rowsData.map((row) => (
                     <div key={row.rowLabel} style={{ height: rowHeight }} className="flex items-center justify-center gap-3">
                       {/* Row label (Left) */}
-                      <button
-                        onClick={() => toggleRow(row.rowLabel)}
-                        style={{ height: rowHeight }}
-                        className={`w-8 flex-shrink-0 flex items-center justify-center rounded-md text-xs font-bold transition-all duration-150 ${row.allRowSelected
-                          ? 'bg-[#4318FF] text-white'
-                          : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-white'
-                          }`}
-                        title={TEXT.SEAT_LAYOUT.BTN_SELECT_ALL_ROW.replace('{0}', row.rowLabel)}
-                      >
-                        {row.rowLabel}
-                      </button>
+                      {isCustomerPreview ? (
+                        <div
+                          style={{ height: rowHeight }}
+                          className="w-8 flex-shrink-0 flex items-center justify-center text-xs font-bold text-gray-500 bg-gray-900/10 rounded-md"
+                        >
+                          {row.rowLabel}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => toggleRow(row.rowLabel)}
+                          style={{ height: rowHeight }}
+                          className={`w-8 flex-shrink-0 flex items-center justify-center rounded-md text-xs font-bold transition-all duration-150 ${row.allRowSelected
+                            ? 'bg-[#4318FF] text-white'
+                            : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700 hover:text-white'
+                            }`}
+                          title={TEXT.SEAT_LAYOUT.BTN_SELECT_ALL_ROW.replace('{0}', row.rowLabel)}
+                        >
+                          {row.rowLabel}
+                        </button>
+                      )}
 
                       {/* Columns */}
                       <div className="flex items-center" style={{ gap: `${gapSize}px` }}>
@@ -1420,57 +1615,59 @@ export default function ManageSeatLayout() {
           </div>
 
           {/* Select All / Clear */}
-          <div className="flex justify-center items-center gap-3 mt-5">
-            {(() => {
-              const virtualCount = getVisibleVirtualSlots().size;
-              const totalItems = visibleSeats.length + virtualCount;
-              const isAllSelected = selectedSeatIds.size === visibleSeats.length
-                && selectedVirtualSlots.size === virtualCount
-                && totalItems > 0;
-              return (
-                <button
-                  onClick={selectAll}
-                  className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
-                >
-                  {isAllSelected ? TEXT.SEAT_LAYOUT.BTN_DESELECT_ALL : TEXT.SEAT_LAYOUT.BTN_SELECT_ALL}
-                </button>
-              );
-            })()}
-            {(() => {
-              const virtualCount = getVisibleVirtualSlots().size;
-              const totalItems = visibleSeats.length + virtualCount;
-              const isAllSelected = selectedSeatIds.size === visibleSeats.length
-                && selectedVirtualSlots.size === virtualCount
-                && totalItems > 0;
-              const hasAnySelected = selectedSeatIds.size > 0 || selectedVirtualSlots.size > 0;
-              // Chỉ hiện nút bỏ chọn riêng khi có selection nhưng chưa chọn tất cả
-              return hasAnySelected && !isAllSelected ? (
-                <button
-                  onClick={clearSelection}
-                  className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
-                >
-                  {TEXT.SEAT_LAYOUT.BTN_DESELECT.replace('{0}', String(selectedSeatIds.size + selectedVirtualSlots.size))}
-                </button>
-              ) : null;
-            })()}
-            <div className="h-4 w-[1px] bg-gray-800 mx-1" />
-            <button
-              onClick={undoSelection}
-              disabled={historyIndex === 0}
-              className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
-              title={TEXT.SEAT_LAYOUT.TOOLTIP_UNDO}
-            >
-              <span>↩️</span> {TEXT.SEAT_LAYOUT.BTN_UNDO}
-            </button>
-            <button
-              onClick={redoSelection}
-              disabled={historyIndex >= selectionHistory.length - 1}
-              className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
-              title={TEXT.SEAT_LAYOUT.TOOLTIP_REDO}
-            >
-              {TEXT.SEAT_LAYOUT.BTN_REDO} <span>↪️</span>
-            </button>
-          </div>
+          {!isCustomerPreview && (
+            <div className="flex justify-center items-center gap-3 mt-5">
+              {(() => {
+                const virtualCount = getVisibleVirtualSlots().size;
+                const totalItems = visibleSeats.length + virtualCount;
+                const isAllSelected = selectedSeatIds.size === visibleSeats.length
+                  && selectedVirtualSlots.size === virtualCount
+                  && totalItems > 0;
+                return (
+                  <button
+                    onClick={selectAll}
+                    className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
+                  >
+                    {isAllSelected ? TEXT.SEAT_LAYOUT.BTN_DESELECT_ALL : TEXT.SEAT_LAYOUT.BTN_SELECT_ALL}
+                  </button>
+                );
+              })()}
+              {(() => {
+                const virtualCount = getVisibleVirtualSlots().size;
+                const totalItems = visibleSeats.length + virtualCount;
+                const isAllSelected = selectedSeatIds.size === visibleSeats.length
+                  && selectedVirtualSlots.size === virtualCount
+                  && totalItems > 0;
+                const hasAnySelected = selectedSeatIds.size > 0 || selectedVirtualSlots.size > 0;
+                // Chỉ hiện nút bỏ chọn riêng khi có selection nhưng chưa chọn tất cả
+                return hasAnySelected && !isAllSelected ? (
+                  <button
+                    onClick={clearSelection}
+                    className="px-3 py-1.5 bg-gray-800/60 hover:bg-gray-700 text-xs text-gray-300 rounded-lg transition"
+                  >
+                    {TEXT.SEAT_LAYOUT.BTN_DESELECT.replace('{0}', String(selectedSeatIds.size + selectedVirtualSlots.size))}
+                  </button>
+                ) : null;
+              })()}
+              <div className="h-4 w-[1px] bg-gray-800 mx-1" />
+              <button
+                onClick={undoSelection}
+                disabled={historyIndex === 0}
+                className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
+                title={TEXT.SEAT_LAYOUT.TOOLTIP_UNDO}
+              >
+                <span>↩️</span> {TEXT.SEAT_LAYOUT.BTN_UNDO}
+              </button>
+              <button
+                onClick={redoSelection}
+                disabled={historyIndex >= selectionHistory.length - 1}
+                className="px-2.5 py-1.5 bg-gray-800/60 hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-gray-800/60 text-xs text-gray-300 rounded-lg transition flex items-center gap-1"
+                title={TEXT.SEAT_LAYOUT.TOOLTIP_REDO}
+              >
+                {TEXT.SEAT_LAYOUT.BTN_REDO} <span>↪️</span>
+              </button>
+            </div>
+          )}
 
           {/* Legend (Chia làm 2 hàng đều và đẹp) */}
           <div className="mt-6 pt-5 border-t border-gray-800 flex flex-col items-center gap-3">
@@ -1490,29 +1687,31 @@ export default function ManageSeatLayout() {
               ))}
             </div>
 
-            {/* Hàng 2: Trạng thái hiển thị */}
-            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pt-2.5 border-t border-gray-800/30 w-full max-w-lg">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-gray-600 ring-2 ring-white" />
-                <span className="text-xs text-gray-400">{TEXT.SEAT_LAYOUT.LEGEND_SELECTED}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded bg-gray-600 opacity-30 relative overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-full h-[1px] bg-red-500 rotate-45" />
-                  </div>
+            {/* Hàng 2: Trạng thái hiển thị - Chỉ hiển thị ở chế độ thiết kế Admin */}
+            {!isCustomerPreview && (
+              <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pt-2.5 border-t border-gray-800/30 w-full max-w-lg">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-gray-600 ring-2 ring-white" />
+                  <span className="text-xs text-gray-400">{TEXT.SEAT_LAYOUT.LEGEND_SELECTED}</span>
                 </div>
-                <span className="text-xs text-gray-400">{TEXT.SEAT_LAYOUT.LEGEND_INACTIVE}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-gray-600 opacity-30 relative overflow-hidden">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-full h-[1px] bg-red-500 rotate-45" />
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400">{TEXT.SEAT_LAYOUT.LEGEND_INACTIVE}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded border border-dashed border-gray-600 bg-[#0F172A]/20" />
+                  <span className="text-xs text-gray-400">Ô trống (click để lắp ghế)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded border border-dashed border-blue-400 bg-blue-600/30 ring-2 ring-white" />
+                  <span className="text-xs text-gray-400">Vị trí đang chọn lắp</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded border border-dashed border-gray-600 bg-[#0F172A]/20" />
-                <span className="text-xs text-gray-400">Ô trống (click để lắp ghế)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded border border-dashed border-blue-400 bg-blue-600/30 ring-2 ring-white" />
-                <span className="text-xs text-gray-400">Vị trí đang chọn lắp</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -1587,7 +1786,7 @@ export default function ManageSeatLayout() {
                       type="text"
                       maxLength={1}
                       value={tempMaxRow}
-                      disabled={room?.roomStatus !== 'MAINTENANCE'}
+                      disabled={room?.roomStatus !== 'MAINTENANCE' || isCustomerPreview}
                       onChange={(e) => {
                         const val = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
                         if (val) {
@@ -1605,7 +1804,7 @@ export default function ManageSeatLayout() {
                       min={1}
                       max={30}
                       value={tempMaxCol}
-                      disabled={room?.roomStatus !== 'MAINTENANCE'}
+                      disabled={room?.roomStatus !== 'MAINTENANCE' || isCustomerPreview}
                       onChange={(e) => {
                         const newCol = Math.max(1, Math.min(30, Number(e.target.value)));
                         setTempMaxCol(newCol);
@@ -1673,7 +1872,8 @@ export default function ManageSeatLayout() {
                       toast.success(`Đã áp dụng kích thước lưới mới: ${tempMaxRow} hàng x ${tempMaxCol} cột!`);
                       await fetchData();
                     }}
-                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition"
+                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isCustomerPreview}
                   >
                     ✓ Áp dụng kích thước mới
                   </button>
@@ -1681,8 +1881,8 @@ export default function ManageSeatLayout() {
 
                 <button
                   onClick={handleResetLayout}
-                  disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
-                  className="w-full py-2 bg-red-950/20 hover:bg-red-900/30 text-red-400 border border-red-500/25 hover:border-red-500/40 text-xs font-semibold rounded-lg transition disabled:opacity-50"
+                  disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading || isCustomerPreview}
+                  className="w-full py-2 bg-red-950/20 hover:bg-red-900/30 text-red-400 border border-red-500/25 hover:border-red-500/40 text-xs font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   ⚠️ Reset Sơ Đồ & Khung Rạp
                 </button>
@@ -1692,6 +1892,21 @@ export default function ManageSeatLayout() {
 
           {/* Hàng 2: Selection / Batch Action Panel */}
           {(() => {
+            if (isCustomerPreview) {
+              return (
+                <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl w-full">
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
+                    Trạng thái xem trước
+                  </h3>
+                  <div className="bg-[#0F172A] rounded-xl p-4 text-center border border-gray-800">
+                    <span className="text-xs text-blue-400 font-semibold flex items-center justify-center gap-1.5">
+                      <span>👁️</span> Chế độ xem trước của khách hàng đang bật. Hãy tắt Xem trước để tiếp tục chỉnh sửa.
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+
             const selectedActive = Array.from(selectedSeatIds).filter(
               (id) => seats.find((s) => s.seatId === id)?.isActive
             );
@@ -1839,7 +2054,7 @@ export default function ManageSeatLayout() {
                 void loadOtherRooms();
                 setShowCopyModal(true);
               }}
-              disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
+              disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading || isCustomerPreview}
               className="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-xl transition border border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
             >
               {TEXT.SEAT_LAYOUT.BTN_COPY}

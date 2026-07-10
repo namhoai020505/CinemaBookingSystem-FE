@@ -77,6 +77,7 @@ type ShowtimeDetailResponse = {
   roomName: string;
   cinemaName: string;
   startTime: string;
+  roomId?: string;
 };
 
 type MovieDetailResponse = {
@@ -323,10 +324,8 @@ const mapSeat = (
   item: SeatMapItemResponse,
   status: SeatStatus,
   ownedLocks: Record<string, StoredLockedSeat>,
-  rowTypeMap: Record<string, SeatType>,
 ): SeatItem => {
-  const backendType = getSeatType(item.seatTypeId);
-  const type = rowTypeMap[item.rowLabel] || backendType;
+  const type = getSeatType(item.seatTypeId);
   const ownedLock = ownedLocks[item.seatId];
   const isLockedByMe =
     status === "HOLDING" && ownedLock && isActiveLock(ownedLock.lockedUntil);
@@ -436,6 +435,24 @@ export default function SeatSelection() {
   const [unlockingSeatId, setUnlockingSeatId] = useState<string | null>(null);
   const [displayDetails, setDisplayDetails] =
     useState<ShowtimeDisplayDetails | null>(null);
+  const [roomId, setRoomId] = useState<string>("");
+  const [aisleCols, setAisleCols] = useState<number[]>([]);
+
+  // Tải cấu hình lối đi khi roomId thay đổi
+  useEffect(() => {
+    if (roomId) {
+      const saved = localStorage.getItem(`aisles-${roomId}`);
+      if (saved) {
+        try {
+          setAisleCols(JSON.parse(saved));
+        } catch (e) {
+          setAisleCols([]);
+        }
+      } else {
+        setAisleCols([]);
+      }
+    }
+  }, [roomId]);
 
   const persistSelectedLockedSeats = useCallback(
     (nextSelectedSeats: SeatItem[]) => {
@@ -484,6 +501,7 @@ export default function SeatSelection() {
         }
 
         const showtime = showtimeResponse.data;
+        setRoomId(showtime.roomId || "");
         let movie: MovieDetailResponse | null = null;
 
         if (showtime.movieId) {
@@ -562,21 +580,33 @@ export default function SeatSelection() {
       const availableSeats = rawData.availableSeats || [];
       const lockedSeats = rawData.lockedSeats || [];
       const soldSeats = rawData.soldSeats || [];
-      const allSeats = [...availableSeats, ...lockedSeats, ...soldSeats];
-      const rowTypeMap = buildSeatRowTypeMap(
-        Array.from(new Set(allSeats.map((seat) => seat.rowLabel))),
-      );
       const mappedSeats = [
         ...availableSeats.map((seat) =>
-          mapSeat(seat, "AVAILABLE", ownedLocks, rowTypeMap),
+          mapSeat(seat, "AVAILABLE", ownedLocks),
         ),
         ...lockedSeats.map((seat) =>
-          mapSeat(seat, "HOLDING", ownedLocks, rowTypeMap),
+          mapSeat(seat, "HOLDING", ownedLocks),
         ),
         ...soldSeats.map((seat) =>
-          mapSeat(seat, "BOOKED", ownedLocks, rowTypeMap),
+          mapSeat(seat, "BOOKED", ownedLocks),
         ),
       ];
+
+      // Tự động làm mịn số thứ tự ghế liên tục bỏ qua lối đi dọc và ô trống
+      const uniqueRows = Array.from(new Set(mappedSeats.map(s => s.row)));
+      uniqueRows.forEach(row => {
+        // Lấy tất cả ghế thuộc hàng này, xếp cột tăng dần
+        const seatsInRow = mappedSeats.filter(s => s.row === row).sort((a, b) => a.column - b.column);
+        let displayNum = 1;
+        seatsInRow.forEach(seat => {
+          const isSweetbox = seat.type === "SWEETBOX";
+          seat.seatCode = isSweetbox 
+            ? `${row}${displayNum}-${displayNum + 1}` 
+            : `${row}${displayNum}`;
+          displayNum += isSweetbox ? 2 : 1;
+        });
+      });
+
       const ownedVisibleSeatIds = new Set(
         mappedSeats
           .filter((seat) => seat.status === "LOCKED_BY_ME")
@@ -946,6 +976,11 @@ export default function SeatSelection() {
     return prices;
   }, [seatMap]);
 
+  const blueprintMaxCol = useMemo(() => {
+    if (!seatMap?.seats || seatMap.seats.length === 0) return 12;
+    return Math.max(...seatMap.seats.map((s) => s.column), 1);
+  }, [seatMap]);
+
   const rowsStructure = seatMap
     ? sortSeatRows(Array.from(new Set(seatMap.seats.map((seat) => seat.row))))
     : [];
@@ -992,11 +1027,11 @@ export default function SeatSelection() {
 
     switch (seat.type) {
       case "VIP":
-        return "border-slate-300 bg-slate-100/15 text-slate-100 hover:border-sky-300 hover:bg-sky-500 hover:text-white";
+        return "border-blue-500 bg-blue-500/15 text-blue-300 hover:bg-blue-600 hover:text-white hover:border-blue-600 hover:shadow-[0_0_12px_rgba(59,130,246,0.3)]";
       case "SWEETBOX":
-        return "border-slate-300 bg-slate-100/15 text-slate-100 hover:border-sky-300 hover:bg-sky-500 hover:text-white";
+        return "border-pink-500 bg-pink-500/15 text-pink-300 hover:bg-pink-600 hover:text-white hover:border-pink-600 hover:shadow-[0_0_12px_rgba(236,72,153,0.3)]";
       default:
-        return "border-slate-300 bg-slate-100/10 text-slate-100 hover:bg-slate-100 hover:text-slate-900";
+        return "border-gray-500 bg-gray-500/10 text-gray-300 hover:bg-gray-200 hover:text-gray-900 hover:border-gray-200";
     }
   };
 
@@ -1100,18 +1135,70 @@ export default function SeatSelection() {
                 <div className="mx-auto flex min-w-max flex-col items-center gap-2 lg:min-w-0">
                   {rowsStructure.map((row) => {
                     const seatsInRow = seatMap.seats
-                      .filter((seat) => seat.row === row)
-                      .sort((left, right) => left.column - right.column);
+                      .filter((seat) => seat.row === row);
 
-                    const filteredSeatsInRow: SeatItem[] = [];
                     const skipCols = new Set<number>();
-                    for (const seat of seatsInRow) {
-                      if (skipCols.has(seat.column)) {
+                    const renderedCols: React.ReactNode[] = [];
+
+                    for (let c = 1; c <= blueprintMaxCol; c++) {
+                      const isAisle = aisleCols.includes(c);
+                      if (isAisle) {
+                        renderedCols.push(
+                          <div
+                            key={`aisle-${row}-${c}`}
+                            className="flex-shrink-0 bg-transparent h-8 sm:h-9 w-[14px] sm:w-[16px] xl:w-[18px]"
+                          />
+                        );
                         continue;
                       }
-                      filteredSeatsInRow.push(seat);
-                      if (seat.type === "SWEETBOX") {
-                        skipCols.add(seat.column + 1);
+
+                      if (skipCols.has(c)) continue;
+
+                      const seat = seatsInRow.find((s) => s.column === c);
+                      if (seat) {
+                        if (seat.type === "SWEETBOX") {
+                          skipCols.add(c + 1);
+                        }
+
+                        const disabled = unlockingSeatId === seat.seatId || !isSelectableSeat(seat);
+                        const isSweetbox = seat.type === "SWEETBOX";
+                        const displayLabel = seat.seatCode.replace(row, ''); // Lấy riêng phần số hiển thị liên tục
+
+                        renderedCols.push(
+                          <button
+                            type="button"
+                            key={seat.seatId}
+                            disabled={disabled}
+                            title={`${getSeatDisplayName(seat)} - ${getSeatTypeLabel(
+                              seat.type,
+                            )} - ${formatCurrency(seat.price)}`}
+                            onClick={() => {
+                              void handleSelectSeat(seat);
+                            }}
+                            className={`group relative flex h-8 sm:h-9 shrink-0 items-center justify-center rounded-md border transition-all ${isSweetbox
+                                ? "w-[70px] sm:w-[78px] xl:w-[86px]"
+                                : "w-[32px] sm:w-[36px] xl:w-[40px]"
+                              } ${getSeatStyles(seat)}`}
+                          >
+                            <div className="flex items-center justify-center gap-1 text-[10px] font-bold">
+                              {renderSeatIcon(seat)}
+                              <span className="text-[9px] font-extrabold text-white/90">
+                                {displayLabel}
+                              </span>
+                            </div>
+                            <span className="pointer-events-none absolute -bottom-5 left-1/2 hidden -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-bold text-white group-hover:block z-10">
+                              {getSeatDisplayName(seat)}
+                            </span>
+                          </button>
+                        );
+                      } else {
+                        // Vẽ ô trống trong suốt thay vì ô ảo nét đứt của admin
+                        renderedCols.push(
+                          <div
+                            key={`empty-${row}-${c}`}
+                            className="flex-shrink-0 bg-transparent h-8 sm:h-9 w-[32px] sm:w-[36px] xl:w-[40px]"
+                          />
+                        );
                       }
                     }
 
@@ -1120,34 +1207,11 @@ export default function SeatSelection() {
                         <div className="w-6 text-center text-xs font-black text-slate-500">
                           {row}
                         </div>
-                        <div className="flex items-center justify-center gap-1.5 xl:gap-2">
-                          {filteredSeatsInRow.map((seat) => {
-                            const disabled =
-                              unlockingSeatId === seat.seatId || !isSelectableSeat(seat);
-
-                            return (
-                              <button
-                                type="button"
-                                key={seat.seatId}
-                                disabled={disabled}
-                                title={`${getSeatDisplayName(seat)} - ${getSeatTypeLabel(
-                                  seat.type,
-                                )} - ${formatCurrency(seat.price)}`}
-                                onClick={() => {
-                                  void handleSelectSeat(seat);
-                                }}
-                                className={`group relative flex h-8 shrink-0 items-center justify-center rounded-md border transition-all sm:h-9 ${seat.type === "SWEETBOX"
-                                    ? "w-14 sm:w-16 xl:w-[70px]"
-                                    : "w-8 sm:w-9"
-                                  } ${getSeatStyles(seat)}`}
-                              >
-                                {renderSeatIcon(seat)}
-                                <span className="pointer-events-none absolute -bottom-5 left-1/2 hidden -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-bold text-white group-hover:block">
-                                  {getSeatDisplayName(seat)}
-                                </span>
-                              </button>
-                            );
-                          })}
+                        <div 
+                          className="flex items-center justify-center"
+                          style={{ gap: `${blueprintMaxCol > 24 ? 2 : blueprintMaxCol > 18 ? 4 : 6}px` }}
+                        >
+                          {renderedCols}
                         </div>
                         <div className="w-6 text-center text-xs font-black text-slate-500">
                           {row}
