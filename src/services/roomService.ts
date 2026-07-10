@@ -1,49 +1,54 @@
 import axiosInstance from '../lib/api';
 
-// Kiểu dữ liệu phòng chiếu trả về từ backend.
+// ============================================================
+// Types khớp chuẩn Backend Contracts — Rooms & Seats
+// ============================================================
+
+/** Khớp CinemaSystem.Contracts.Rooms.RoomResponse */
 export interface RoomResponse {
   roomId: string;
   cinemaId: string;
   cinemaName: string;
   roomName: string;
   capacity: number;
-  roomStatus: string;
+  roomStatus: string;   // ACTIVE | INACTIVE | MAINTENANCE
   seatCount: number;
 }
 
-// Payload tạo phòng mới trong một rạp.
+/** Khớp CinemaSystem.Contracts.Rooms.CreateRoomRequest */
 export interface CreateRoomPayload {
   roomName: string;
   capacity: number;
   roomStatus: string;
 }
 
-// Payload cập nhật thông tin phòng.
+/** Khớp CinemaSystem.Contracts.Rooms.UpdateRoomRequest */
 export interface UpdateRoomPayload {
   roomName: string;
   capacity: number;
   roomStatus: string;
 }
 
-// Payload sinh ghế tự động theo số hàng/cột và loại ghế.
+/** Khớp CinemaSystem.Contracts.Rooms.GenerateSeatsRequest */
 export interface GenerateSeatsPayload {
   rows: number;
   columns: number;
   seatTypeId: string;
 }
 
-// Kiểu dữ liệu ghế trong sơ đồ phòng.
+/** Khớp CinemaSystem.Contracts.Seats.SeatResponse */
 export interface SeatResponse {
   seatId: string;
   roomId: string;
   rowLabel: string;
   seatNumber: number;
   seatCode: string;
-  seatTypeId: string;
+  seatTypeId: string;   // SEAT_TYPE_NORMAL | SEAT_TYPE_VIP | SEAT_TYPE_SWEETBOX
+  seatStatus?: string;  // ACTIVE | INACTIVE
   isActive: boolean;
 }
 
-// Payload tạo ghế lẻ.
+/** Khớp CinemaSystem.Contracts.Seats.CreateSeatRequest */
 export interface CreateSeatPayload {
   roomId: string;
   rowLabel: string;
@@ -51,15 +56,16 @@ export interface CreateSeatPayload {
   seatTypeId: string;
 }
 
-// Payload cập nhật ghế lẻ.
+/** Khớp CinemaSystem.Contracts.Seats.UpdateSeatRequest */
 export interface UpdateSeatPayload {
   rowLabel: string;
   seatNumber: number;
   seatTypeId: string;
   isActive?: boolean;
+  seatStatus?: string;  // ACTIVE | INACTIVE
 }
 
-// Kiểu dữ liệu rạp dùng khi tạo phòng.
+/** Khớp CinemaSystem.Contracts.Cinemas.CinemaResponse */
 export interface CinemaResponse {
   cinemaId: string;
   cinemaName: string;
@@ -69,7 +75,10 @@ export interface CinemaResponse {
   cinemaStatus: string;
 }
 
-// Wrapper ApiResponse chuẩn backend; interceptor đã unwrap response.data một lớp.
+// ============================================================
+// Wrapper giải nén ApiResponse<T> chuẩn BE
+// (api interceptor đã trả response.data nên ta nhận ApiResponse)
+// ============================================================
 interface ApiEnvelope<T> {
   success: boolean;
   message: string;
@@ -77,9 +86,13 @@ interface ApiEnvelope<T> {
   errorCode?: string;
 }
 
-// Gom API quản lý phòng và layout ghế cho admin.
+// ============================================================
+// Service methods
+// ============================================================
 export const roomService = {
-  // GET /api/rooms/rooms: lấy toàn bộ danh sách phòng (bao gồm cả phòng ngưng hoạt động).
+  // ---------- Rooms ----------
+
+  /** GET /api/rooms/rooms – Lấy toàn bộ danh sách phòng */
   getRooms: async (includeInactive = true): Promise<RoomResponse[]> => {
     const envelope = await axiosInstance.get('/api/rooms/rooms', {
       params: { includeInactive }
@@ -87,58 +100,86 @@ export const roomService = {
     return envelope?.data ?? [];
   },
 
-  // GET /api/rooms/rooms/{roomId}: lấy chi tiết phòng.
-  getRoomById: async (roomId: string): Promise<RoomResponse> => {
-    const envelope = await axiosInstance.get(`/api/rooms/rooms/${roomId}`) as unknown as ApiEnvelope<RoomResponse>;
+  /** GET /api/rooms/rooms/{roomId} – Chi tiết phòng */
+  getRoomById: async (roomId: string, includeInactive = true): Promise<RoomResponse> => {
+    const envelope = await axiosInstance.get(`/api/rooms/rooms/${roomId}`, {
+      params: { includeInactive }
+    }) as unknown as ApiEnvelope<RoomResponse>;
     return envelope.data;
   },
 
-  // POST /api/rooms/cinemas/{cinemaId}/rooms: tạo phòng mới trong rạp.
+  /** POST /api/rooms/cinemas/{cinemaId}/rooms – Tạo phòng mới */
   createRoom: async (cinemaId: string, payload: CreateRoomPayload): Promise<RoomResponse> => {
     const envelope = await axiosInstance.post(`/api/rooms/cinemas/${cinemaId}/rooms`, payload) as unknown as ApiEnvelope<RoomResponse>;
     return envelope.data;
   },
 
-  // PUT /api/rooms/rooms/{roomId}: cập nhật thông tin phòng.
+  /** PUT /api/rooms/rooms/{roomId} – Cập nhật phòng */
   updateRoom: async (roomId: string, payload: UpdateRoomPayload): Promise<RoomResponse> => {
     const envelope = await axiosInstance.put(`/api/rooms/rooms/${roomId}`, payload) as unknown as ApiEnvelope<RoomResponse>;
     return envelope.data;
   },
 
-  // DELETE /api/rooms/rooms/{roomId}: xóa hoặc vô hiệu hóa phòng.
+  /** DELETE /api/rooms/rooms/{roomId} – Xóa phòng */
   deleteRoom: async (roomId: string): Promise<void> => {
     await axiosInstance.delete(`/api/rooms/rooms/${roomId}`);
   },
 
-  // POST /api/rooms/{roomId}/generate-seats: sinh sơ đồ ghế tự động.
+  /** POST /api/rooms/{roomId}/generate-seats – Sinh ghế tự động */
   generateSeats: async (roomId: string, payload: GenerateSeatsPayload): Promise<void> => {
     await axiosInstance.post(`/api/rooms/${roomId}/generate-seats`, payload);
   },
 
-  // GET /api/seats/room/{roomId}: lấy toàn bộ ghế trong một phòng.
+  // ---------- Seats ----------
+
+  /** GET /api/seats/room/{roomId} – Lấy sơ đồ ghế */
   getSeatMap: async (roomId: string): Promise<SeatResponse[]> => {
     const envelope = await axiosInstance.get(`/api/seats/room/${roomId}`) as unknown as ApiEnvelope<SeatResponse[]>;
-    return envelope?.data ?? [];
+    const seats = envelope?.data ?? [];
+    return seats.map(s => ({
+      ...s,
+      isActive: s.seatStatus !== 'INACTIVE'
+    }));
   },
 
-  // POST /api/seats: tạo một ghế lẻ.
+  /** POST /api/seats – Tạo ghế đơn */
   createSeat: async (payload: CreateSeatPayload): Promise<SeatResponse> => {
     const envelope = await axiosInstance.post('/api/seats', payload) as unknown as ApiEnvelope<SeatResponse>;
-    return envelope.data;
+    const seat = envelope.data;
+    return {
+      ...seat,
+      isActive: seat?.seatStatus !== 'INACTIVE'
+    };
   },
 
-  // PUT /api/seats/{seatId}: cập nhật thông tin một ghế.
+  /** PUT /api/seats/{seatId} – Cập nhật ghế */
   updateSeat: async (seatId: string, payload: UpdateSeatPayload): Promise<SeatResponse> => {
-    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, { seatId, ...payload }) as unknown as ApiEnvelope<SeatResponse>;
-    return envelope.data;
+    const { isActive, ...rest } = payload;
+    const seatStatus = isActive !== undefined 
+      ? (isActive ? 'ACTIVE' : 'INACTIVE') 
+      : (payload.seatStatus || 'ACTIVE');
+
+    const envelope = await axiosInstance.put(`/api/seats/${seatId}`, { 
+      seatId, 
+      ...rest, 
+      seatStatus 
+    }) as unknown as ApiEnvelope<SeatResponse>;
+
+    const seat = envelope.data;
+    return {
+      ...seat,
+      isActive: seat?.seatStatus !== 'INACTIVE'
+    };
   },
 
-  // DELETE /api/seats/{seatId}: xóa một ghế khỏi phòng.
+  /** DELETE /api/seats/{seatId} – Xóa ghế */
   deleteSeat: async (seatId: string): Promise<void> => {
     await axiosInstance.delete(`/api/seats/${seatId}`);
   },
 
-  // GET /api/cinemas: lấy danh sách rạp để admin chọn rạp khi tạo phòng.
+  // ---------- Helpers ----------
+
+  /** GET /api/cinemas – Danh sách rạp chiếu */
   getCinemas: async (): Promise<CinemaResponse[]> => {
     const envelope = await axiosInstance.get('/api/cinemas') as unknown as ApiEnvelope<CinemaResponse[]>;
     return envelope?.data ?? [];

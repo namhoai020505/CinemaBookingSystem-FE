@@ -9,7 +9,6 @@ type ThemeMode = 'dark' | 'light';
 
 const THEME_STORAGE_KEY = 'g2c-theme';
 
-// Đọc theme ban đầu từ localStorage để giữ lựa chọn light/dark giữa các lần mở app.
 const getInitialTheme = (): ThemeMode => {
   if (typeof window === 'undefined') {
     return 'dark';
@@ -18,7 +17,6 @@ const getInitialTheme = (): ThemeMode => {
   return localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
 };
 
-// Header user chứa topbar login/logout, logo, chọn rạp, menu và nút đổi theme.
 export default function Header() {
   const navigate = useNavigate();
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme);
@@ -27,7 +25,6 @@ export default function Header() {
   const fullName = localStorage.getItem('fullName');
   const isLightMode = themeMode === 'light';
 
-  // Đồng bộ theme vào html/body để CSS global có thể đổi toàn bộ giao diện.
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
     document.documentElement.classList.toggle('light', isLightMode);
@@ -35,13 +32,11 @@ export default function Header() {
     localStorage.setItem(THEME_STORAGE_KEY, themeMode);
   }, [isLightMode, themeMode]);
 
-  // Gọi logout service rồi điều hướng về trang chủ.
   const handleLogout = async () => {
     await logout();
     navigate('/');
   };
 
-  // Đổi qua lại giữa light mode và dark mode.
   const handleToggleTheme = () => {
     setThemeMode((currentMode) => (currentMode === 'light' ? 'dark' : 'light'));
   };
@@ -50,7 +45,6 @@ export default function Header() {
   const dividerClass = isLightMode ? 'text-slate-400' : 'text-gray-600';
   const menuTextClass = isLightMode ? 'text-slate-800' : 'text-white';
 
-  // Nút theme dùng chung cho cả trạng thái đã đăng nhập và chưa đăng nhập.
   const themeToggle = (
     <button
       type="button"
@@ -70,7 +64,6 @@ export default function Header() {
 
   return (
     <header className="fixed left-0 top-0 z-50 w-full shadow-lg">
-      {/* Topbar hiển thị login/register hoặc lời chào + vé của tôi + logout. */}
       <div
         className={`g2c-topbar py-1.5 transition-colors ${
           isLightMode ? 'bg-[#E2E8F0] text-[#1E293B]' : 'bg-[#0F172A] text-gray-300'
@@ -116,7 +109,6 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Navbar chính gồm logo, chọn rạp và menu điều hướng. */}
       <div
         className={`border-b py-3 transition-colors ${
           isLightMode ? 'border-[#CBD5E1] bg-white' : 'border-[#474747] bg-[#1E293B]'

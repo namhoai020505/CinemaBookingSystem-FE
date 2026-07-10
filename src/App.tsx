@@ -1,26 +1,25 @@
-import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
 import AdminLayout from './layouts/admin/AdminLayout';
 import UserLayout from './layouts/user/UserLayout';
+import Dashboard from './pages/admin/Dashboard';
+import Home from './pages/user/Home';
+import Profile from './pages/user/Profile';
 import Login from './pages/auth/Login';
 import StaffSetPassword from './pages/auth/StaffSetPassword';
-import Dashboard from './pages/admin/Dashboard';
 import RequireAuth from './components/RequireAuth';
 import ManageMovie from './pages/admin/ManageMovie';
-import ManageRooms from './pages/admin/ManageRooms';
-import ManageSeatLayout from './pages/admin/ManageSeatLayout';
 import ManageShowtime from './pages/admin/ManageShowtime';
 import ManageStaff from './pages/admin/ManageStaff';
+import ManageRooms from './pages/admin/ManageRooms';
+import ManageSeatLayout from './pages/admin/ManageSeatLayout';
+import { useIdleTimeout } from './hooks/useIdleTimeout';
+import MovieShowtimes from './pages/user/MovieShowtimes';
+import SeatSelection from './pages/user/SeatSelection';
+import Checkout from './pages/user/Checkout';
 import ReviewModeration from './pages/admin/ReviewModeration';
 import BookingSuccess from './pages/user/BookingSuccess';
-import Checkout from './pages/user/Checkout';
-import Home from './pages/user/Home';
-import MovieShowtimes from './pages/user/MovieShowtimes';
 import MyBookings from './pages/user/MyBookings';
-import Profile from './pages/user/Profile';
-import SeatSelection from './pages/user/SeatSelection';
 
-// Nhóm role được truyền vào RequireAuth để khóa route theo quyền trong JWT.
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
 

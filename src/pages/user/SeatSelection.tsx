@@ -21,7 +21,6 @@ type ApiResponse<T> = {
   data?: T | null;
 };
 
-// Lấy HTTP status từ lỗi Axios mà không cần ép kiểu any.
 const getHttpStatus = (error: unknown) =>
   typeof error === "object" &&
     error !== null &&
@@ -78,6 +77,7 @@ type ShowtimeDetailResponse = {
   roomName: string;
   cinemaName: string;
   startTime: string;
+  roomId?: string;
 };
 
 type MovieDetailResponse = {
@@ -152,19 +152,6 @@ type SeatLockSession = {
   updatedAt: string;
 };
 
-type StoredPaymentSession = {
-  showtimeId: string;
-  userKey: string;
-  expiresAt?: string;
-  selectedSeatIds?: string[];
-  seatSignature?: string;
-  booking?: {
-    status?: string;
-    expiredAt?: string | null;
-  };
-};
-
-// Parse lockedUntil từ backend/localStorage về timestamp để tính thời gian giữ ghế.
 const parseLockTime = (value?: string | null) => {
   if (!value) {
     return 0;
@@ -178,11 +165,9 @@ const parseLockTime = (value?: string | null) => {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
-// Kiểm tra lock còn hiệu lực hay đã hết hạn.
 const isActiveLock = (lockedUntil?: string | null) =>
   parseLockTime(lockedUntil) > Date.now();
 
-// Map mã loại ghế backend sang type UI của FE.
 const getSeatType = (seatTypeId: string): SeatType => {
   if (seatTypeId === "ST02" || seatTypeId === "SEAT_TYPE_VIP") {
     return "VIP";
@@ -195,7 +180,6 @@ const getSeatType = (seatTypeId: string): SeatType => {
   return "NORMAL";
 };
 
-// Giá fallback nếu backend chưa trả price cho ghế.
 const getSeatPrice = (type: SeatType) => {
   if (type === "VIP") {
     return 100000;
@@ -208,20 +192,14 @@ const getSeatPrice = (type: SeatType) => {
   return 80000;
 };
 
-// Key localStorage tách theo user + showtime để mỗi tài khoản có lock session riêng.
 const getStorageKey = (showtimeId: string, userKey: string) =>
   `g2c-seat-locks:${userKey}:${showtimeId}`;
 
-const getPaymentStorageKey = (showtimeId: string, userKey: string) =>
-  `g2c-payment:${userKey}:${showtimeId}`;
-
-// Lấy định danh user từ JWT để phân biệt ghế user hiện tại đang giữ.
 const getUserKey = () => {
   const profile = getCurrentUserProfile();
   return profile?.userId || profile?.email || "anonymous";
 };
 
-// Đọc lock session và tự dọn các ghế đã hết hạn khỏi localStorage.
 const readLockSession = (
   showtimeId: string,
   userKey: string,
@@ -266,7 +244,6 @@ const readLockSession = (
   }
 };
 
-// Ghi lock session mới sau khi chọn/khóa/bỏ khóa ghế.
 const writeLockSession = (session: SeatLockSession) => {
   localStorage.setItem(
     getStorageKey(session.showtimeId, session.userKey),
@@ -277,16 +254,10 @@ const writeLockSession = (session: SeatLockSession) => {
   );
 };
 
-// Xóa toàn bộ lock session của user cho suất chiếu hiện tại.
 const removeLockSession = (showtimeId: string, userKey: string) => {
   localStorage.removeItem(getStorageKey(showtimeId, userKey));
 };
 
-const removePaymentSession = (showtimeId: string, userKey: string) => {
-  localStorage.removeItem(getPaymentStorageKey(showtimeId, userKey));
-};
-
-// Tính thời gian còn lại dựa trên lock hết hạn sớm nhất trong session.
 const getSessionRemainingSeconds = (session: SeatLockSession | null) => {
   if (!session) {
     return DEFAULT_LOCK_SECONDS;
@@ -311,74 +282,6 @@ const getSessionRemainingSeconds = (session: SeatLockSession | null) => {
   return Math.max(0, Math.ceil((earliestExpiry - Date.now()) / 1000));
 };
 
-// Doc payment pending cua user hien tai de khong render ghe PENDING_PAYMENT thanh ghe da ban.
-const readPendingPaymentSeatIds = (showtimeId: string, userKey: string) => {
-  const storageKey = getPaymentStorageKey(showtimeId, userKey);
-  const rawValue = localStorage.getItem(storageKey);
-
-  if (!rawValue) {
-    return new Set<string>();
-  }
-
-  try {
-    const session = JSON.parse(rawValue) as StoredPaymentSession;
-    const status = session.booking?.status?.toUpperCase() || "PENDING_PAYMENT";
-    const expiresAt = session.expiresAt || session.booking?.expiredAt;
-
-    if (
-      status === "PAID" ||
-      status === "CANCELLED" ||
-      parseLockTime(expiresAt) <= Date.now()
-    ) {
-      localStorage.removeItem(storageKey);
-      return new Set<string>();
-    }
-
-    return new Set(session.selectedSeatIds || []);
-  } catch {
-    localStorage.removeItem(storageKey);
-    return new Set<string>();
-  }
-};
-
-const getVisualSeatStatus = (
-  seat: SeatMapItemResponse,
-  fallbackStatus: SeatStatus,
-  pendingPaymentSeatIds: Set<string>,
-): SeatStatus => {
-  if (
-    pendingPaymentSeatIds.has(seat.seatId) ||
-    pendingPaymentSeatIds.has(seat.showtimeSeatId)
-  ) {
-    return "HOLDING";
-  }
-
-  const backendStatus = seat.seatStatus?.toUpperCase();
-  if (
-    backendStatus === "LOCKED" ||
-    backendStatus === "HELD" ||
-    backendStatus === "HOLDING" ||
-    backendStatus === "PENDING_PAYMENT"
-  ) {
-    return "HOLDING";
-  }
-
-  if (
-    backendStatus === "BOOKED" ||
-    backendStatus === "SOLD" ||
-    backendStatus === "PAID"
-  ) {
-    return "BOOKED";
-  }
-
-  if (backendStatus === "AVAILABLE") {
-    return "AVAILABLE";
-  }
-
-  return fallbackStatus;
-};
-
-// Chuyển SeatItem đang chọn sang dạng lưu localStorage.
 const toStoredLockedSeat = (
   seat: SeatItem,
   lockedUntil: string,
@@ -393,13 +296,11 @@ const toStoredLockedSeat = (
   lockedUntil,
 });
 
-// Sắp xếp hàng ghế theo thứ tự tự nhiên A, B, C hoặc số nếu có.
 const sortSeatRows = (rows: string[]) =>
   [...rows].sort((left, right) =>
     left.localeCompare(right, undefined, { numeric: true }),
   );
 
-// Suy luận loại ghế theo vị trí hàng khi backend thiếu loại ghế chi tiết.
 const buildSeatRowTypeMap = (rows: string[]): Record<string, SeatType> => {
   const orderedRows = sortSeatRows(rows);
   const lastRowIndex = orderedRows.length - 1;
@@ -419,15 +320,12 @@ const buildSeatRowTypeMap = (rows: string[]): Record<string, SeatType> => {
   }, {});
 };
 
-// Map từng ghế từ API sang model render và nhận diện ghế do chính user giữ.
 const mapSeat = (
   item: SeatMapItemResponse,
   status: SeatStatus,
   ownedLocks: Record<string, StoredLockedSeat>,
-  rowTypeMap: Record<string, SeatType>,
 ): SeatItem => {
-  const backendType = getSeatType(item.seatTypeId);
-  const type = rowTypeMap[item.rowLabel] || backendType;
+  const type = getSeatType(item.seatTypeId);
   const ownedLock = ownedLocks[item.seatId];
   const isLockedByMe =
     status === "HOLDING" && ownedLock && isActiveLock(ownedLock.lockedUntil);
@@ -445,7 +343,6 @@ const mapSeat = (
   };
 };
 
-// Format giây thành mm:ss cho bộ đếm giữ ghế.
 const formatTimer = (seconds: number) => {
   const safeSeconds = Math.max(0, seconds);
   const mins = Math.floor(safeSeconds / 60);
@@ -455,11 +352,9 @@ const formatTimer = (seconds: number) => {
     .padStart(2, "0")}`;
 };
 
-// Chỉ ghế trống hoặc ghế user đang giữ mới được click chọn/bỏ chọn.
 const isSelectableSeat = (seat: SeatItem) =>
   seat.status === "AVAILABLE" || seat.status === "LOCKED_BY_ME";
 
-// Format giá ngắn trong legend ghế, ví dụ 80k.
 const formatCompactPrice = (value?: number | null) => {
   if (!value) {
     return "";
@@ -468,11 +363,9 @@ const formatCompactPrice = (value?: number | null) => {
   return ` (${Math.round(value / 1000)}k)`;
 };
 
-// Format tiền theo chuẩn vi-VN.
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("vi-VN").format(value) + "đ";
 
-// Format thời gian chiếu để hiển thị ở sidebar thông tin phim.
 const formatDateTime = (value?: string | null) => {
   if (!value) {
     return "Đang cập nhật";
@@ -497,7 +390,8 @@ const formatDateTime = (value?: string | null) => {
     });
 };
 
-// Label tiếng Việt cho từng loại ghế.
+
+
 const getSeatTypeLabel = (type: SeatType) => {
   if (type === "VIP") {
     return "Ghế VIP";
@@ -510,11 +404,9 @@ const getSeatTypeLabel = (type: SeatType) => {
   return "Ghế thường";
 };
 
-// Ưu tiên seatCode từ backend, fallback về row + column.
 const getSeatDisplayName = (seat: SeatItem) =>
   seat.seatCode || `${seat.row}${seat.column}`;
 
-// Trang chọn ghế: tải sơ đồ ghế, giữ ghế tạm thời và chuyển sang checkout.
 export default function SeatSelection() {
   const { showtimeId = "" } = useParams();
   const navigate = useNavigate();
@@ -543,8 +435,25 @@ export default function SeatSelection() {
   const [unlockingSeatId, setUnlockingSeatId] = useState<string | null>(null);
   const [displayDetails, setDisplayDetails] =
     useState<ShowtimeDisplayDetails | null>(null);
+  const [roomId, setRoomId] = useState<string>("");
+  const [aisleCols, setAisleCols] = useState<number[]>([]);
 
-  // Đồng bộ danh sách ghế đang chọn vào lock session đã có.
+  // Tải cấu hình lối đi khi roomId thay đổi
+  useEffect(() => {
+    if (roomId) {
+      const saved = localStorage.getItem(`aisles-${roomId}`);
+      if (saved) {
+        try {
+          setAisleCols(JSON.parse(saved));
+        } catch (e) {
+          setAisleCols([]);
+        }
+      } else {
+        setAisleCols([]);
+      }
+    }
+  }, [roomId]);
+
   const persistSelectedLockedSeats = useCallback(
     (nextSelectedSeats: SeatItem[]) => {
       const session = readLockSession(showtimeId, userKey);
@@ -565,12 +474,10 @@ export default function SeatSelection() {
     [showtimeId, userKey],
   );
 
-  // Luôn đưa user lên đầu trang khi vào màn chọn ghế.
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  // Tải thông tin phim/suất chiếu phụ trợ để sidebar không bị "Đang cập nhật".
   useEffect(() => {
     let isMounted = true;
 
@@ -594,6 +501,7 @@ export default function SeatSelection() {
         }
 
         const showtime = showtimeResponse.data;
+        setRoomId(showtime.roomId || "");
         let movie: MovieDetailResponse | null = null;
 
         if (showtime.movieId) {
@@ -642,7 +550,6 @@ export default function SeatSelection() {
     };
   }, [showtimeId]);
 
-  // Tải sơ đồ ghế mới nhất, merge với lock session local để biết ghế nào do chính user giữ.
   const refreshSeatMap = useCallback(async () => {
     if (!showtimeId) {
       return;
@@ -661,7 +568,6 @@ export default function SeatSelection() {
       setSeatMapError("");
       const lockSession = readLockSession(showtimeId, userKey);
       const ownedLocks = lockSession?.lockedSeats || {};
-      const pendingPaymentSeatIds = readPendingPaymentSeatIds(showtimeId, userKey);
       const response = (await api.get(
         `/api/seats/showtimes/${showtimeId}/map`,
       )) as unknown as ApiResponse<SeatMapResponse>;
@@ -674,36 +580,33 @@ export default function SeatSelection() {
       const availableSeats = rawData.availableSeats || [];
       const lockedSeats = rawData.lockedSeats || [];
       const soldSeats = rawData.soldSeats || [];
-      const allSeats = [...availableSeats, ...lockedSeats, ...soldSeats];
-      const rowTypeMap = buildSeatRowTypeMap(
-        Array.from(new Set(allSeats.map((seat) => seat.rowLabel))),
-      );
       const mappedSeats = [
         ...availableSeats.map((seat) =>
-          mapSeat(
-            seat,
-            getVisualSeatStatus(seat, "AVAILABLE", pendingPaymentSeatIds),
-            ownedLocks,
-            rowTypeMap,
-          ),
+          mapSeat(seat, "AVAILABLE", ownedLocks),
         ),
         ...lockedSeats.map((seat) =>
-          mapSeat(
-            seat,
-            getVisualSeatStatus(seat, "HOLDING", pendingPaymentSeatIds),
-            ownedLocks,
-            rowTypeMap,
-          ),
+          mapSeat(seat, "HOLDING", ownedLocks),
         ),
         ...soldSeats.map((seat) =>
-          mapSeat(
-            seat,
-            getVisualSeatStatus(seat, "BOOKED", pendingPaymentSeatIds),
-            ownedLocks,
-            rowTypeMap,
-          ),
+          mapSeat(seat, "BOOKED", ownedLocks),
         ),
       ];
+
+      // Tự động làm mịn số thứ tự ghế liên tục bỏ qua lối đi dọc và ô trống
+      const uniqueRows = Array.from(new Set(mappedSeats.map(s => s.row)));
+      uniqueRows.forEach(row => {
+        // Lấy tất cả ghế thuộc hàng này, xếp cột tăng dần
+        const seatsInRow = mappedSeats.filter(s => s.row === row).sort((a, b) => a.column - b.column);
+        let displayNum = 1;
+        seatsInRow.forEach(seat => {
+          const isSweetbox = seat.type === "SWEETBOX";
+          seat.seatCode = isSweetbox 
+            ? `${row}${displayNum}-${displayNum + 1}` 
+            : `${row}${displayNum}`;
+          displayNum += isSweetbox ? 2 : 1;
+        });
+      });
+
       const ownedVisibleSeatIds = new Set(
         mappedSeats
           .filter((seat) => seat.status === "LOCKED_BY_ME")
@@ -777,7 +680,6 @@ export default function SeatSelection() {
     location.pathname,
   ]);
 
-  // Gọi refreshSeatMap sau khi component mount.
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       void refreshSeatMap();
@@ -786,7 +688,6 @@ export default function SeatSelection() {
     return () => window.clearTimeout(timeoutId);
   }, [refreshSeatMap]);
 
-  // Bộ đếm giữ ghế chạy theo lockedUntil thực tế nên refresh trang không reset thời gian.
   useEffect(() => {
     const timer = window.setInterval(() => {
       const session = readLockSession(showtimeId, userKey);
@@ -822,7 +723,6 @@ export default function SeatSelection() {
     return () => window.clearInterval(timer);
   }, [refreshSeatMap, showtimeId, userKey]);
 
-  // Chặn lựa chọn tạo ra một ghế trống kẹt giữa hai ghế đã chọn/đã bán.
   const validateSeatGaps = (currentSelection: SeatItem[]) => {
     if (!seatMap) {
       return true;
@@ -877,7 +777,6 @@ export default function SeatSelection() {
     return true;
   };
 
-  // Gọi API unlock để user có thể bỏ ghế cũ rồi chọn ghế khác.
   const releaseLockedSeat = async (seat: SeatItem) => {
     setUnlockingSeatId(seat.seatId);
 
@@ -938,7 +837,6 @@ export default function SeatSelection() {
     }
   };
 
-  // Xử lý click ghế: chọn mới, bỏ chọn, hoặc unlock nếu ghế đang do user giữ.
   const handleSelectSeat = async (seat: SeatItem) => {
     if (unlockingSeatId || !isSelectableSeat(seat)) {
       return;
@@ -967,7 +865,6 @@ export default function SeatSelection() {
   const totalAmount = selectedSeats.reduce((sum, seat) => sum + seat.price, 0);
   const selectedSeatCodes = selectedSeats.map(getSeatDisplayName);
 
-  // Lock toàn bộ ghế đã chọn rồi chuyển sang trang checkout/F&B.
   const handleProceed = async () => {
     if (selectedSeats.length === 0) {
       alert("Vui lòng chọn ít nhất một ghế.");
@@ -1051,7 +948,6 @@ export default function SeatSelection() {
       }));
 
       setSelectedSeats(nextSelectedSeats);
-      removePaymentSession(showtimeId, userKey);
       navigate(`/booking/checkout/${showtimeId}`, {
         state: {
           selectedSeats: nextSelectedSeats,
@@ -1067,7 +963,6 @@ export default function SeatSelection() {
     }
   };
 
-  // Tính giá thấp nhất của từng loại ghế để hiển thị trong legend.
   const seatTypePrices = useMemo(() => {
     const prices: Partial<Record<SeatType, number>> = {};
 
@@ -1079,6 +974,11 @@ export default function SeatSelection() {
     });
 
     return prices;
+  }, [seatMap]);
+
+  const blueprintMaxCol = useMemo(() => {
+    if (!seatMap?.seats || seatMap.seats.length === 0) return 12;
+    return Math.max(...seatMap.seats.map((s) => s.column), 1);
   }, [seatMap]);
 
   const rowsStructure = seatMap
@@ -1106,7 +1006,6 @@ export default function SeatSelection() {
   const displayStartTime =
     seatMap?.startTime || routeStartTime || displayDetails?.startTime;
 
-  // Chọn class màu cho ghế theo trạng thái và loại ghế.
   const getSeatStyles = (seat: SeatItem) => {
     const isChoosing = selectedSeats.some((item) => item.seatId === seat.seatId);
 
@@ -1128,15 +1027,14 @@ export default function SeatSelection() {
 
     switch (seat.type) {
       case "VIP":
-        return "border-slate-300 bg-slate-100/15 text-slate-100 hover:border-sky-300 hover:bg-sky-500 hover:text-white";
+        return "border-blue-500 bg-blue-500/15 text-blue-300 hover:bg-blue-600 hover:text-white hover:border-blue-600 hover:shadow-[0_0_12px_rgba(59,130,246,0.3)]";
       case "SWEETBOX":
-        return "border-slate-300 bg-slate-100/15 text-slate-100 hover:border-sky-300 hover:bg-sky-500 hover:text-white";
+        return "border-pink-500 bg-pink-500/15 text-pink-300 hover:bg-pink-600 hover:text-white hover:border-pink-600 hover:shadow-[0_0_12px_rgba(236,72,153,0.3)]";
       default:
-        return "border-slate-300 bg-slate-100/10 text-slate-100 hover:bg-slate-100 hover:text-slate-900";
+        return "border-gray-500 bg-gray-500/10 text-gray-300 hover:bg-gray-200 hover:text-gray-900 hover:border-gray-200";
     }
   };
 
-  // Render icon ghế đơn/ghế đôi theo loại ghế.
   const renderSeatIcon = (seat: SeatItem) => {
     if (seat.type === "SWEETBOX") {
       return <FaCouch className="h-5 w-10 sm:h-6 sm:w-12" />;
@@ -1149,7 +1047,6 @@ export default function SeatSelection() {
     return <FaChair className="h-4 w-4 sm:h-5 sm:w-5" />;
   };
 
-  // Quay lại trang chủ từ màn chọn ghế.
   const handleBack = () => {
     navigate("/");
   };
@@ -1238,18 +1135,70 @@ export default function SeatSelection() {
                 <div className="mx-auto flex min-w-max flex-col items-center gap-2 lg:min-w-0">
                   {rowsStructure.map((row) => {
                     const seatsInRow = seatMap.seats
-                      .filter((seat) => seat.row === row)
-                      .sort((left, right) => left.column - right.column);
+                      .filter((seat) => seat.row === row);
 
-                    const filteredSeatsInRow: SeatItem[] = [];
                     const skipCols = new Set<number>();
-                    for (const seat of seatsInRow) {
-                      if (skipCols.has(seat.column)) {
+                    const renderedCols: React.ReactNode[] = [];
+
+                    for (let c = 1; c <= blueprintMaxCol; c++) {
+                      if (skipCols.has(c)) continue;
+
+                      const isAisle = aisleCols.includes(c);
+                      if (isAisle) {
+                        renderedCols.push(
+                          <div
+                            key={`aisle-${row}-${c}`}
+                            className="flex-shrink-0 bg-transparent h-8 sm:h-9 w-[14px] sm:w-[16px] xl:w-[18px]"
+                          />
+                        );
                         continue;
                       }
-                      filteredSeatsInRow.push(seat);
-                      if (seat.type === "SWEETBOX") {
-                        skipCols.add(seat.column + 1);
+
+                      const seat = seatsInRow.find((s) => s.column === c);
+                      if (seat) {
+                        if (seat.type === "SWEETBOX") {
+                          skipCols.add(c + 1);
+                        }
+
+                        const disabled = unlockingSeatId === seat.seatId || !isSelectableSeat(seat);
+                        const isSweetbox = seat.type === "SWEETBOX";
+                        const displayLabel = seat.seatCode.replace(row, ''); // Lấy riêng phần số hiển thị liên tục
+
+                        renderedCols.push(
+                          <button
+                            type="button"
+                            key={seat.seatId}
+                            disabled={disabled}
+                            title={`${getSeatDisplayName(seat)} - ${getSeatTypeLabel(
+                              seat.type,
+                            )} - ${formatCurrency(seat.price)}`}
+                            onClick={() => {
+                              void handleSelectSeat(seat);
+                            }}
+                            className={`group relative flex h-8 sm:h-9 shrink-0 items-center justify-center rounded-md border transition-all ${isSweetbox
+                                ? "w-[70px] sm:w-[78px] xl:w-[86px]"
+                                : "w-[32px] sm:w-[36px] xl:w-[40px]"
+                              } ${getSeatStyles(seat)}`}
+                          >
+                            <div className="flex items-center justify-center gap-1 text-[10px] font-bold">
+                              {renderSeatIcon(seat)}
+                              <span className="text-[9px] font-extrabold text-white/90">
+                                {displayLabel}
+                              </span>
+                            </div>
+                            <span className="pointer-events-none absolute -bottom-5 left-1/2 hidden -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-bold text-white group-hover:block z-10">
+                              {getSeatDisplayName(seat)}
+                            </span>
+                          </button>
+                        );
+                      } else {
+                        // Vẽ ô trống trong suốt thay vì ô ảo nét đứt của admin
+                        renderedCols.push(
+                          <div
+                            key={`empty-${row}-${c}`}
+                            className="flex-shrink-0 bg-transparent h-8 sm:h-9 w-[32px] sm:w-[36px] xl:w-[40px]"
+                          />
+                        );
                       }
                     }
 
@@ -1258,34 +1207,11 @@ export default function SeatSelection() {
                         <div className="w-6 text-center text-xs font-black text-slate-500">
                           {row}
                         </div>
-                        <div className="flex items-center justify-center gap-1.5 xl:gap-2">
-                          {filteredSeatsInRow.map((seat) => {
-                            const disabled =
-                              unlockingSeatId === seat.seatId || !isSelectableSeat(seat);
-
-                            return (
-                              <button
-                                type="button"
-                                key={seat.seatId}
-                                disabled={disabled}
-                                title={`${getSeatDisplayName(seat)} - ${getSeatTypeLabel(
-                                  seat.type,
-                                )} - ${formatCurrency(seat.price)}`}
-                                onClick={() => {
-                                  void handleSelectSeat(seat);
-                                }}
-                                className={`group relative flex h-8 shrink-0 items-center justify-center rounded-md border transition-all sm:h-9 ${seat.type === "SWEETBOX"
-                                  ? "w-14 sm:w-16 xl:w-[70px]"
-                                  : "w-8 sm:w-9"
-                                  } ${getSeatStyles(seat)}`}
-                              >
-                                {renderSeatIcon(seat)}
-                                <span className="pointer-events-none absolute -bottom-5 left-1/2 hidden -translate-x-1/2 rounded bg-black/80 px-1.5 py-0.5 text-[9px] font-bold text-white group-hover:block">
-                                  {getSeatDisplayName(seat)}
-                                </span>
-                              </button>
-                            );
-                          })}
+                        <div 
+                          className="flex items-center justify-center"
+                          style={{ gap: `${blueprintMaxCol > 24 ? 2 : blueprintMaxCol > 18 ? 4 : 6}px` }}
+                        >
+                          {renderedCols}
                         </div>
                         <div className="w-6 text-center text-xs font-black text-slate-500">
                           {row}
@@ -1357,8 +1283,8 @@ export default function SeatSelection() {
                 disabled={selectedSeats.length === 0 || submitting}
                 onClick={handleProceed}
                 className={`h-12 self-center rounded-xl text-xs font-black uppercase tracking-wider shadow-md transition-all ${selectedSeats.length > 0 && !submitting
-                  ? "bg-[#FFD166] text-black hover:-translate-y-0.5 hover:bg-[#FFE7A3]"
-                  : "cursor-not-allowed bg-slate-800 text-slate-500"
+                    ? "bg-[#FFD166] text-black hover:-translate-y-0.5 hover:bg-[#FFE7A3]"
+                    : "cursor-not-allowed bg-slate-800 text-slate-500"
                   }`}
               >
                 {submitting ? "Đang giữ..." : "Tiếp tục"}

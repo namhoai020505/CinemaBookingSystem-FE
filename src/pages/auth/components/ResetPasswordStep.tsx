@@ -6,7 +6,6 @@ type ResetPasswordStepProps = {
   controller: LoginController;
 };
 
-// Bước đặt lại mật khẩu: xác nhận OTP reset và nhập mật khẩu mới.
 export const ResetPasswordStep = ({ controller }: ResetPasswordStepProps) => (
   <>
     <div className="rounded-md border border-[#FFD166]/40 bg-[#FFD166]/10 px-4 py-3 text-sm text-[#FFEBA4]">
@@ -44,7 +43,6 @@ export const ResetPasswordStep = ({ controller }: ResetPasswordStepProps) => (
       backLabel="Đổi email"
       onResend={controller.handleResendPasswordResetOtp}
       onBack={() => {
-        // Quay lại bước nhập email, đồng thời xóa OTP/mật khẩu cũ khỏi form.
         controller.setPasswordResetStep('request');
         controller.resetOtpState();
         controller.setNewPassword('');
