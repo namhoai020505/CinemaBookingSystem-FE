@@ -69,7 +69,7 @@ export default function ManageSeatLayout() {
   // Tự động tính toán kích thước lưới Blueprint mặc định dựa trên số ghế hiện có khi đổi phòng
   useEffect(() => {
     if (seats.length > 0 && lastLoadedRoomIdRef.current !== roomId) {
-      lastLoadedRoomIdRef.current = roomId;
+      lastLoadedRoomIdRef.current = roomId ?? null;
       let maxRCode = 74; // 'J'
       let maxC = 12;
       for (const seat of seats) {
@@ -96,7 +96,7 @@ export default function ManageSeatLayout() {
       setSelectedSeatIds(new Set());
       setSelectedVirtualSlots(new Set());
     } else if (seats.length === 0 && lastLoadedRoomIdRef.current !== roomId) {
-      lastLoadedRoomIdRef.current = roomId;
+      lastLoadedRoomIdRef.current = roomId ?? null;
       setBlueprintMaxRow('J');
       setBlueprintMaxCol(12);
 
@@ -238,7 +238,6 @@ export default function ManageSeatLayout() {
     return sortedRows;
   })();
 
-  const maxCols = seatGrid.reduce((max, [, rowSeats]) => Math.max(max, rowSeats.length), 0);
   const visibleSeats = seatGrid.flatMap(([, rowSeats]) => rowSeats);
 
   // ──────────────────────────────────────────
@@ -1222,7 +1221,7 @@ export default function ManageSeatLayout() {
   // (cả hai đều gọi soft-delete API — giữ 1 hàm tránh nhầm lẫn)
 
   // ──────────────────────────────────────────
-  void handleBatchDelete;
+  void handleBatchReactivate;
 
   // Stats
   // ──────────────────────────────────────────

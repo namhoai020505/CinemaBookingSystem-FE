@@ -301,25 +301,6 @@ const sortSeatRows = (rows: string[]) =>
     left.localeCompare(right, undefined, { numeric: true }),
   );
 
-const buildSeatRowTypeMap = (rows: string[]): Record<string, SeatType> => {
-  const orderedRows = sortSeatRows(rows);
-  const lastRowIndex = orderedRows.length - 1;
-  const frontNormalRowCount =
-    orderedRows.length >= 7
-      ? 3
-      : Math.min(2, Math.max(1, orderedRows.length - 2));
-
-  return orderedRows.reduce<Record<string, SeatType>>((types, row, index) => {
-    if (index === lastRowIndex) {
-      types[row] = "SWEETBOX";
-      return types;
-    }
-
-    types[row] = index < frontNormalRowCount ? "NORMAL" : "VIP";
-    return types;
-  }, {});
-};
-
 const mapSeat = (
   item: SeatMapItemResponse,
   status: SeatStatus,

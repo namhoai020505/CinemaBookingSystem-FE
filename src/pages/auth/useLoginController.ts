@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
-import { getRoleFromAccessToken, isAdminRole } from '../../lib/auth';
+import { getPostLoginRedirect, getRoleFromAccessToken } from '../../lib/auth';
 import type { AuthMode, AuthResponseData, PasswordResetStep, RegisterResponseData, RegisterStep } from './authTypes';
 import {
   createCaptcha,
@@ -73,11 +73,22 @@ export const useLoginController = () => {
   // Ví dụ: click "Đăng ký" từ header → {mode:'register'}, click "Đăng nhập" → {mode:'login'}
   useEffect(() => {
     const state = location.state as { mode?: string } | null;
-    if (state?.mode === 'register') {
-      setAuthMode('register');
-    } else if (state?.mode === 'login') {
-      setAuthMode('login');
+    const nextMode = state?.mode === 'register' || state?.mode === 'login' ? state.mode : null;
+
+    if (!nextMode) {
+      return;
     }
+
+    let isMounted = true;
+    queueMicrotask(() => {
+      if (isMounted) {
+        setAuthMode(nextMode);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
     // Nếu không có state, giữ nguyên mode hiện tại (user định tần có thể tự switch tab)
   }, [location.state]);
 
@@ -164,7 +175,7 @@ export const useLoginController = () => {
         localStorage.setItem('refreshToken', authData.refreshToken);
       }
 
-      navigate(isAdminRole(getRoleFromAccessToken(token)) ? '/admin/dashboard' : '/');
+      navigate(getPostLoginRedirect(getRoleFromAccessToken(token)));
     } catch (err: unknown) {
       const apiError = parseApiError(err);
 
@@ -207,7 +218,7 @@ export const useLoginController = () => {
         localStorage.setItem('refreshToken', authData.refreshToken);
       }
 
-      navigate(isAdminRole(getRoleFromAccessToken(token)) ? '/admin/dashboard' : '/');
+      navigate(getPostLoginRedirect(getRoleFromAccessToken(token)));
     } catch (err: unknown) {
       setError(parseApiError(err).message);
     } finally {

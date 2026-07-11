@@ -1,7 +1,13 @@
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
 import AdminLayout from './layouts/admin/AdminLayout';
+import ManagerLayout from './layouts/manager/ManagerLayout';
 import UserLayout from './layouts/user/UserLayout';
 import Dashboard from './pages/admin/Dashboard';
+import ManagerDashboardPage from './pages/manager/ManagerDashboardPage';
+import ManagerShowtimesPage from './pages/manager/ManagerShowtimesPage';
+import ManagerRefundsPage from './pages/manager/ManagerRefundsPage';
+import TicketScannerPage from './pages/manager/TicketScannerPage';
+import MyCinemaPage from './pages/manager/MyCinemaPage';
 import Home from './pages/user/Home';
 import Profile from './pages/user/Profile';
 import Login from './pages/auth/Login';
@@ -22,6 +28,7 @@ import MyBookings from './pages/user/MyBookings';
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
+const managerRoles = ['manager', 'staff'];
 
 /**
  * RootLayout: wrapper ngoài cùng, luôn render bên trong RouterProvider
@@ -82,6 +89,24 @@ const router = createBrowserRouter([
               { path: 'rooms', element: <ManageRooms /> },
               { path: 'rooms/:roomId/seats', element: <ManageSeatLayout /> },
               { path: 'reviews', element: <ReviewModeration /> },
+            ],
+          },
+        ],
+      },
+      {
+        // Manager / Staff layout
+        element: <RequireAuth allowedRoles={managerRoles} />,
+        children: [
+          {
+            path: '/manager',
+            element: <ManagerLayout />,
+            children: [
+              { index: true, element: <Navigate to="dashboard" replace /> },
+              { path: 'dashboard', element: <ManagerDashboardPage /> },
+              { path: 'showtimes', element: <ManagerShowtimesPage /> },
+              { path: 'refunds', element: <ManagerRefundsPage /> },
+              { path: 'ticket-scanner', element: <TicketScannerPage /> },
+              { path: 'my-cinema', element: <MyCinemaPage /> },
             ],
           },
         ],

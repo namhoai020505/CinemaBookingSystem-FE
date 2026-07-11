@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import Sidebar from './Sidebar';
-import Topbar from './Topbar';
+import ManagerSidebar from './ManagerSidebar';
+import ManagerTopbar from './ManagerTopbar';
 
-export type ThemeMode = 'dark' | 'light';
+export type ManagerThemeMode = 'dark' | 'light';
 
-export type AdminOutletContext = {
-  themeMode: ThemeMode;
+export type ManagerOutletContext = {
+  themeMode: ManagerThemeMode;
   isLightMode: boolean;
 };
 
-const THEME_STORAGE_KEY = 'g2c-theme';
+const THEME_STORAGE_KEY = 'g2c-manager-theme';
 
-const getInitialTheme = (): ThemeMode => {
+const getInitialTheme = (): ManagerThemeMode => {
   if (typeof window === 'undefined') {
     return 'dark';
   }
@@ -20,17 +20,15 @@ const getInitialTheme = (): ThemeMode => {
   return localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
 };
 
-const AdminLayout = () => {
+const ManagerLayout = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme);
+  const [themeMode, setThemeMode] = useState<ManagerThemeMode>(getInitialTheme);
   const isLightMode = themeMode === 'light';
 
   useEffect(() => {
-    document.documentElement.dataset.theme = themeMode;
-    document.documentElement.classList.toggle('light', isLightMode);
-    document.body.classList.toggle('g2c-light-mode', isLightMode);
+    document.documentElement.dataset.managerTheme = themeMode;
     localStorage.setItem(THEME_STORAGE_KEY, themeMode);
-  }, [isLightMode, themeMode]);
+  }, [themeMode]);
 
   const toggleSidebar = () => setSidebarCollapsed((current) => !current);
   const toggleTheme = () => {
@@ -40,25 +38,25 @@ const AdminLayout = () => {
   return (
     <div
       className={`flex h-screen overflow-hidden font-['Urbanist'] transition-colors duration-300 ${
-        isLightMode ? 'bg-slate-100 text-slate-950' : 'bg-[#070B14] text-white'
+        isLightMode ? 'bg-slate-100 text-slate-950' : 'bg-[#07111E] text-white'
       }`}
     >
-      <Sidebar collapsed={sidebarCollapsed} isLightMode={isLightMode} />
+      <ManagerSidebar collapsed={sidebarCollapsed} isLightMode={isLightMode} />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <Topbar
+        <ManagerTopbar
           sidebarCollapsed={sidebarCollapsed}
           isLightMode={isLightMode}
-          onToggle={toggleSidebar}
+          onToggleSidebar={toggleSidebar}
           onToggleTheme={toggleTheme}
         />
 
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <Outlet context={{ themeMode, isLightMode } satisfies AdminOutletContext} />
+          <Outlet context={{ themeMode, isLightMode } satisfies ManagerOutletContext} />
         </main>
       </div>
     </div>
   );
 };
 
-export default AdminLayout;
+export default ManagerLayout;
