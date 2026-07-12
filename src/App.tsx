@@ -108,6 +108,7 @@ const router = createBrowserRouter([
               { path: 'showtimes', element: <ManagerShowtimesPage /> },
               { path: 'refunds', element: <ManagerRefundsPage /> },
               { path: 'ticket-scanner', element: <TicketScannerPage /> },
+              { path: 'vouchers', element: <ManageVouchers /> },
               { path: 'my-cinema', element: <MyCinemaPage /> },
             ],
           },

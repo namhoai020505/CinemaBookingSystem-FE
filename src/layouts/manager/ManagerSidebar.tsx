@@ -7,6 +7,7 @@ import {
   FaDoorOpen,
   FaMoneyCheckAlt,
   FaShieldAlt,
+  FaTicketAlt,
 } from 'react-icons/fa';
 
 type ManagerSidebarProps = {
@@ -38,6 +39,12 @@ const navItems = [
     label: 'Ticket Scanner',
     description: 'Soát vé tại rạp',
     icon: <FaBarcode />,
+  },
+  {
+    to: '/manager/vouchers',
+    label: 'Vouchers',
+    description: 'Quản lý mã giảm giá của rạp',
+    icon: <FaTicketAlt />,
   },
   {
     to: '/manager/my-cinema',
