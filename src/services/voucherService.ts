@@ -1,50 +1,59 @@
 import api from '../lib/api';
 
-export type DiscountType = 'Percentage' | 'FixedAmount';
+export type DiscountType = 'PERCENT' | 'AMOUNT';
+export type VoucherStatus = 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
 
 export interface Voucher {
   voucherId: string;
-  code: string;
+  voucherCode: string;
+  title?: string;
+  description?: string;
+  imageUrl?: string;
   discountType: DiscountType;
   discountValue: number;
-  minOrderAmount: number;
-  maxDiscountAmount: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number;
+  usageLimit: number;
+  perCustomerLimit?: number;
+  usedCount: number;
   startDate: string;
   endDate: string;
-  usageLimit: number;
-  usedCount: number;
-  isActive: boolean;
+  voucherStatus: VoucherStatus;
 }
 
 export interface CreateVoucherPayload {
-  code: string;
+  voucherCode: string;
+  title?: string;
+  description?: string;
+  imageUrl?: string;
   discountType: DiscountType;
   discountValue: number;
-  minOrderAmount: number;
-  maxDiscountAmount: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number;
+  usageLimit: number;
+  perCustomerLimit?: number;
   startDate: string;
   endDate: string;
-  usageLimit: number;
-  isActive: boolean;
 }
 
 export interface UpdateVoucherPayload {
-  code: string;
-  discountType: DiscountType;
-  discountValue: number;
-  minOrderAmount: number;
-  maxDiscountAmount: number;
+  title?: string;
+  description?: string;
+  imageUrl?: string;
+  voucherStatus: VoucherStatus;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number;
+  usageLimit: number;
+  perCustomerLimit?: number;
   startDate: string;
   endDate: string;
-  usageLimit: number;
-  isActive: boolean;
 }
 
 export interface ValidateVoucherResponse {
   isValid: boolean;
   discountAmount: number;
   message?: string;
-  voucher?: Voucher;
+  errorCode?: string;
 }
 
 export interface ApiResponse<T = unknown> {
@@ -57,8 +66,10 @@ export interface ApiResponse<T = unknown> {
 
 export const voucherService = {
   // Admin APIs
-  getAllAdminVouchers: async () =>
-    api.get<unknown, ApiResponse<Voucher[]>>('/api/admin/vouchers'),
+  getAllAdminVouchers: async (searchCode?: string, status?: string) =>
+    api.get<unknown, ApiResponse<Voucher[]>>('/api/admin/vouchers', {
+      params: { searchCode, status }
+    }),
 
   getAdminVoucherById: async (voucherId: string) =>
     api.get<unknown, ApiResponse<Voucher>>(`/api/admin/vouchers/${voucherId}`),
@@ -76,8 +87,8 @@ export const voucherService = {
   getActiveVouchers: async () =>
     api.get<unknown, ApiResponse<Voucher[]>>('/api/vouchers'),
 
-  validateVoucher: async (code: string, orderAmount: number) =>
+  validateVoucher: async (code: string, bookingAmount: number) =>
     api.get<unknown, ApiResponse<ValidateVoucherResponse>>(`/api/vouchers/validate`, {
-      params: { code, orderAmount },
+      params: { code, bookingAmount },
     }),
 };

@@ -463,7 +463,7 @@ export default function Checkout() {
       if (response && response.success && response.data) {
         const validateData = response.data;
         if (validateData.isValid) {
-          setAppliedVoucher(validateData.voucher || { code: codeStr.trim().toUpperCase() } as any);
+          setAppliedVoucher({ voucherCode: codeStr.trim().toUpperCase() } as any);
           setVoucherDiscount(validateData.discountAmount);
           setVoucherError("");
         } else {
@@ -512,7 +512,7 @@ export default function Checkout() {
   // Re-validate when amount changes
   useEffect(() => {
     if (appliedVoucher) {
-      handleApplyVoucher(appliedVoucher.code);
+      handleApplyVoucher(appliedVoucher.voucherCode);
     }
   }, [estimatedTotalAmount, handleApplyVoucher]);
 
@@ -923,7 +923,7 @@ export default function Checkout() {
       const checkoutResponse = await bookingService.checkout({
         showtimeId,
         showtimeSeatIds,
-        voucherCode: appliedVoucher?.code || undefined,
+        voucherCode: appliedVoucher?.voucherCode || undefined,
         foodItems: foodItems.length > 0 ? foodItems : undefined,
       });
 
@@ -1400,7 +1400,7 @@ export default function Checkout() {
                   <div className="flex items-center justify-between text-sm mb-2">
                     <span className="font-black">G2C Voucher</span>
                     {appliedVoucher ? (
-                      <span className="text-xs text-emerald-400 font-bold">Đã áp dụng mã: {appliedVoucher.code}</span>
+                      <span className="text-xs text-emerald-400 font-bold">Đã áp dụng mã: {appliedVoucher.voucherCode}</span>
                     ) : (
                       <span className="text-xs text-slate-400">Nhập mã hoặc chọn bên dưới</span>
                     )}
@@ -1425,7 +1425,7 @@ export default function Checkout() {
                     </div>
                   ) : (
                     <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
-                      <span className="text-xs font-mono font-bold text-emerald-400">{appliedVoucher.code}</span>
+                      <span className="text-xs font-mono font-bold text-emerald-400">{appliedVoucher.voucherCode}</span>
                       <button
                         type="button"
                         onClick={handleRemoveVoucher}
@@ -1446,15 +1446,15 @@ export default function Checkout() {
                     <p className="text-[11px] font-bold text-slate-400 mb-2">Voucher có sẵn:</p>
                     <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1">
                       {activeVouchers.map((v) => {
-                        const isEligible = estimatedTotalAmount >= v.minOrderAmount;
+                        const isEligible = estimatedTotalAmount >= (v.minOrderAmount || 0);
                         return (
                           <button
                             key={v.voucherId}
                             type="button"
                             disabled={!isEligible}
                             onClick={() => {
-                              setVoucherCodeInput(v.code);
-                              handleApplyVoucher(v.code);
+                              setVoucherCodeInput(v.voucherCode);
+                              handleApplyVoucher(v.voucherCode);
                             }}
                             className={`flex items-center justify-between border rounded-lg p-2 text-left transition select-none ${
                               isEligible
@@ -1463,13 +1463,13 @@ export default function Checkout() {
                             }`}
                           >
                             <div>
-                              <div className="text-xs font-bold font-mono text-blue-400">{v.code}</div>
+                              <div className="text-xs font-bold font-mono text-blue-400">{v.voucherCode}</div>
                               <div className="text-[10px] text-slate-400 mt-0.5">
-                                Giảm {v.discountType === 'Percentage' ? `${v.discountValue}%` : formatCurrency(v.discountValue)}
+                                Giảm {v.discountType === 'PERCENT' ? `${v.discountValue}%` : formatCurrency(v.discountValue)}
                               </div>
                             </div>
                             <div className="text-[9px] text-right text-gray-400">
-                              <div>Đơn tối thiểu: {formatCurrency(v.minOrderAmount)}</div>
+                              <div>Đơn tối thiểu: {formatCurrency(v.minOrderAmount || 0)}</div>
                               {!isEligible && <div className="text-red-400 font-bold">Chưa đủ điều kiện</div>}
                             </div>
                           </button>

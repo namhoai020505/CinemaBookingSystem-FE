@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'react-toastify';
-import { FaTicketAlt, FaPlus, FaEdit, FaTrashAlt, FaCheck, FaTimes, FaSearch, FaPercent, FaMoneyBillWave } from 'react-icons/fa';
+import { FaTicketAlt, FaPlus, FaEdit, FaTrashAlt, FaTimes, FaSearch, FaPercent, FaMoneyBillWave } from 'react-icons/fa';
 import { voucherService } from '../../services/voucherService';
 import type { Voucher, CreateVoucherPayload, UpdateVoucherPayload } from '../../services/voucherService';
 
@@ -22,7 +22,7 @@ const formatDate = (dateStr: string) => {
 const toDatetimeLocal = (dateStr: string) => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
-  const tzoffset = date.getTimezoneOffset() * 60000; // offset in milliseconds
+  const tzoffset = date.getTimezoneOffset() * 60000;
   const localISOTime = (new Date(date.getTime() - tzoffset)).toISOString().slice(0, 16);
   return localISOTime;
 };
@@ -33,7 +33,7 @@ export default function ManageVouchers() {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'ALL' | 'Percentage' | 'FixedAmount'>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'PERCENT' | 'AMOUNT'>('ALL');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
   // Modal
@@ -41,22 +41,28 @@ export default function ManageVouchers() {
   const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null);
 
   // Form State
-  const [code, setCode] = useState('');
-  const [discountType, setDiscountType] = useState<'Percentage' | 'FixedAmount'>('Percentage');
+  const [voucherCode, setVoucherCode] = useState('');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [discountType, setDiscountType] = useState<'PERCENT' | 'AMOUNT'>('PERCENT');
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [minOrderAmount, setMinOrderAmount] = useState<number>(0);
   const [maxDiscountAmount, setMaxDiscountAmount] = useState<number>(0);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [usageLimit, setUsageLimit] = useState<number>(100);
-  const [isActive, setIsActive] = useState(true);
+  const [perCustomerLimit, setPerCustomerLimit] = useState<number>(1);
+  const [voucherStatus, setVoucherStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [submitting, setSubmitting] = useState(false);
 
   // Load vouchers
   const fetchVouchers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await voucherService.getAllAdminVouchers();
+      // Call service with search filter and status filter
+      const searchParam = searchTerm.trim() || undefined;
+      const statusParam = filterStatus !== 'ALL' ? filterStatus : undefined;
+      const response = await voucherService.getAllAdminVouchers(searchParam, statusParam);
       if (response && response.success) {
         setVouchers(response.data || []);
       } else {
@@ -67,7 +73,7 @@ export default function ManageVouchers() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [searchTerm, filterStatus]);
 
   useEffect(() => {
     fetchVouchers();
@@ -88,8 +94,10 @@ export default function ManageVouchers() {
   // Open Modal Add
   const handleOpenAdd = () => {
     setEditingVoucher(null);
-    setCode('');
-    setDiscountType('Percentage');
+    setVoucherCode('');
+    setTitle('');
+    setDescription('');
+    setDiscountType('PERCENT');
     setDiscountValue(0);
     setMinOrderAmount(0);
     setMaxDiscountAmount(0);
@@ -101,22 +109,26 @@ export default function ManageVouchers() {
     setStartDate(toDatetimeLocal(now.toISOString()));
     setEndDate(toDatetimeLocal(nextWeek.toISOString()));
     setUsageLimit(100);
-    setIsActive(true);
+    setPerCustomerLimit(1);
+    setVoucherStatus('ACTIVE');
     setIsModalOpen(true);
   };
 
   // Open Modal Edit
   const handleOpenEdit = (voucher: Voucher) => {
     setEditingVoucher(voucher);
-    setCode(voucher.code);
+    setVoucherCode(voucher.voucherCode);
+    setTitle(voucher.title || '');
+    setDescription(voucher.description || '');
     setDiscountType(voucher.discountType);
     setDiscountValue(voucher.discountValue);
-    setMinOrderAmount(voucher.minOrderAmount);
-    setMaxDiscountAmount(voucher.maxDiscountAmount);
+    setMinOrderAmount(voucher.minOrderAmount || 0);
+    setMaxDiscountAmount(voucher.maxDiscountAmount || 0);
     setStartDate(toDatetimeLocal(voucher.startDate));
     setEndDate(toDatetimeLocal(voucher.endDate));
     setUsageLimit(voucher.usageLimit);
-    setIsActive(voucher.isActive);
+    setPerCustomerLimit(voucher.perCustomerLimit || 1);
+    setVoucherStatus(voucher.voucherStatus === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE');
     setIsModalOpen(true);
   };
 
@@ -124,7 +136,7 @@ export default function ManageVouchers() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!code.trim()) {
+    if (!voucherCode.trim()) {
       toast.error('Mã voucher không được để trống');
       return;
     }
@@ -134,7 +146,7 @@ export default function ManageVouchers() {
       return;
     }
 
-    if (discountType === 'Percentage' && discountValue > 100) {
+    if (discountType === 'PERCENT' && discountValue > 100) {
       toast.error('Giá trị giảm giá phần trăm không được vượt quá 100%');
       return;
     }
@@ -152,18 +164,21 @@ export default function ManageVouchers() {
     setSubmitting(true);
 
     try {
-      const cleanCode = code.trim().toUpperCase();
+      const cleanCode = voucherCode.trim().toUpperCase();
+      const titleVal = title.trim() || `Giảm giá ${cleanCode}`;
+      const descVal = description.trim() || `Mã giảm giá áp dụng cho đơn hàng từ G2Cinema`;
+
       if (editingVoucher) {
         const payload: UpdateVoucherPayload = {
-          code: cleanCode,
-          discountType,
-          discountValue,
+          title: titleVal,
+          description: descVal,
+          voucherStatus,
           minOrderAmount,
-          maxDiscountAmount: discountType === 'FixedAmount' ? discountValue : maxDiscountAmount,
+          maxDiscountAmount: discountType === 'AMOUNT' ? discountValue : maxDiscountAmount,
           startDate: new Date(startDate).toISOString(),
           endDate: new Date(endDate).toISOString(),
           usageLimit,
-          isActive,
+          perCustomerLimit,
         };
         const response = await voucherService.updateVoucher(editingVoucher.voucherId, payload);
         if (response.success) {
@@ -176,15 +191,17 @@ export default function ManageVouchers() {
         }
       } else {
         const payload: CreateVoucherPayload = {
-          code: cleanCode,
+          voucherCode: cleanCode,
+          title: titleVal,
+          description: descVal,
           discountType,
           discountValue,
           minOrderAmount,
-          maxDiscountAmount: discountType === 'FixedAmount' ? discountValue : maxDiscountAmount,
+          maxDiscountAmount: discountType === 'AMOUNT' ? discountValue : maxDiscountAmount,
           startDate: new Date(startDate).toISOString(),
           endDate: new Date(endDate).toISOString(),
           usageLimit,
-          isActive,
+          perCustomerLimit,
         };
         const response = await voucherService.createVoucher(payload);
         if (response.success) {
@@ -204,7 +221,7 @@ export default function ManageVouchers() {
 
   // Delete voucher
   const handleDelete = async (voucher: Voucher) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa voucher ${voucher.code}?`)) {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa voucher ${voucher.voucherCode}?`)) {
       return;
     }
 
@@ -224,20 +241,21 @@ export default function ManageVouchers() {
   // Toggle quick status
   const handleToggleStatus = async (voucher: Voucher) => {
     try {
+      const newStatus = voucher.voucherStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
       const payload: UpdateVoucherPayload = {
-        code: voucher.code,
-        discountType: voucher.discountType,
-        discountValue: voucher.discountValue,
+        title: voucher.title,
+        description: voucher.description,
+        voucherStatus: newStatus,
         minOrderAmount: voucher.minOrderAmount,
         maxDiscountAmount: voucher.maxDiscountAmount,
         startDate: voucher.startDate,
         endDate: voucher.endDate,
         usageLimit: voucher.usageLimit,
-        isActive: !voucher.isActive,
+        perCustomerLimit: voucher.perCustomerLimit,
       };
       const response = await voucherService.updateVoucher(voucher.voucherId, payload);
       if (response.success) {
-        toast.success(`Đã ${!voucher.isActive ? 'kích hoạt' : 'vô hiệu hóa'} voucher ${voucher.code}`);
+        toast.success(`Đã ${newStatus === 'ACTIVE' ? 'kích hoạt' : 'vô hiệu hóa'} voucher ${voucher.voucherCode}`);
         fetchVouchers();
       } else {
         toast.error(response.message || 'Thay đổi trạng thái voucher thất bại');
@@ -247,15 +265,10 @@ export default function ManageVouchers() {
     }
   };
 
-  // Filtered Vouchers
+  // Client-side type filter
   const filteredVouchers = vouchers.filter((v) => {
-    const matchSearch = v.code.toLowerCase().includes(searchTerm.toLowerCase());
     const matchType = filterType === 'ALL' || v.discountType === filterType;
-    const matchStatus =
-      filterStatus === 'ALL' ||
-      (filterStatus === 'ACTIVE' && v.isActive) ||
-      (filterStatus === 'INACTIVE' && !v.isActive);
-    return matchSearch && matchType && matchStatus;
+    return matchType;
   });
 
   return (
@@ -303,8 +316,8 @@ export default function ManageVouchers() {
             className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition"
           >
             <option value="ALL">Tất cả loại giảm giá</option>
-            <option value="Percentage">Phần trăm (%)</option>
-            <option value="FixedAmount">Số tiền cố định (đ)</option>
+            <option value="PERCENT">Phần trăm (%)</option>
+            <option value="AMOUNT">Số tiền cố định (đ)</option>
           </select>
         </div>
 
@@ -316,8 +329,8 @@ export default function ManageVouchers() {
             className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition"
           >
             <option value="ALL">Tất cả trạng thái</option>
-            <option value="ACTIVE">Đang hoạt động (Kích hoạt)</option>
-            <option value="INACTIVE">Ngừng hoạt động (Khóa)</option>
+            <option value="ACTIVE">Đang hoạt động (ACTIVE)</option>
+            <option value="INACTIVE">Ngừng hoạt động (INACTIVE)</option>
           </select>
         </div>
       </div>
@@ -340,13 +353,13 @@ export default function ManageVouchers() {
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-gray-800 bg-blue-950/20 text-xs font-black uppercase tracking-wider text-slate-400">
-                  <th className="p-4">Mã Voucher</th>
+                  <th className="p-4">Mã Voucher / Mô Tả</th>
                   <th className="p-4">Loại & Mức Giảm</th>
                   <th className="p-4 text-center">Đơn Tối Thiểu</th>
                   <th className="p-4 text-center">Giảm Tối Đa</th>
                   <th className="p-4 text-center">Đã Dùng / Giới Hạn</th>
                   <th className="p-4">Thời Gian Khả Dụng</th>
-                  <th className="p-4 text-center">Trạng Thái</th>
+                  <th className="p-4 text-center">Trạng Trạng</th>
                   <th className="p-4 text-center">Hành Động</th>
                 </tr>
               </thead>
@@ -354,27 +367,30 @@ export default function ManageVouchers() {
                 {filteredVouchers.map((voucher) => {
                   const isExpired = new Date(voucher.endDate) < new Date();
                   const isExhausted = voucher.usedCount >= voucher.usageLimit;
-                  const isReallyActive = voucher.isActive && !isExpired && !isExhausted;
+                  const isReallyActive = voucher.voucherStatus === 'ACTIVE' && !isExpired && !isExhausted;
 
                   return (
                     <tr
                       key={voucher.voucherId}
-                      className={`hover:bg-blue-950/10 transition group ${!voucher.isActive ? 'opacity-60' : ''}`}
+                      className={`hover:bg-blue-950/10 transition group ${voucher.voucherStatus !== 'ACTIVE' ? 'opacity-60' : ''}`}
                     >
-                      {/* Code */}
+                      {/* Code & Title */}
                       <td className="p-4">
                         <div className="flex items-center gap-2">
                           <span className="rounded bg-blue-500/10 px-2.5 py-1 text-xs font-bold text-blue-400 border border-blue-500/20 uppercase font-mono">
-                            {voucher.code}
+                            {voucher.voucherCode}
+                          </span>
+                          <span className="text-xs font-bold text-white max-w-[200px] truncate" title={voucher.title}>
+                            {voucher.title}
                           </span>
                         </div>
-                        <div className="text-[10px] text-gray-500 mt-1 font-mono">{voucher.voucherId}</div>
+                        <div className="text-[10px] text-gray-400 mt-1 font-semibold max-w-[320px] truncate">{voucher.description}</div>
                       </td>
 
                       {/* Type & Value */}
                       <td className="p-4 font-semibold text-white">
                         <div className="flex items-center gap-2">
-                          {voucher.discountType === 'Percentage' ? (
+                          {voucher.discountType === 'PERCENT' ? (
                             <>
                               <FaPercent className="text-cyan-400 text-xs" />
                               <span>{voucher.discountValue}%</span>
@@ -390,13 +406,13 @@ export default function ManageVouchers() {
 
                       {/* Min Order */}
                       <td className="p-4 text-center text-gray-300">
-                        {voucher.minOrderAmount > 0 ? formatCurrency(voucher.minOrderAmount) : 'Không có'}
+                        {voucher.minOrderAmount && voucher.minOrderAmount > 0 ? formatCurrency(voucher.minOrderAmount) : 'Không có'}
                       </td>
 
                       {/* Max Discount */}
                       <td className="p-4 text-center text-gray-300">
-                        {voucher.discountType === 'Percentage'
-                          ? voucher.maxDiscountAmount > 0
+                        {voucher.discountType === 'PERCENT'
+                          ? voucher.maxDiscountAmount && voucher.maxDiscountAmount > 0
                             ? formatCurrency(voucher.maxDiscountAmount)
                             : 'Không giới hạn'
                           : 'Bằng mức giảm'}
@@ -473,7 +489,7 @@ export default function ManageVouchers() {
       {/* MODAL THÊM / SỬA VOUCHER              */}
       {/* ────────────────────────────────────── */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex justify-center items-center z-50 p-4 font-['Urbanist']">
           <div className="bg-[#111C44] border border-gray-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] text-white">
             {/* Header */}
             <div className="p-5 border-b border-gray-800 flex justify-between items-center bg-blue-950/20 shrink-0">
@@ -502,12 +518,45 @@ export default function ManageVouchers() {
                 <input
                   type="text"
                   required
+                  disabled={!!editingVoucher}
                   placeholder="Ví dụ: SUMMER50, G2C100K"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition font-mono uppercase"
+                  value={voucherCode}
+                  onChange={(e) => setVoucherCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
+                  className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition font-mono uppercase ${
+                    editingVoucher ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 />
-                <span className="text-[10px] text-gray-500 mt-1 block">Mã tự động chuyển viết hoa, không khoảng trắng.</span>
+                {!editingVoucher && (
+                  <span className="text-[10px] text-gray-500 mt-1 block">Mã tự động chuyển viết hoa, không khoảng trắng.</span>
+                )}
+              </div>
+
+              {/* Title & Description */}
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                    Tiêu Đề Voucher
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: Khuyến Mãi Mùa Hè"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                    Mô tả chi tiết
+                  </label>
+                  <textarea
+                    placeholder="Ví dụ: Giảm ngay 10% tối đa 50k cho mọi đơn đặt vé phim."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={2}
+                    className="w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition resize-none"
+                  />
+                </div>
               </div>
 
               {/* Discount Type & Value */}
@@ -518,14 +567,17 @@ export default function ManageVouchers() {
                   </label>
                   <select
                     value={discountType}
+                    disabled={!!editingVoucher}
                     onChange={(e) => {
                       setDiscountType(e.target.value as any);
                       setDiscountValue(0);
                     }}
-                    className="w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${
+                      editingVoucher ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                   >
-                    <option value="Percentage">Phần trăm (%)</option>
-                    <option value="FixedAmount">Số tiền cố định (đ)</option>
+                    <option value="PERCENT">Phần trăm (%)</option>
+                    <option value="AMOUNT">Số tiền cố định (đ)</option>
                   </select>
                 </div>
                 <div>
@@ -536,10 +588,13 @@ export default function ManageVouchers() {
                     type="number"
                     min={1}
                     required
+                    disabled={!!editingVoucher}
                     value={discountValue || ''}
                     onChange={(e) => setDiscountValue(Number(e.target.value))}
-                    placeholder={discountType === 'Percentage' ? 'Ví dụ: 10 (%)' : 'Ví dụ: 50000 (đ)'}
-                    className="w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    placeholder={discountType === 'PERCENT' ? 'Ví dụ: 10 (%)' : 'Ví dụ: 50000 (đ)'}
+                    className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${
+                      editingVoucher ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                   />
                 </div>
               </div>
@@ -566,12 +621,12 @@ export default function ManageVouchers() {
                   <input
                     type="number"
                     min={0}
-                    disabled={discountType === 'FixedAmount'}
-                    value={discountType === 'FixedAmount' ? discountValue : maxDiscountAmount || ''}
+                    disabled={discountType === 'AMOUNT'}
+                    value={discountType === 'AMOUNT' ? discountValue : maxDiscountAmount || ''}
                     onChange={(e) => setMaxDiscountAmount(Number(e.target.value))}
-                    placeholder={discountType === 'FixedAmount' ? 'Cố định bằng mức giảm' : '0 (Không giới hạn)'}
+                    placeholder={discountType === 'AMOUNT' ? 'Cố định bằng mức giảm' : '0 (Không giới hạn)'}
                     className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${
-                      discountType === 'FixedAmount' ? 'opacity-50 cursor-not-allowed' : ''
+                      discountType === 'AMOUNT' ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                   />
                 </div>
@@ -605,8 +660,8 @@ export default function ManageVouchers() {
                 </div>
               </div>
 
-              {/* Usage Limit & Status */}
-              <div className="grid grid-cols-2 gap-4 items-center pt-2">
+              {/* Usage Limit & PerCustomerLimit */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     Giới hạn số lượng dùng
@@ -621,20 +676,37 @@ export default function ManageVouchers() {
                     className="w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                    Giới hạn/mỗi khách
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={perCustomerLimit || ''}
+                    onChange={(e) => setPerCustomerLimit(Number(e.target.value))}
+                    placeholder="Ví dụ: 1"
+                    className="w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition"
+                  />
+                </div>
+              </div>
 
-                <div className="flex items-center h-full pt-5 pl-2">
+              {/* Status active */}
+              {editingVoucher && (
+                <div className="flex items-center pt-2">
                   <label className="inline-flex items-center cursor-pointer select-none">
                     <input
                       type="checkbox"
-                      checked={isActive}
-                      onChange={(e) => setIsActive(e.target.checked)}
+                      checked={voucherStatus === 'ACTIVE'}
+                      onChange={(e) => setVoucherStatus(e.target.checked ? 'ACTIVE' : 'INACTIVE')}
                       className="sr-only peer"
                     />
                     <div className="relative w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    <span className="ms-3 text-xs font-semibold uppercase text-gray-400">Kích hoạt ngay</span>
+                    <span className="ms-3 text-xs font-semibold uppercase text-gray-400">Trạng thái: Hoạt động</span>
                   </label>
                 </div>
-              </div>
+              )}
 
               {/* Actions Footer */}
               <div className="pt-4 border-t border-gray-800 flex justify-end gap-3 shrink-0">
