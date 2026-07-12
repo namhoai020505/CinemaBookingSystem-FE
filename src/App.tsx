@@ -25,6 +25,7 @@ import Checkout from './pages/user/Checkout';
 import ReviewModeration from './pages/admin/ReviewModeration';
 import BookingSuccess from './pages/user/BookingSuccess';
 import MyBookings from './pages/user/MyBookings';
+import ManageVouchers from './pages/admin/ManageVouchers';
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
@@ -89,6 +90,7 @@ const router = createBrowserRouter([
               { path: 'rooms', element: <ManageRooms /> },
               { path: 'rooms/:roomId/seats', element: <ManageSeatLayout /> },
               { path: 'reviews', element: <ReviewModeration /> },
+              { path: 'vouchers', element: <ManageVouchers /> },
             ],
           },
         ],
