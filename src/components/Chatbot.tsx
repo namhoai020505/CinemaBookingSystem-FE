@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { FaComments, FaTimes, FaPaperPlane, FaRobot, FaUser } from 'react-icons/fa';
+import { Send, Sparkles, X, Loader2, MessageSquare } from 'lucide-react';
 import { chatbotService } from '../services/chatbotService';
 
 interface Message {
@@ -21,6 +21,7 @@ export default function Chatbot() {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -83,15 +84,15 @@ export default function Chatbot() {
   ];
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 font-['Urbanist'] select-none">
+    <div className="fixed bottom-6 right-6 z-50 select-none">
       {/* Floating Chat Button */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="group relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-2xl transition hover:scale-110 active:scale-95 animate-bounce hover:animate-none"
+          className="group relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-2xl transition hover:scale-110 active:scale-95 animate-bounce hover:animate-none border border-indigo-400/20"
           title="Chat với G2Cinema"
         >
-          <FaComments className="h-6 w-6" />
+          <MessageSquare className="h-6 w-6" />
           <span className="absolute -top-1 -right-1 flex h-4 w-4">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex h-4 w-4 rounded-full bg-emerald-500 text-[9px] font-bold justify-center items-center">1</span>
@@ -101,93 +102,76 @@ export default function Chatbot() {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="flex h-[500px] w-[360px] flex-col rounded-2xl border border-white/10 bg-[#0F172A]/95 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
+        <div className="flex h-[550px] w-[380px] flex-col rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-slate-900 to-indigo-950 shadow-2xl overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-blue-900/40 via-cyan-900/20 to-slate-900/60 p-4 rounded-t-2xl">
-            <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-tr from-blue-500 to-cyan-400 text-white shadow-md">
-                <FaRobot className="h-5 w-5" />
-              </div>
+          <div className="bg-indigo-600/30 backdrop-blur-sm p-4 border-b border-indigo-500/30 flex justify-between items-center">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="text-indigo-300 h-5 w-5" />
               <div>
-                <h3 className="text-sm font-black text-white leading-tight">G2C Assistant</h3>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Trực tuyến</span>
+                <h3 className="text-white font-medium text-sm">G2C Assistant</h3>
+                <div className="flex items-center space-x-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-[10px] text-emerald-400 font-medium">Trực tuyến</span>
                 </div>
               </div>
             </div>
-            <button
+            <button 
               onClick={() => setIsOpen(false)}
-              className="rounded-lg p-1.5 text-gray-400 hover:bg-white/10 hover:text-white transition"
+              className="text-indigo-200 hover:text-white transition-colors"
             >
-              <FaTimes className="h-4 w-4" />
+              <X className="h-4 w-4" />
             </button>
           </div>
 
           {/* Messages Body */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/50">
             {messages.map((msg) => {
               const isBot = msg.sender === 'bot';
               return (
                 <div
                   key={msg.id}
-                  className={`flex items-start gap-2.5 ${isBot ? 'justify-start' : 'justify-end'}`}
+                  className={`flex ${isBot ? "justify-start" : "justify-end"}`}
                 >
-                  {isBot && (
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-800 text-cyan-400 text-xs font-bold border border-slate-700">
-                      <FaRobot />
-                    </div>
-                  )}
-                  <div className="flex flex-col max-w-[75%]">
+                  <div className="flex flex-col max-w-[80%]">
                     <div
-                      className={`rounded-2xl px-4 py-2.5 text-xs shadow-md leading-relaxed whitespace-pre-line ${
-                        isBot
-                          ? 'bg-slate-800/80 text-slate-100 border border-slate-700/50 rounded-tl-none'
-                          : 'bg-gradient-to-br from-blue-600 to-cyan-600 text-white rounded-tr-none'
-                      }`}
+                      className={`p-3 rounded-2xl ${
+                        !isBot
+                          ? "bg-indigo-600 text-white rounded-tr-none"
+                          : "bg-slate-700/60 text-slate-100 rounded-tl-none border border-slate-600/50"
+                      } animate-fade-in`}
                     >
-                      {msg.text}
+                      <p className="text-xs whitespace-pre-line leading-relaxed">{msg.text}</p>
                     </div>
-                    <span className={`text-[9px] text-gray-500 mt-1 ${!isBot ? 'text-right' : ''}`}>
+                    <span className={`text-[9px] text-slate-400 mt-1 px-1 ${!isBot ? 'text-right' : 'text-left'}`}>
                       {msg.timestamp.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  {!isBot && (
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-600/20 text-blue-400 text-xs font-bold border border-blue-500/20">
-                      <FaUser />
-                    </div>
-                  )}
                 </div>
               );
             })}
 
-            {/* Typing Loader */}
             {isTyping && (
-              <div className="flex items-start gap-2.5 justify-start">
-                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-800 text-cyan-400 text-xs font-bold border border-slate-700">
-                  <FaRobot />
-                </div>
-                <div className="flex flex-col">
-                  <div className="rounded-2xl rounded-tl-none px-4 py-2.5 bg-slate-800/80 border border-slate-700/50 text-slate-400 text-xs flex gap-1 items-center">
-                    <span className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="h-1.5 w-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div className="flex justify-start">
+                <div className="max-w-[80%] p-3 rounded-2xl bg-slate-700/60 text-slate-100 rounded-tl-none border border-slate-600/50">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></div>
+                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse delay-75"></div>
+                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse delay-150"></div>
                   </div>
                 </div>
               </div>
             )}
-            
             <div ref={messagesEndRef} />
           </div>
 
           {/* Quick presets (only shown if not typing) */}
           {!isTyping && (
-            <div className="px-4 pb-2 pt-1 border-t border-white/5 flex gap-1.5 flex-wrap">
+            <div className="px-4 pb-2 pt-1 border-t border-slate-800/40 bg-slate-900/30 flex gap-1.5 flex-wrap">
               {presets.map((preset, idx) => (
                 <button
                   key={idx}
                   onClick={() => handleSend(preset.text)}
-                  className="rounded-full border border-gray-800 bg-[#0F172A] hover:border-blue-500/50 hover:bg-blue-950/10 px-2.5 py-1 text-[10px] font-black text-slate-300 transition"
+                  className="rounded-full border border-indigo-500/20 bg-slate-800/50 hover:border-indigo-500/50 hover:bg-indigo-950/40 px-2.5 py-1 text-[10px] text-indigo-200 transition"
                 >
                   {preset.label}
                 </button>
@@ -196,30 +180,69 @@ export default function Chatbot() {
           )}
 
           {/* Input Footer */}
-          <form
+          <form 
             onSubmit={(e) => {
               e.preventDefault();
               handleSend(inputValue);
             }}
-            className="border-t border-white/10 p-3 flex gap-2 shrink-0 bg-slate-950/40 rounded-b-2xl"
+            className={`p-4 border-t ${isFocused ? 'border-indigo-500/70 bg-slate-800/80' : 'border-slate-700/50 bg-slate-800/30'} transition-colors duration-200`}
           >
-            <input
-              type="text"
-              placeholder="Nhập tin nhắn..."
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              className="flex-1 rounded-xl border border-gray-800 bg-[#0F172A] px-3.5 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition"
-            />
-            <button
-              type="submit"
-              disabled={!inputValue.trim() || isTyping}
-              className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 text-white shadow-md transition hover:brightness-110 active:scale-95 disabled:opacity-50"
-            >
-              <FaPaperPlane className="h-3 w-3" />
-            </button>
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                placeholder="Nhập tin nhắn..."
+                className="w-full bg-slate-700/50 border border-slate-600/50 rounded-full py-2.5 pl-4 pr-12 text-xs text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/70"
+              />
+              <button
+                type="submit"
+                disabled={!inputValue.trim() || isTyping}
+                className={`absolute right-1 rounded-full p-1.5 ${
+                  !inputValue.trim() || isTyping
+                    ? "text-slate-500 bg-slate-700/50 cursor-not-allowed"
+                    : "text-white bg-indigo-600 hover:bg-indigo-500"
+                } transition-colors`}
+              >
+                {isTyping ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </button>
+            </div>
           </form>
         </div>
       )}
+
+      <style>
+        {`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        .delay-75 {
+          animation-delay: 0.2s;
+        }
+        
+        .delay-150 {
+          animation-delay: 0.4s;
+        }
+        `}
+      </style>
     </div>
   );
 }
