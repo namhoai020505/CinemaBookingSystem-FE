@@ -117,6 +117,14 @@ export type CheckoutResponse = {
   expiredAt: string | null;
 };
 
+export type CheckoutRecovery = {
+  bookingId: string;
+  showtimeId: string;
+  bookingStatus: string;
+  paymentStatus?: string | null;
+  expiredAt?: string | null;
+};
+
 const HIDDEN_EXPIRED_BOOKINGS_KEY = 'g2c-hidden-expired-bookings';
 
 const normalizeBackendDate = (value?: string | null) => {
@@ -185,7 +193,7 @@ export const bookingService = {
     return response;
   },
 
-  checkout: async (payload: CheckoutPayload) => {
+  checkout: async (payload: CheckoutPayload, idempotencyKey: string) => {
     // Backend endpoint: POST /api/bookings (CreateBookingRequest)
     // Maps FE payload fields → BE PascalCase fields
     const bePayload: CreateBookingRequestPayload = {
@@ -198,7 +206,9 @@ export const bookingService = {
       })),
     };
 
-    const raw = await axiosInstance.post('/api/bookings', bePayload) as unknown as ApiResponse<BookingSummary>;
+    const raw = await axiosInstance.post('/api/bookings', bePayload, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    }) as unknown as ApiResponse<BookingSummary>;
 
     // Map BookingResponse → CheckoutResponse shape expected by Checkout.tsx
     if (!raw.success || !raw.data) {
@@ -230,6 +240,13 @@ export const bookingService = {
 
   getBookingById: async (bookingId: string | number) => {
     const response = await axiosInstance.get(`/api/bookings/${bookingId}`) as unknown as ApiResponse<BookingDetails>;
+    return response;
+  },
+
+  recoverCheckout: async (idempotencyKey: string) => {
+    const response = await axiosInstance.get('/api/bookings/checkout-recovery', {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    }) as unknown as ApiResponse<CheckoutRecovery>;
     return response;
   },
 

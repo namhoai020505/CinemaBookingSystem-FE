@@ -23,7 +23,15 @@ import {
   bookingService,
   hideExpiredBookingFromHistory,
   type BookingSummary,
+  type CheckoutPayload,
 } from "../../services/bookingService";
+import {
+  isSameCheckoutRequest,
+  readCheckoutAttempt,
+  removeCheckoutAttempt,
+  writeCheckoutAttempt,
+  type CheckoutAttempt,
+} from "../../services/checkoutAttempt";
 import {
   paymentService,
   type CreatePaymentResponse,
@@ -361,6 +369,11 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
+const isNetworkInterruption = (error: unknown) =>
+  typeof error === "object"
+  && error !== null
+  && (!("response" in error) || (error as { response?: unknown }).response == null);
+
 export default function Checkout() {
   const { showtimeId = "" } = useParams();
   const location = useLocation();
@@ -371,6 +384,9 @@ export default function Checkout() {
   const [userProfile] = useState(() => getCurrentUserProfile());
   const [storedPaymentSession] = useState(() =>
     readPaymentSession(showtimeId, userKey),
+  );
+  const [checkoutAttempt, setCheckoutAttempt] = useState<CheckoutAttempt | null>(() =>
+    readCheckoutAttempt(showtimeId, userKey),
   );
   const [selectedSeats] = useState<CheckoutSeat[]>(() =>
     routeState?.selectedSeats?.length
@@ -482,10 +498,81 @@ export default function Checkout() {
 
     if (showtimeId) {
       removePaymentSession(showtimeId, userKey);
+      removeCheckoutAttempt(showtimeId, userKey);
     }
 
     navigate("/", { replace: true });
   }, [booking?.bookingId, navigate, showtimeId, userKey]);
+
+  const recoverCheckoutAttempt = useCallback(async (attempt: CheckoutAttempt) => {
+    const recoveryResponse = await bookingService.recoverCheckout(
+      attempt.idempotencyKey,
+    );
+
+    if (!recoveryResponse.success || !recoveryResponse.data) {
+      return false;
+    }
+
+    const recovery = recoveryResponse.data;
+    if (recovery.bookingStatus === "PAID") {
+      removeCheckoutAttempt(showtimeId, userKey);
+      navigate(`/booking/success/${recovery.bookingId}`, { replace: true });
+      return true;
+    }
+
+    if (recovery.bookingStatus !== "PENDING_PAYMENT") {
+      removeCheckoutAttempt(showtimeId, userKey);
+      setCheckoutAttempt(null);
+      setErrorMessage("Đơn checkout trước đó không còn chờ thanh toán. Vui lòng chọn ghế lại.");
+      return true;
+    }
+
+    const detailResponse = await bookingService.getBookingById(recovery.bookingId);
+    if (!detailResponse.success || !detailResponse.data) {
+      return false;
+    }
+
+    const detail = detailResponse.data;
+    const recoveredBooking: BookingSummary = {
+      bookingId: detail.bookingId,
+      showtimeId: detail.showtimeId,
+      movieTitle: detail.movieTitle,
+      cinemaName: detail.cinemaName,
+      roomName: detail.roomName,
+      startTime: detail.startTime,
+      totalAmount: detail.totalAmount,
+      status: detail.status,
+      createdAt: detail.createdAt,
+      expiredAt: recovery.expiredAt,
+    };
+    const recoveredAttempt = { ...attempt, bookingId: recovery.bookingId };
+
+    writeCheckoutAttempt(showtimeId, userKey, recoveredAttempt);
+    setCheckoutAttempt(recoveredAttempt);
+    setBooking(recoveredBooking);
+    setPaymentExpiresAt(recovery.expiredAt || null);
+    setPaymentSeconds(getSecondsUntil(recovery.expiredAt, PAYMENT_WINDOW_SECONDS));
+    setStep("payment");
+    setErrorMessage("");
+    return true;
+  }, [navigate, showtimeId, userKey]);
+
+  useEffect(() => {
+    if (!checkoutAttempt || booking) {
+      return undefined;
+    }
+
+    const syncAttempt = () => {
+      void recoverCheckoutAttempt(checkoutAttempt).catch(() => {
+        // A missing network response is expected here; the persisted attempt
+        // remains available for the next online event or manual retry.
+      });
+    };
+
+    syncAttempt();
+    window.addEventListener("online", syncAttempt);
+    return () => window.removeEventListener("online", syncAttempt);
+  }, [booking, checkoutAttempt, recoverCheckoutAttempt]);
 
   useEffect(() => {
     let isMounted = true;
@@ -734,6 +821,7 @@ export default function Checkout() {
 
         if (response.data.status === "PAID") {
           removePaymentSession(showtimeId, userKey);
+          removeCheckoutAttempt(showtimeId, userKey);
           navigate(`/booking/success/${booking.bookingId}`, { replace: true });
         }
       } catch (error) {
@@ -806,6 +894,7 @@ export default function Checkout() {
 
       if (response.data.status === "PAID") {
         removePaymentSession(showtimeId, userKey);
+        removeCheckoutAttempt(showtimeId, userKey);
         navigate(`/booking/success/${booking.bookingId}`, { replace: true });
         return;
       }
@@ -842,6 +931,8 @@ export default function Checkout() {
       return;
     }
 
+    let activeAttempt: CheckoutAttempt | null = null;
+
     try {
       setSubmitting(true);
       setErrorMessage("");
@@ -850,11 +941,28 @@ export default function Checkout() {
         .filter(([, quantity]) => quantity > 0)
         .map(([fbItemId, quantity]) => ({ fbItemId, quantity }));
 
-      const checkoutResponse = await bookingService.checkout({
+      const checkoutPayload: CheckoutPayload = {
         showtimeId,
         showtimeSeatIds,
         foodItems: foodItems.length > 0 ? foodItems : undefined,
-      });
+      };
+      const attempt = checkoutAttempt && isSameCheckoutRequest(checkoutAttempt.request, checkoutPayload)
+        ? checkoutAttempt
+        : {
+          version: 1,
+          idempotencyKey: crypto.randomUUID(),
+          request: checkoutPayload,
+          createdAt: new Date().toISOString(),
+        };
+
+      writeCheckoutAttempt(showtimeId, userKey, attempt);
+      setCheckoutAttempt(attempt);
+      activeAttempt = attempt;
+
+      const checkoutResponse = await bookingService.checkout(
+        checkoutPayload,
+        attempt.idempotencyKey,
+      );
 
       if (!checkoutResponse.success || !checkoutResponse.data?.bookingId) {
         throw new Error(checkoutResponse.message || "Không thể tạo đơn đặt vé.");
@@ -873,6 +981,9 @@ export default function Checkout() {
         createdAt: new Date().toISOString(),
         expiredAt: checkout.expiredAt,
       };
+      const bookedAttempt = { ...attempt, bookingId: nextBooking.bookingId };
+      writeCheckoutAttempt(showtimeId, userKey, bookedAttempt);
+      setCheckoutAttempt(bookedAttempt);
 
       const paymentResponse = await paymentService.createPayment({
         bookingId: nextBooking.bookingId,
@@ -908,6 +1019,15 @@ export default function Checkout() {
       setStep("payment");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
+      if (isNetworkInterruption(error) && activeAttempt) {
+        const recovered = await recoverCheckoutAttempt(activeAttempt);
+        if (!recovered) {
+          setErrorMessage(
+            "Kết nối bị gián đoạn. Checkout đã được lưu; hệ thống sẽ đồng bộ lại khi có mạng hoặc khi bạn bấm tiếp tục.",
+          );
+        }
+        return;
+      }
       console.error("Lỗi tạo thanh toán:", error);
       setErrorMessage(getApiErrorMessage(error, "Đã có lỗi xảy ra khi tạo thanh toán."));
     } finally {
