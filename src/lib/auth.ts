@@ -96,7 +96,27 @@ export const getRoleFromAccessToken = (token: string | null = getAccessToken()) 
 
 export const isAdminRole = (role: string | null | undefined) => normalizeRole(role) === 'admin';
 
+export const isManagerRole = (role: string | null | undefined) => normalizeRole(role) === 'manager';
+
+export const isStaffRole = (role: string | null | undefined) => normalizeRole(role) === 'staff';
+
 export const isCustomerRole = (role: string | null | undefined) => normalizeRole(role) === 'customer';
+
+export const getPostLoginRedirect = (role: string | null | undefined) => {
+  if (isAdminRole(role)) {
+    return '/admin/dashboard';
+  }
+
+  if (isManagerRole(role)) {
+    return '/manager/dashboard';
+  }
+
+  if (isStaffRole(role)) {
+    return '/staff/ticket-scanner';
+  }
+
+  return '/';
+};
 
 const getStringClaim = (payload: JwtPayload | null, keys: string[]) => {
   if (!payload) {

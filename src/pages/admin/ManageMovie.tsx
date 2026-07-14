@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { movieService } from "../../services/movieService";
 import type { MovieResponse } from "../../services/movieService";
@@ -89,7 +89,8 @@ export default function ManageMovie() {
         // Khi chọn một trạng thái cụ thể: chỉ hiện phim có trạng thái đó
         if (movie.movieStatus !== selectedStatus) return false;
       }
-      if (searchGenres.length > 0 && (!movie.genres || !searchGenres.some(sg => movie.genres.includes(sg)))) return false;
+      const movieGenres = movie.genres ?? [];
+      if (searchGenres.length > 0 && !searchGenres.some(sg => movieGenres.includes(sg))) return false;
       if (searchTerm && !movie.movieNameVn.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       return true;
     });

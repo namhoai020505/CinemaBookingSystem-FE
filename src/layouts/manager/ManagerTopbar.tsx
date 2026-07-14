@@ -1,65 +1,48 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaBars, FaBell, FaMoon, FaPowerOff, FaSun } from 'react-icons/fa';
+import { FaBars, FaMoon, FaPowerOff, FaSun, FaUserShield } from 'react-icons/fa';
+import { getCurrentUserProfile } from '../../lib/auth';
 import { logout } from '../../services/authService';
 
-interface TopbarProps {
+type ManagerTopbarProps = {
   sidebarCollapsed: boolean;
   isLightMode: boolean;
-  onToggle: () => void;
+  onToggleSidebar: () => void;
   onToggleTheme: () => void;
-}
+};
 
 const routeTitles: Record<string, { title: string; subtitle: string }> = {
-  '/admin/dashboard': {
-    title: 'Dashboard',
-    subtitle: 'Theo dõi nhanh tình trạng vận hành hệ thống rạp.',
+  '/manager/dashboard': {
+    title: 'Manager Dashboard',
+    subtitle: 'Doanh thu, vé bán và hiệu suất rạp đang phụ trách.',
   },
-  '/admin/movies': {
-    title: 'Quản lý phim',
-    subtitle: 'Điều phối catalog phim, trailer và thời lượng chiếu.',
+  '/manager/showtimes': {
+    title: 'Showtimes',
+    subtitle: 'Theo dõi suất chiếu, trạng thái và xử lý hủy suất.',
   },
-  '/admin/rooms': {
-    title: 'Quản lý phòng chiếu',
-    subtitle: 'Kiểm soát phòng, sức chứa và sơ đồ ghế.',
+  '/manager/refunds': {
+    title: 'Refunds',
+    subtitle: 'Theo dõi hoàn tiền phát sinh từ nghiệp vụ rạp.',
   },
-  '/admin/showtime': {
-    title: 'Quản lý lịch chiếu',
-    subtitle: 'Sắp xếp suất chiếu theo rạp, phòng và khung giờ.',
+  '/manager/ticket-scanner': {
+    title: 'Ticket Scanner',
+    subtitle: 'Soát vé bằng QR hoặc nhập mã thủ công tại rạp.',
   },
-  '/admin/reviews': {
-    title: 'Kiểm duyệt review',
-    subtitle: 'Xử lý đánh giá đang chờ và nội dung cần chú ý.',
-  },
-  '/admin/staff': {
-    title: 'Quản lý staff',
-    subtitle: 'Tạo lời mời và quản trị tài khoản nội bộ.',
+  '/manager/my-cinema': {
+    title: 'My Cinema',
+    subtitle: 'Thông tin rạp và các phòng đang thuộc phạm vi quản lý.',
   },
 };
 
-const getRouteTitle = (pathname: string) => {
-  if (pathname.includes('/rooms/') && pathname.includes('/seats')) {
-    return {
-      title: 'Sơ đồ ghế',
-      subtitle: 'Cấu hình seat map, loại ghế và trạng thái sử dụng.',
-    };
-  }
-
-  return routeTitles[pathname] ?? {
-    title: 'Admin console',
-    subtitle: 'Cinema Booking System operations.',
-  };
-};
-
-const Topbar = ({
+const ManagerTopbar = ({
   sidebarCollapsed,
   isLightMode,
-  onToggle,
+  onToggleSidebar,
   onToggleTheme,
-}: TopbarProps) => {
+}: ManagerTopbarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const fullName = localStorage.getItem('fullName') || 'Quản trị viên';
-  const page = getRouteTitle(location.pathname);
+  const profile = getCurrentUserProfile();
+  const page = routeTitles[location.pathname] ?? routeTitles['/manager/dashboard'];
 
   const handleLogout = async () => {
     await logout();
@@ -69,21 +52,21 @@ const Topbar = ({
   const iconButtonClass = [
     'grid h-10 w-10 shrink-0 place-items-center rounded-lg border transition',
     isLightMode
-      ? 'border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600'
-      : 'border-white/10 bg-white/5 text-slate-300 hover:border-blue-400/40 hover:bg-blue-500/10 hover:text-white',
+      ? 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'
+      : 'border-white/10 bg-white/5 text-slate-300 hover:border-emerald-400/40 hover:bg-emerald-500/10 hover:text-white',
   ].join(' ');
 
   return (
     <header
       className={[
-        'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-4 border-b px-6 backdrop-blur-xl transition-colors',
+        'sticky top-0 z-30 flex h-[72px] shrink-0 items-center gap-4 border-b px-5 backdrop-blur-xl transition-colors',
         isLightMode
           ? 'border-slate-200 bg-white/90 text-slate-950'
           : 'border-white/10 bg-[#0B1220]/90 text-white',
       ].join(' ')}
     >
       <button
-        onClick={onToggle}
+        onClick={onToggleSidebar}
         className={iconButtonClass}
         title={sidebarCollapsed ? 'Mở sidebar' : 'Thu gọn sidebar'}
         type="button"
@@ -103,9 +86,17 @@ const Topbar = ({
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <button className={iconButtonClass} title="Thông báo" type="button">
-          <FaBell />
-        </button>
+        <div
+          className={[
+            'hidden min-h-10 items-center gap-2 rounded-lg border px-3 text-xs font-black md:inline-flex',
+            isLightMode
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200',
+          ].join(' ')}
+        >
+          <FaUserShield />
+          Rạp của tôi
+        </div>
 
         <button
           type="button"
@@ -126,20 +117,20 @@ const Topbar = ({
         <Link
           to="/profile"
           className={[
-            'hidden min-h-10 items-center gap-2 rounded-lg border px-2 py-1 no-underline transition md:flex',
+            'hidden min-h-10 items-center gap-2 rounded-lg border px-2 py-1 no-underline transition lg:flex',
             isLightMode
-              ? 'border-slate-200 bg-white text-slate-950 hover:border-blue-200'
-              : 'border-white/10 bg-white/5 text-white hover:border-blue-400/40',
+              ? 'border-slate-200 bg-white text-slate-950 hover:border-emerald-200'
+              : 'border-white/10 bg-white/5 text-white hover:border-emerald-400/40',
           ].join(' ')}
           title="Hồ sơ"
         >
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 text-xs font-black text-white">
-            {fullName.charAt(0).toUpperCase()}
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-600 text-xs font-black text-white">
+            {(profile?.fullName || 'M').charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <div className="max-w-32 truncate text-xs font-black">{fullName}</div>
+            <div className="max-w-32 truncate text-xs font-black">{profile?.fullName || 'Manager'}</div>
             <div className={`text-[10px] font-bold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-              Administrator
+              {profile?.role || 'MANAGER'}
             </div>
           </div>
         </Link>
@@ -162,4 +153,4 @@ const Topbar = ({
   );
 };
 
-export default Topbar;
+export default ManagerTopbar;
