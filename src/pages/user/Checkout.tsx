@@ -28,6 +28,7 @@ import {
   paymentService,
   type CreatePaymentResponse,
 } from "../../services/paymentService";
+import { voucherService, type Voucher } from "../../services/voucherService";
 
 const PAYMENT_PROVIDER_ID = "PP_SEPAY";
 const PAYMENT_WINDOW_SECONDS = 600;
@@ -445,7 +446,76 @@ export default function Checkout() {
   );
 
   const estimatedTotalAmount = seatsTotalAmount + fnbTotalAmount;
-  const voucherDiscount = 0;
+  const [voucherCodeInput, setVoucherCodeInput] = useState("");
+  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
+  const [voucherDiscount, setVoucherDiscount] = useState(0);
+  const [activeVouchers, setActiveVouchers] = useState<Voucher[]>([]);
+  const [voucherError, setVoucherError] = useState("");
+
+  const handleApplyVoucher = useCallback(async (codeStr: string) => {
+    if (!codeStr.trim()) {
+      setVoucherError("Vui lòng nhập mã voucher");
+      return;
+    }
+    setVoucherError("");
+    try {
+      const response = await voucherService.validateVoucher(codeStr.trim().toUpperCase(), estimatedTotalAmount);
+      if (response && response.success && response.data) {
+        const validateData = response.data;
+        if (validateData.isValid) {
+          setAppliedVoucher({ voucherCode: codeStr.trim().toUpperCase() } as any);
+          setVoucherDiscount(validateData.discountAmount);
+          setVoucherError("");
+        } else {
+          setVoucherError(validateData.message || "Voucher không hợp lệ hoặc không đủ điều kiện");
+          setAppliedVoucher(null);
+          setVoucherDiscount(0);
+        }
+      } else {
+        setVoucherError(response?.message || "Mã voucher không hợp lệ");
+        setAppliedVoucher(null);
+        setVoucherDiscount(0);
+      }
+    } catch (err: any) {
+      setVoucherError(err.response?.data?.message || "Lỗi khi kiểm tra mã voucher");
+      setAppliedVoucher(null);
+      setVoucherDiscount(0);
+    }
+  }, [estimatedTotalAmount]);
+
+  const handleRemoveVoucher = useCallback(() => {
+    setAppliedVoucher(null);
+    setVoucherCodeInput("");
+    setVoucherDiscount(0);
+    setVoucherError("");
+  }, []);
+
+  // Fetch active vouchers
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveVouchers = async () => {
+      try {
+        const response = await voucherService.getActiveVouchers();
+        if (isMounted && response && response.success) {
+          setActiveVouchers(response.data || []);
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải voucher hoạt động:", err);
+      }
+    };
+    fetchActiveVouchers();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Re-validate when amount changes
+  useEffect(() => {
+    if (appliedVoucher) {
+      handleApplyVoucher(appliedVoucher.voucherCode);
+    }
+  }, [estimatedTotalAmount, handleApplyVoucher]);
+
   const pointDiscount = 0;
   const payableAmount = Math.max(
     0,
@@ -853,6 +923,7 @@ export default function Checkout() {
       const checkoutResponse = await bookingService.checkout({
         showtimeId,
         showtimeSeatIds,
+        voucherCode: appliedVoucher?.voucherCode || undefined,
         foodItems: foodItems.length > 0 ? foodItems : undefined,
       });
 
@@ -1324,11 +1395,92 @@ export default function Checkout() {
               </div>
 
               <div className="space-y-4 border-b border-white/10 pb-5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-black">G2C Voucher</span>
-                  <span className="text-xs text-slate-400">Chưa có voucher khả dụng</span>
+                {/* G2C Voucher Apply */}
+                <div>
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <span className="font-black">G2C Voucher</span>
+                    {appliedVoucher ? (
+                      <span className="text-xs text-emerald-400 font-bold">Đã áp dụng mã: {appliedVoucher.voucherCode}</span>
+                    ) : (
+                      <span className="text-xs text-slate-400">Nhập mã hoặc chọn bên dưới</span>
+                    )}
+                  </div>
+
+                  {!appliedVoucher ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nhập mã voucher..."
+                        value={voucherCodeInput}
+                        onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                        className="flex-1 rounded-lg border border-gray-800 bg-[#0F172A] px-3 py-1.5 text-xs text-white uppercase font-mono outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleApplyVoucher(voucherCodeInput)}
+                        className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-1.5 text-xs font-bold text-white transition"
+                      >
+                        Áp dụng
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+                      <span className="text-xs font-mono font-bold text-emerald-400">{appliedVoucher.voucherCode}</span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveVoucher}
+                        className="text-xs text-red-400 hover:text-red-300 font-bold"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  )}
+                  {voucherError && (
+                    <p className="text-[11px] text-red-400 mt-1 font-semibold">{voucherError}</p>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-sm">
+
+                {/* Available Vouchers List */}
+                {activeVouchers.length > 0 && !appliedVoucher && (
+                  <div>
+                    <p className="text-[11px] font-bold text-slate-400 mb-2">Voucher có sẵn:</p>
+                    <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1">
+                      {activeVouchers.map((v) => {
+                        const isEligible = estimatedTotalAmount >= (v.minOrderAmount || 0);
+                        return (
+                          <button
+                            key={v.voucherId}
+                            type="button"
+                            disabled={!isEligible}
+                            onClick={() => {
+                              setVoucherCodeInput(v.voucherCode);
+                              handleApplyVoucher(v.voucherCode);
+                            }}
+                            className={`flex items-center justify-between border rounded-lg p-2 text-left transition select-none ${
+                              isEligible
+                                ? 'border-gray-800 hover:border-blue-500 hover:bg-blue-950/10 cursor-pointer text-white'
+                                : 'border-gray-955 opacity-40 cursor-not-allowed text-gray-500'
+                            }`}
+                          >
+                            <div>
+                              <div className="text-xs font-bold font-mono text-blue-400">{v.voucherCode}</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                Giảm {v.discountType === 'PERCENT' ? `${v.discountValue}%` : formatCurrency(v.discountValue)}
+                              </div>
+                            </div>
+                            <div className="text-[9px] text-right text-gray-400">
+                              <div>Đơn tối thiểu: {formatCurrency(v.minOrderAmount || 0)}</div>
+                              {!isEligible && <div className="text-red-400 font-bold">Chưa đủ điều kiện</div>}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Points */}
+                <div className="flex items-center justify-between text-sm border-t border-white/5 pt-3">
                   <span className="font-black">G2C Point</span>
                   <span className="text-xs text-slate-400">0 điểm có thể dùng</span>
                 </div>
