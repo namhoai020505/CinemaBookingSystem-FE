@@ -47,6 +47,12 @@ const navItems = [
     icon: <FaComments />,
   },
   {
+    to: '/admin/vouchers',
+    label: 'Vouchers',
+    description: 'Quản lý mã giảm giá',
+    icon: <FaTicketAlt />,
+  },
+  {
     to: '/admin/staff',
     label: 'Staff',
     description: 'Tài khoản nội bộ',

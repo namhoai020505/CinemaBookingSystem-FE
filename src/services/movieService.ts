@@ -79,8 +79,8 @@ export const movieService = {
   // Lấy danh sách phim cho người dùng (Đang chiếu + Sắp chiếu)
   getActiveMovies: async (): Promise<MovieResponse[]> => {
     const results = await Promise.all([
-      axiosInstance.get('/api/movies', { params: { status: 'NOW_SHOWING', pageSize: 100 } }) as unknown as ApiEnvelope<PagedList<MovieResponse>>,
-      axiosInstance.get('/api/movies', { params: { status: 'COMING_SOON', pageSize: 100 } }) as unknown as ApiEnvelope<PagedList<MovieResponse>>,
+      axiosInstance.get('/api/movies', { params: { status: 'NOW_SHOWING', pageSize: 200 } }) as unknown as ApiEnvelope<PagedList<MovieResponse>>,
+      axiosInstance.get('/api/movies', { params: { status: 'COMING_SOON', pageSize: 200 } }) as unknown as ApiEnvelope<PagedList<MovieResponse>>,
     ]);
     return [
       ...(results[0]?.data?.items ?? []),
@@ -127,6 +127,11 @@ export const movieService = {
     await axiosInstance.delete(`/api/movies/${movieId}`);
   },
 
+  // 6. POST: Tăng lượt xem phim theo ID
+  incrementMovieView: async (movieId: string): Promise<any> => {
+    const envelope = await axiosInstance.post(`/api/movies/${movieId}/view`) as unknown as ApiEnvelope<any>;
+    return envelope.data;
+  },
 
   // 5. GET: Lấy danh sách thể loại từ DB
   getGenres: async (): Promise<GenreResponse[]> => {

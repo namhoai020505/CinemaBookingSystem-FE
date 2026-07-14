@@ -27,8 +27,11 @@ const ManagerLayout = () => {
 
   useEffect(() => {
     document.documentElement.dataset.managerTheme = themeMode;
+    document.documentElement.classList.toggle('light', isLightMode);
+    document.documentElement.classList.toggle('dark', !isLightMode);
+    document.body.classList.toggle('g2c-light-mode', isLightMode);
     localStorage.setItem(THEME_STORAGE_KEY, themeMode);
-  }, [themeMode]);
+  }, [isLightMode, themeMode]);
 
   const toggleSidebar = () => setSidebarCollapsed((current) => !current);
   const toggleTheme = () => {

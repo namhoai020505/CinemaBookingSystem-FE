@@ -7,6 +7,7 @@ import {
   type BookingDetails,
   type BookingSeatDetail,
 } from "../../services/bookingService";
+import { removeCheckoutAttempt } from "../../services/checkoutAttempt";
 
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
@@ -76,6 +77,9 @@ export default function BookingSuccess() {
 
           if (response.data.status === "PAID") {
             localStorage.removeItem(getPaymentStorageKey(response.data.showtimeId));
+            const profile = getCurrentUserProfile();
+            const userKey = profile?.userId || profile?.email || "anonymous";
+            removeCheckoutAttempt(response.data.showtimeId, userKey);
           }
         }
       } catch (error) {

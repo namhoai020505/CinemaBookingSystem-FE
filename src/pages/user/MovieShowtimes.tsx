@@ -669,6 +669,11 @@ export default function MovieShowtimes() {
           ),
         );
 
+        // Tăng lượt xem phim ngầm (không chặn luồng load trang lịch chiếu)
+        api.post(`/api/movies/${currentMovieId}/view`).catch((err) => {
+          console.warn("Không thể ghi nhận lượt xem phim:", err);
+        });
+
         const canLoadSeatMap = Boolean(getAccessToken()) && !isAccessTokenExpired();
         const availabilityEntries = await Promise.all(
           movieShowtimes.map(async (showtime) => {

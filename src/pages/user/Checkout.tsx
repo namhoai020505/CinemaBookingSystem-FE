@@ -23,11 +23,20 @@ import {
   bookingService,
   hideExpiredBookingFromHistory,
   type BookingSummary,
+  type CheckoutPayload,
 } from "../../services/bookingService";
+import {
+  isSameCheckoutRequest,
+  readCheckoutAttempt,
+  removeCheckoutAttempt,
+  writeCheckoutAttempt,
+  type CheckoutAttempt,
+} from "../../services/checkoutAttempt";
 import {
   paymentService,
   type CreatePaymentResponse,
 } from "../../services/paymentService";
+import { voucherService, type Voucher } from "../../services/voucherService";
 
 const PAYMENT_PROVIDER_ID = "PP_SEPAY";
 const PAYMENT_WINDOW_SECONDS = 600;
@@ -361,6 +370,11 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
+const isNetworkInterruption = (error: unknown) =>
+  typeof error === "object"
+  && error !== null
+  && (!("response" in error) || (error as { response?: unknown }).response == null);
+
 export default function Checkout() {
   const { showtimeId = "" } = useParams();
   const location = useLocation();
@@ -371,6 +385,9 @@ export default function Checkout() {
   const [userProfile] = useState(() => getCurrentUserProfile());
   const [storedPaymentSession] = useState(() =>
     readPaymentSession(showtimeId, userKey),
+  );
+  const [checkoutAttempt, setCheckoutAttempt] = useState<CheckoutAttempt | null>(() =>
+    readCheckoutAttempt(showtimeId, userKey),
   );
   const [selectedSeats] = useState<CheckoutSeat[]>(() =>
     routeState?.selectedSeats?.length
@@ -445,7 +462,76 @@ export default function Checkout() {
   );
 
   const estimatedTotalAmount = seatsTotalAmount + fnbTotalAmount;
-  const voucherDiscount = 0;
+  const [voucherCodeInput, setVoucherCodeInput] = useState("");
+  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
+  const [voucherDiscount, setVoucherDiscount] = useState(0);
+  const [activeVouchers, setActiveVouchers] = useState<Voucher[]>([]);
+  const [voucherError, setVoucherError] = useState("");
+
+  const handleApplyVoucher = useCallback(async (codeStr: string) => {
+    if (!codeStr.trim()) {
+      setVoucherError("Vui lòng nhập mã voucher");
+      return;
+    }
+    setVoucherError("");
+    try {
+      const response = await voucherService.validateVoucher(codeStr.trim().toUpperCase(), estimatedTotalAmount);
+      if (response && response.success && response.data) {
+        const validateData = response.data;
+        if (validateData.isValid) {
+          setAppliedVoucher({ voucherCode: codeStr.trim().toUpperCase() } as any);
+          setVoucherDiscount(validateData.discountAmount);
+          setVoucherError("");
+        } else {
+          setVoucherError(validateData.message || "Voucher không hợp lệ hoặc không đủ điều kiện");
+          setAppliedVoucher(null);
+          setVoucherDiscount(0);
+        }
+      } else {
+        setVoucherError(response?.message || "Mã voucher không hợp lệ");
+        setAppliedVoucher(null);
+        setVoucherDiscount(0);
+      }
+    } catch (err: any) {
+      setVoucherError(err.response?.data?.message || "Lỗi khi kiểm tra mã voucher");
+      setAppliedVoucher(null);
+      setVoucherDiscount(0);
+    }
+  }, [estimatedTotalAmount]);
+
+  const handleRemoveVoucher = useCallback(() => {
+    setAppliedVoucher(null);
+    setVoucherCodeInput("");
+    setVoucherDiscount(0);
+    setVoucherError("");
+  }, []);
+
+  // Fetch active vouchers
+  useEffect(() => {
+    let isMounted = true;
+    const fetchActiveVouchers = async () => {
+      try {
+        const response = await voucherService.getActiveVouchers();
+        if (isMounted && response && response.success) {
+          setActiveVouchers(response.data || []);
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải voucher hoạt động:", err);
+      }
+    };
+    fetchActiveVouchers();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Re-validate when amount changes
+  useEffect(() => {
+    if (appliedVoucher) {
+      handleApplyVoucher(appliedVoucher.voucherCode);
+    }
+  }, [estimatedTotalAmount, handleApplyVoucher]);
+
   const pointDiscount = 0;
   const payableAmount = Math.max(
     0,
@@ -482,10 +568,81 @@ export default function Checkout() {
 
     if (showtimeId) {
       removePaymentSession(showtimeId, userKey);
+      removeCheckoutAttempt(showtimeId, userKey);
     }
 
     navigate("/", { replace: true });
   }, [booking?.bookingId, navigate, showtimeId, userKey]);
+
+  const recoverCheckoutAttempt = useCallback(async (attempt: CheckoutAttempt) => {
+    const recoveryResponse = await bookingService.recoverCheckout(
+      attempt.idempotencyKey,
+    );
+
+    if (!recoveryResponse.success || !recoveryResponse.data) {
+      return false;
+    }
+
+    const recovery = recoveryResponse.data;
+    if (recovery.bookingStatus === "PAID") {
+      removeCheckoutAttempt(showtimeId, userKey);
+      navigate(`/booking/success/${recovery.bookingId}`, { replace: true });
+      return true;
+    }
+
+    if (recovery.bookingStatus !== "PENDING_PAYMENT") {
+      removeCheckoutAttempt(showtimeId, userKey);
+      setCheckoutAttempt(null);
+      setErrorMessage("Đơn checkout trước đó không còn chờ thanh toán. Vui lòng chọn ghế lại.");
+      return true;
+    }
+
+    const detailResponse = await bookingService.getBookingById(recovery.bookingId);
+    if (!detailResponse.success || !detailResponse.data) {
+      return false;
+    }
+
+    const detail = detailResponse.data;
+    const recoveredBooking: BookingSummary = {
+      bookingId: detail.bookingId,
+      showtimeId: detail.showtimeId,
+      movieTitle: detail.movieTitle,
+      cinemaName: detail.cinemaName,
+      roomName: detail.roomName,
+      startTime: detail.startTime,
+      totalAmount: detail.totalAmount,
+      status: detail.status,
+      createdAt: detail.createdAt,
+      expiredAt: recovery.expiredAt,
+    };
+    const recoveredAttempt = { ...attempt, bookingId: recovery.bookingId };
+
+    writeCheckoutAttempt(showtimeId, userKey, recoveredAttempt);
+    setCheckoutAttempt(recoveredAttempt);
+    setBooking(recoveredBooking);
+    setPaymentExpiresAt(recovery.expiredAt || null);
+    setPaymentSeconds(getSecondsUntil(recovery.expiredAt, PAYMENT_WINDOW_SECONDS));
+    setStep("payment");
+    setErrorMessage("");
+    return true;
+  }, [navigate, showtimeId, userKey]);
+
+  useEffect(() => {
+    if (!checkoutAttempt || booking) {
+      return undefined;
+    }
+
+    const syncAttempt = () => {
+      void recoverCheckoutAttempt(checkoutAttempt).catch(() => {
+        // A missing network response is expected here; the persisted attempt
+        // remains available for the next online event or manual retry.
+      });
+    };
+
+    syncAttempt();
+    window.addEventListener("online", syncAttempt);
+    return () => window.removeEventListener("online", syncAttempt);
+  }, [booking, checkoutAttempt, recoverCheckoutAttempt]);
 
   useEffect(() => {
     let isMounted = true;
@@ -734,6 +891,7 @@ export default function Checkout() {
 
         if (response.data.status === "PAID") {
           removePaymentSession(showtimeId, userKey);
+          removeCheckoutAttempt(showtimeId, userKey);
           navigate(`/booking/success/${booking.bookingId}`, { replace: true });
         }
       } catch (error) {
@@ -806,6 +964,7 @@ export default function Checkout() {
 
       if (response.data.status === "PAID") {
         removePaymentSession(showtimeId, userKey);
+        removeCheckoutAttempt(showtimeId, userKey);
         navigate(`/booking/success/${booking.bookingId}`, { replace: true });
         return;
       }
@@ -842,6 +1001,8 @@ export default function Checkout() {
       return;
     }
 
+    let activeAttempt: CheckoutAttempt | null = null;
+
     try {
       setSubmitting(true);
       setErrorMessage("");
@@ -850,11 +1011,29 @@ export default function Checkout() {
         .filter(([, quantity]) => quantity > 0)
         .map(([fbItemId, quantity]) => ({ fbItemId, quantity }));
 
-      const checkoutResponse = await bookingService.checkout({
+      const checkoutPayload: CheckoutPayload = {
         showtimeId,
         showtimeSeatIds,
+        voucherCode: appliedVoucher?.voucherCode || undefined,
         foodItems: foodItems.length > 0 ? foodItems : undefined,
-      });
+      };
+      const attempt = checkoutAttempt && isSameCheckoutRequest(checkoutAttempt.request, checkoutPayload)
+        ? checkoutAttempt
+        : {
+          version: 1,
+          idempotencyKey: crypto.randomUUID(),
+          request: checkoutPayload,
+          createdAt: new Date().toISOString(),
+        };
+
+      writeCheckoutAttempt(showtimeId, userKey, attempt);
+      setCheckoutAttempt(attempt);
+      activeAttempt = attempt;
+
+      const checkoutResponse = await bookingService.checkout(
+        checkoutPayload,
+        attempt.idempotencyKey,
+      );
 
       if (!checkoutResponse.success || !checkoutResponse.data?.bookingId) {
         throw new Error(checkoutResponse.message || "Không thể tạo đơn đặt vé.");
@@ -873,6 +1052,9 @@ export default function Checkout() {
         createdAt: new Date().toISOString(),
         expiredAt: checkout.expiredAt,
       };
+      const bookedAttempt = { ...attempt, bookingId: nextBooking.bookingId };
+      writeCheckoutAttempt(showtimeId, userKey, bookedAttempt);
+      setCheckoutAttempt(bookedAttempt);
 
       const paymentResponse = await paymentService.createPayment({
         bookingId: nextBooking.bookingId,
@@ -908,6 +1090,15 @@ export default function Checkout() {
       setStep("payment");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
+      if (isNetworkInterruption(error) && activeAttempt) {
+        const recovered = await recoverCheckoutAttempt(activeAttempt);
+        if (!recovered) {
+          setErrorMessage(
+            "Kết nối bị gián đoạn. Checkout đã được lưu; hệ thống sẽ đồng bộ lại khi có mạng hoặc khi bạn bấm tiếp tục.",
+          );
+        }
+        return;
+      }
       console.error("Lỗi tạo thanh toán:", error);
       setErrorMessage(getApiErrorMessage(error, "Đã có lỗi xảy ra khi tạo thanh toán."));
     } finally {
@@ -1324,11 +1515,92 @@ export default function Checkout() {
               </div>
 
               <div className="space-y-4 border-b border-white/10 pb-5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-black">G2C Voucher</span>
-                  <span className="text-xs text-slate-400">Chưa có voucher khả dụng</span>
+                {/* G2C Voucher Apply */}
+                <div>
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <span className="font-black">G2C Voucher</span>
+                    {appliedVoucher ? (
+                      <span className="text-xs text-emerald-400 font-bold">Đã áp dụng mã: {appliedVoucher.voucherCode}</span>
+                    ) : (
+                      <span className="text-xs text-slate-400">Nhập mã hoặc chọn bên dưới</span>
+                    )}
+                  </div>
+
+                  {!appliedVoucher ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nhập mã voucher..."
+                        value={voucherCodeInput}
+                        onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                        className="flex-1 rounded-lg border border-gray-800 bg-[#0F172A] px-3 py-1.5 text-xs text-white uppercase font-mono outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleApplyVoucher(voucherCodeInput)}
+                        className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-1.5 text-xs font-bold text-white transition"
+                      >
+                        Áp dụng
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+                      <span className="text-xs font-mono font-bold text-emerald-400">{appliedVoucher.voucherCode}</span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveVoucher}
+                        className="text-xs text-red-400 hover:text-red-300 font-bold"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  )}
+                  {voucherError && (
+                    <p className="text-[11px] text-red-400 mt-1 font-semibold">{voucherError}</p>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-sm">
+
+                {/* Available Vouchers List */}
+                {activeVouchers.length > 0 && !appliedVoucher && (
+                  <div>
+                    <p className="text-[11px] font-bold text-slate-400 mb-2">Voucher có sẵn:</p>
+                    <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1">
+                      {activeVouchers.map((v) => {
+                        const isEligible = estimatedTotalAmount >= (v.minOrderAmount || 0);
+                        return (
+                          <button
+                            key={v.voucherId}
+                            type="button"
+                            disabled={!isEligible}
+                            onClick={() => {
+                              setVoucherCodeInput(v.voucherCode);
+                              handleApplyVoucher(v.voucherCode);
+                            }}
+                            className={`flex items-center justify-between border rounded-lg p-2 text-left transition select-none ${
+                              isEligible
+                                ? 'border-gray-800 hover:border-blue-500 hover:bg-blue-950/10 cursor-pointer text-white'
+                                : 'border-gray-955 opacity-40 cursor-not-allowed text-gray-500'
+                            }`}
+                          >
+                            <div>
+                              <div className="text-xs font-bold font-mono text-blue-400">{v.voucherCode}</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                Giảm {v.discountType === 'PERCENT' ? `${v.discountValue}%` : formatCurrency(v.discountValue)}
+                              </div>
+                            </div>
+                            <div className="text-[9px] text-right text-gray-400">
+                              <div>Đơn tối thiểu: {formatCurrency(v.minOrderAmount || 0)}</div>
+                              {!isEligible && <div className="text-red-400 font-bold">Chưa đủ điều kiện</div>}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Points */}
+                <div className="flex items-center justify-between text-sm border-t border-white/5 pt-3">
                   <span className="font-black">G2C Point</span>
                   <span className="text-xs text-slate-400">0 điểm có thể dùng</span>
                 </div>
