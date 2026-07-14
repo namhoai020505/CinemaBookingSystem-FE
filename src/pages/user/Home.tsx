@@ -35,6 +35,7 @@ type Movie = {
   posterUrl: string;
   ageRating: string;
   highlight?: string;
+  movieStatus?: string;
 };
 
 type MovieApiItem = Record<string, unknown>;
@@ -193,6 +194,7 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     posterUrl,
     ageRating: getStringValue(movie, ["ageRating", "rating", "rated"]) || "P",
     highlight: isHot ? "HOT" : undefined,
+    movieStatus: getStringValue(movie, ["movieStatus", "status"]) || "NOW_SHOWING",
   };
 };
 
@@ -208,6 +210,56 @@ export default function Home() {
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [selectedShowtimeMovie, setSelectedShowtimeMovie] =
     useState<Movie | null>(null);
+
+  const [activeTab, setActiveTab] = useState<"NOW_SHOWING" | "COMING_SOON" | "SPECIAL">("NOW_SHOWING");
+  const [pageIndex, setPageIndex] = useState(1);
+  const pageSize = 10;
+
+  const filteredMovies = useMemo(() => {
+    return movies.filter((movie) => {
+      if (activeTab === "NOW_SHOWING") {
+        return movie.movieStatus === "NOW_SHOWING";
+      }
+      if (activeTab === "COMING_SOON") {
+        return movie.movieStatus === "COMING_SOON";
+      }
+      if (activeTab === "SPECIAL") {
+        return !!movie.highlight;
+      }
+      return true;
+    });
+  }, [movies, activeTab]);
+
+  const totalPages = Math.ceil(filteredMovies.length / pageSize);
+
+  const paginatedMovies = useMemo(() => {
+    const start = (pageIndex - 1) * pageSize;
+    return filteredMovies.slice(start, start + pageSize);
+  }, [filteredMovies, pageIndex, pageSize]);
+
+  const getPageNumbers = () => {
+    const pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+      if (pageIndex > 3) {
+        pages.push("...");
+      }
+      const start = Math.max(2, pageIndex - 1);
+      const end = Math.min(totalPages - 1, pageIndex + 1);
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      if (pageIndex < totalPages - 2) {
+        pages.push("...");
+      }
+      pages.push(totalPages);
+    }
+    return pages;
+  };
 
   // Tải danh sách phim và lịch chiếu để chỉ hiện nút mua vé khi phim có suất chiếu còn bán.
   useEffect(() => {
@@ -391,7 +443,7 @@ export default function Home() {
   };
 
   return (
-    <div className="bg-[#182437]">
+    <div className="bg-slate-50 dark:bg-[#182437] text-slate-900 dark:text-white transition-colors duration-300">
       <section
         className="relative overflow-hidden bg-black"
         aria-label="Movie banners"
@@ -464,103 +516,298 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="bg-[#182437] px-4 pb-12 pt-8 sm:px-6 sm:pb-16 sm:pt-10">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-base font-extrabold uppercase text-white sm:text-xl">
-            <button type="button" className="transition hover:text-[#FFD166]">
-              Phim sắp chiếu
-            </button>
-            <span className="text-white/80">|</span>
+      <section id="movies-section" className="bg-slate-50 dark:bg-[#182437] px-4 pb-12 pt-8 sm:px-6 sm:pb-16 sm:pt-10 transition-colors duration-300">
+        <div className="mx-auto max-w-[1360px] w-full">
+          <div className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-base font-extrabold uppercase text-slate-800 dark:text-white sm:text-xl">
             <button
               type="button"
-              className="border-b-2 border-[#FFD166] pb-1 text-[#FFD166]"
+              onClick={() => {
+                setActiveTab("COMING_SOON");
+                setPageIndex(1);
+              }}
+              className={`transition hover:text-[#FFD166] ${
+                activeTab === "COMING_SOON"
+                  ? "border-b-2 border-[#FFD166] pb-1 text-[#FFD166]"
+                  : "text-slate-500 dark:text-white/60"
+              }`}
+            >
+              Phim sắp chiếu
+            </button>
+            <span className="text-slate-400 dark:text-white/80">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("NOW_SHOWING");
+                setPageIndex(1);
+              }}
+              className={`transition hover:text-[#FFD166] ${
+                activeTab === "NOW_SHOWING"
+                  ? "border-b-2 border-[#FFD166] pb-1 text-[#FFD166]"
+                  : "text-slate-500 dark:text-white/60"
+              }`}
             >
               Phim đang chiếu
             </button>
-            <span className="text-white/80">|</span>
-            <button type="button" className="transition hover:text-[#FFD166]">
+            <span className="text-slate-400 dark:text-white/80">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("SPECIAL");
+                setPageIndex(1);
+              }}
+              className={`transition hover:text-[#FFD166] ${
+                activeTab === "SPECIAL"
+                  ? "border-b-2 border-[#FFD166] pb-1 text-[#FFD166]"
+                  : "text-slate-500 dark:text-white/60"
+              }`}
+            >
               Suất chiếu đặc biệt
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
-            {loadingMovies ? (
-              <div className="col-span-full text-center text-white py-10 animate-pulse">
-                Đang tải danh sách phim...
-              </div>
-            ) : movieError ? (
-              <div className="col-span-full rounded-lg border border-red-400/20 bg-red-400/10 px-4 py-10 text-center text-sm font-semibold text-red-100">
-                {movieError}
-              </div>
-            ) : movies.length === 0 ? (
-              <div className="col-span-full text-center text-gray-500 py-10">
-                Hiện chưa có phim nào đang chiếu.
-              </div>
-            ) : (
-              movies.map((movie, index) => (
-                <article
-                  key={movie.movieId || `${movie.title}-${index}`}
-                  className="movie-card flex min-w-0 flex-col rounded-lg border border-transparent p-3 transition-colors"
-                >
-                  <div
-                    onClick={() => navigate(`/movie/${movie.movieId}/showtimes`)}
-                    className="relative aspect-[2/3] overflow-hidden rounded-lg bg-[#0F172A] shadow-lg shadow-black/20 cursor-pointer hover:opacity-90 hover:scale-[1.01] transition-all"
+          {/* DANH SÁCH BỐ CỤC PHÂN CHIA RIÊNG BIỆT */}
+          {loadingMovies ? (
+            <div className="col-span-full text-center text-white py-20 animate-pulse font-bold">
+              Đang tải danh sách phim...
+            </div>
+          ) : movieError ? (
+            <div className="col-span-full rounded-lg border border-red-400/20 bg-red-400/10 px-4 py-10 text-center text-sm font-semibold text-red-100">
+              {movieError}
+            </div>
+          ) : paginatedMovies.length === 0 ? (
+            <div className="col-span-full text-center text-gray-400 py-20 font-bold">
+              Hiện chưa có phim nào trong danh mục này.
+            </div>
+          ) : (
+            <>
+              {/* DESKTOP VIEW (5 cột cân bằng 5-5, chiều rộng rộng hơn để không trống trải) */}
+              <div className="hidden lg:grid lg:grid-cols-5 gap-x-6 gap-y-10">
+                {paginatedMovies.map((movie, index) => (
+                  <article
+                    key={`desktop-${movie.movieId || index}`}
+                    className="movie-card flex min-w-0 flex-col justify-between h-full rounded-xl border border-slate-200 dark:border-transparent p-3 hover:bg-slate-100 dark:hover:bg-[#1E2E4A]/40 transition-all duration-300 bg-white dark:bg-[#182437]/50 shadow-sm dark:shadow-none"
                   >
-                    {movie.posterUrl ? (
-                      <img
-                        src={movie.posterUrl}
-                        alt={movie.title}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                        draggable={false}
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-[#111827] px-5 text-center text-sm font-bold uppercase tracking-wide text-white/45">
-                        Chưa có poster
-                      </div>
-                    )}
+                    <div className="flex flex-col gap-3">
+                      <div
+                        onClick={() => navigate(`/movie/${movie.movieId}/showtimes`)}
+                        className="relative aspect-[2/3] overflow-hidden rounded-lg bg-[#0F172A] shadow-lg shadow-black/30 cursor-pointer hover:opacity-90 hover:scale-[1.02] transition-all duration-300"
+                      >
+                        {movie.posterUrl ? (
+                          <img
+                            src={movie.posterUrl}
+                            alt={movie.title}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            draggable={false}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-[#111827] px-5 text-center text-sm font-bold uppercase tracking-wide text-white/45">
+                            Chưa có poster
+                          </div>
+                        )}
 
-                    <div className="absolute left-2 top-2 rounded bg-white/90 px-2 py-1 text-[10px] font-extrabold leading-none text-[#8A8F98]">
-                      {movie.ageRating}
+                        <div className="absolute left-2 top-2 rounded bg-white/90 px-2 py-1 text-[10px] font-extrabold leading-none text-[#8A8F98]">
+                          {movie.ageRating}
+                        </div>
+
+                        {movie.highlight ? (
+                          <div className="absolute right-0 top-0 rounded-bl bg-[#7C4DFF] px-2.5 py-2 text-[10px] font-extrabold leading-none text-white">
+                            {movie.highlight}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div>
+                        <h3
+                          className="text-[15px] font-bold leading-5 text-slate-800 dark:text-white line-clamp-2 min-h-[40px] hover:text-[#FFD166] dark:hover:text-[#FFD166] cursor-pointer transition-colors"
+                          onClick={() => navigate(`/movie/${movie.movieId}/showtimes`)}
+                        >
+                          {movie.title}
+                        </h3>
+                        <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-white/70">
+                          <p className="truncate">
+                            Đạo diễn: <span className="text-slate-800 dark:text-white font-medium">{movie.director}</span>
+                          </p>
+                          <p className="truncate">
+                            Thể loại: <span className="text-slate-800 dark:text-white font-medium">{movie.genre}</span>
+                          </p>
+                          <p className="truncate">
+                            Thời lượng: <span className="text-slate-800 dark:text-white font-medium">{movie.duration}</span>
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
-                    {movie.highlight ? (
-                      <div className="absolute right-0 top-0 rounded-bl bg-[#7C4DFF] px-2.5 py-2 text-[10px] font-extrabold leading-none text-white">
-                        {movie.highlight}
+                    {movie.movieId && bookableMovieIds.has(String(movie.movieId)) ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBuyTicket(movie);
+                        }}
+                        className="mt-5 h-10 w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] text-xs font-extrabold uppercase text-black transition hover:brightness-105 shadow-md active:scale-95"
+                      >
+                        Mua vé
+                      </button>
+                    ) : (
+                      <div className="mt-5 h-10 w-full flex items-center justify-center rounded-md border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-[#1E2E4A]/20 text-[10px] font-bold uppercase text-slate-400 dark:text-white/45">
+                        Sắp có suất chiếu
                       </div>
-                    ) : null}
-                  </div>
+                    )}
+                  </article>
+                ))}
+              </div>
 
-                  <h3 className="mt-3 text-[15px] font-bold leading-5 text-white">
-                    {movie.title}
-                  </h3>
-                  <p className="mt-1 text-xs leading-5 text-white">
-                    Đạo diễn: <span className="text-white/80">{movie.director}</span>
-                  </p>
-                  <p className="text-xs leading-5 text-white">
-                    Thể loại: <span className="text-white/80">{movie.genre}</span>
-                  </p>
-                  <p className="text-xs leading-5 text-white">
-                    Thời lượng:{" "}
-                    <span className="text-white/80">{movie.duration}</span>
-                  </p>
+              {/* MOBILE VIEW (2 cột cân bằng 2-2-2-2-2, không bao giờ lẻ loi) */}
+              <div className="grid grid-cols-2 lg:hidden gap-x-4 gap-y-8">
+                {paginatedMovies.map((movie, index) => (
+                  <article
+                    key={`mobile-${movie.movieId || index}`}
+                    className="movie-card flex min-w-0 flex-col justify-between h-full rounded-lg border border-slate-200 dark:border-transparent p-2 hover:bg-slate-100 dark:hover:bg-[#1E2E4A]/30 transition-all duration-300 bg-white dark:bg-[#182437]/50 shadow-sm dark:shadow-none"
+                  >
+                    <div className="flex flex-col gap-2">
+                      <div
+                        onClick={() => navigate(`/movie/${movie.movieId}/showtimes`)}
+                        className="relative aspect-[2/3] overflow-hidden rounded-lg bg-[#0F172A] shadow-md shadow-black/20 cursor-pointer active:opacity-80 transition-all"
+                      >
+                        {movie.posterUrl ? (
+                          <img
+                            src={movie.posterUrl}
+                            alt={movie.title}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            draggable={false}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-[#111827] px-3 text-center text-xs font-bold uppercase tracking-wide text-white/45">
+                            Chưa có poster
+                          </div>
+                        )}
 
-                  {movie.movieId && bookableMovieIds.has(String(movie.movieId)) ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleBuyTicket(movie);
-                      }}
-                      className="mt-5 h-10 w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] text-xs font-extrabold uppercase text-black transition hover:brightness-105"
+                        <div className="absolute left-1.5 top-1.5 rounded bg-white/90 px-1.5 py-0.5 text-[9px] font-extrabold leading-none text-[#8A8F98]">
+                          {movie.ageRating}
+                        </div>
+
+                        {movie.highlight ? (
+                          <div className="absolute right-0 top-0 rounded-bl bg-[#7C4DFF] px-2 py-1.5 text-[9px] font-extrabold leading-none text-white">
+                            {movie.highlight}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div>
+                        <h3
+                          className="text-sm font-bold leading-4 text-slate-800 dark:text-white line-clamp-2 min-h-[32px] hover:text-[#FFD166] dark:hover:text-[#FFD166] cursor-pointer transition-colors"
+                          onClick={() => navigate(`/movie/${movie.movieId}/showtimes`)}
+                        >
+                          {movie.title}
+                        </h3>
+                        <div className="mt-1.5 space-y-0.5 text-[11px] text-slate-500 dark:text-white/60">
+                          <p className="truncate">
+                            Đạo diễn: <span className="text-slate-700 dark:text-white/80">{movie.director}</span>
+                          </p>
+                          <p className="truncate">
+                            Thể loại: <span className="text-slate-700 dark:text-white/80">{movie.genre}</span>
+                          </p>
+                          <p className="truncate">
+                            Thời lượng: <span className="text-slate-700 dark:text-white/80">{movie.duration}</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {movie.movieId && bookableMovieIds.has(String(movie.movieId)) ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBuyTicket(movie);
+                        }}
+                        className="mt-4 h-9 w-full rounded bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] text-[11px] font-extrabold uppercase text-black transition active:scale-95"
+                      >
+                        Mua vé
+                      </button>
+                    ) : (
+                      <div className="mt-4 h-9 w-full flex items-center justify-center rounded border border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-[#1E2E4A]/10 text-[9px] font-bold uppercase text-slate-400 dark:text-white/40">
+                        Sắp có suất
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
+
+          {totalPages > 1 && (
+            <div className="mt-10 flex flex-wrap justify-center items-center gap-2">
+              <button
+                type="button"
+                disabled={pageIndex === 1}
+                onClick={() => {
+                  setPageIndex((prev) => prev - 1);
+                  const element = document.getElementById("movies-section");
+                  if (element) {
+                    element.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 dark:bg-[#24334C] text-slate-800 dark:text-white transition hover:bg-slate-300 dark:hover:bg-[#2D3F5E] disabled:opacity-40 disabled:hover:bg-slate-200 dark:disabled:hover:bg-[#24334C]"
+                aria-label="Trang trước"
+              >
+                <FiChevronLeft className="h-5 w-5" />
+              </button>
+              
+              {getPageNumbers().map((page, index) => {
+                if (page === "...") {
+                  return (
+                    <span
+                      key={`ellipsis-${index}`}
+                      className="flex h-10 w-10 items-center justify-center font-bold text-slate-400 dark:text-white/50"
                     >
-                      Mua vé
-                    </button>
-                  ) : null}
-                </article>
-              ))
-            )}
-          </div>
+                      ...
+                    </span>
+                  );
+                }
+                
+                const isCurrent = page === pageIndex;
+                return (
+                  <button
+                    key={`page-${page}`}
+                    type="button"
+                    onClick={() => {
+                      setPageIndex(Number(page));
+                      const element = document.getElementById("movies-section");
+                      if (element) {
+                        element.scrollIntoView({ behavior: "smooth" });
+                      }
+                    }}
+                    className={`flex h-10 w-10 items-center justify-center rounded-full font-bold text-sm transition-all duration-200 ${
+                      isCurrent
+                        ? "bg-[#FFD166] text-black shadow-md shadow-[#FFD166]/20 scale-105"
+                        : "bg-slate-200 dark:bg-[#24334C] text-slate-800 dark:text-white hover:bg-slate-300 dark:hover:bg-[#2D3F5E] hover:scale-105"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                disabled={pageIndex === totalPages}
+                onClick={() => {
+                  setPageIndex((prev) => prev + 1);
+                  const element = document.getElementById("movies-section");
+                  if (element) {
+                    element.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 dark:bg-[#24334C] text-slate-800 dark:text-white transition hover:bg-slate-300 dark:hover:bg-[#2D3F5E] disabled:opacity-40 disabled:hover:bg-slate-200 dark:disabled:hover:bg-[#24334C]"
+                aria-label="Trang sau"
+              >
+                <FiChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          )}
         </div>
       </section>
 

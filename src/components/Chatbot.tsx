@@ -102,29 +102,29 @@ export default function Chatbot() {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="flex h-[550px] w-[380px] flex-col rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-slate-900 to-indigo-950 shadow-2xl overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
+        <div className="flex h-[550px] w-[380px] flex-col rounded-2xl border border-slate-200 dark:border-indigo-500/20 bg-white dark:bg-gradient-to-br dark:from-slate-900 dark:to-indigo-950 shadow-2xl overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-5 text-slate-800 dark:text-slate-100">
           {/* Header */}
-          <div className="bg-indigo-600/30 backdrop-blur-sm p-4 border-b border-indigo-500/30 flex justify-between items-center">
+          <div className="bg-slate-100 dark:bg-indigo-600/30 backdrop-blur-sm p-4 border-b border-slate-200 dark:border-indigo-500/30 flex justify-between items-center">
             <div className="flex items-center space-x-2">
-              <Sparkles className="text-indigo-300 h-5 w-5" />
+              <Sparkles className="text-indigo-600 dark:text-indigo-300 h-5 w-5" />
               <div>
-                <h3 className="text-white font-medium text-sm">G2C Assistant</h3>
+                <h3 className="text-slate-800 dark:text-white font-bold text-sm">G2C Assistant</h3>
                 <div className="flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span className="text-[10px] text-emerald-400 font-medium">Trực tuyến</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Trực tuyến</span>
                 </div>
               </div>
             </div>
             <button 
               onClick={() => setIsOpen(false)}
-              className="text-indigo-200 hover:text-white transition-colors"
+              className="text-slate-500 dark:text-indigo-200 hover:text-slate-800 dark:hover:text-white transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
           {/* Messages Body */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900/50">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-900/50">
             {messages.map((msg) => {
               const isBot = msg.sender === 'bot';
               return (
@@ -136,8 +136,8 @@ export default function Chatbot() {
                     <div
                       className={`p-3 rounded-2xl ${
                         !isBot
-                          ? "bg-indigo-600 text-white rounded-tr-none"
-                          : "bg-slate-700/60 text-slate-100 rounded-tl-none border border-slate-600/50"
+                          ? "bg-indigo-600 text-white rounded-tr-none shadow-sm"
+                          : "bg-white dark:bg-slate-700/60 text-slate-800 dark:text-slate-100 rounded-tl-none border border-slate-200 dark:border-slate-600/50 shadow-sm"
                       } animate-fade-in`}
                     >
                       <p className="text-xs whitespace-pre-line leading-relaxed">{msg.text}</p>
@@ -152,11 +152,11 @@ export default function Chatbot() {
 
             {isTyping && (
               <div className="flex justify-start">
-                <div className="max-w-[80%] p-3 rounded-2xl bg-slate-700/60 text-slate-100 rounded-tl-none border border-slate-600/50">
+                <div className="max-w-[80%] p-3 rounded-2xl bg-white dark:bg-slate-700/60 text-slate-800 dark:text-slate-100 rounded-tl-none border border-slate-200 dark:border-slate-600/50 shadow-sm">
                   <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></div>
-                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse delay-75"></div>
-                    <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse delay-150"></div>
+                    <div className="w-2 h-2 rounded-full bg-indigo-500 dark:bg-indigo-400 animate-pulse"></div>
+                    <div className="w-2 h-2 rounded-full bg-indigo-500 dark:bg-indigo-400 animate-pulse delay-75"></div>
+                    <div className="w-2 h-2 rounded-full bg-indigo-500 dark:bg-indigo-400 animate-pulse delay-150"></div>
                   </div>
                 </div>
               </div>
@@ -166,12 +166,12 @@ export default function Chatbot() {
 
           {/* Quick presets (only shown if not typing) */}
           {!isTyping && (
-            <div className="px-4 pb-2 pt-1 border-t border-slate-800/40 bg-slate-900/30 flex gap-1.5 flex-wrap">
+            <div className="px-4 pb-2 pt-1 border-t border-slate-200 dark:border-slate-800/40 bg-slate-100 dark:bg-slate-900/30 flex gap-1.5 flex-wrap">
               {presets.map((preset, idx) => (
                 <button
                   key={idx}
                   onClick={() => handleSend(preset.text)}
-                  className="rounded-full border border-indigo-500/20 bg-slate-800/50 hover:border-indigo-500/50 hover:bg-indigo-950/40 px-2.5 py-1 text-[10px] text-indigo-200 transition"
+                  className="rounded-full border border-slate-300 dark:border-indigo-500/20 bg-white dark:bg-slate-800/50 hover:border-indigo-500/50 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 px-2.5 py-1 text-[10px] text-slate-600 dark:text-indigo-200 transition"
                 >
                   {preset.label}
                 </button>
@@ -185,7 +185,11 @@ export default function Chatbot() {
               e.preventDefault();
               handleSend(inputValue);
             }}
-            className={`p-4 border-t ${isFocused ? 'border-indigo-500/70 bg-slate-800/80' : 'border-slate-700/50 bg-slate-800/30'} transition-colors duration-200`}
+            className={`p-4 border-t ${
+              isFocused 
+                ? 'border-indigo-500/70 bg-slate-100 dark:bg-slate-800/80' 
+                : 'border-slate-200 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30'
+            } transition-colors duration-200`}
           >
             <div className="relative flex items-center">
               <input
@@ -195,14 +199,14 @@ export default function Chatbot() {
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 placeholder="Nhập tin nhắn..."
-                className="w-full bg-slate-700/50 border border-slate-600/50 rounded-full py-2.5 pl-4 pr-12 text-xs text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/70"
+                className="w-full bg-slate-100 dark:bg-slate-700/50 border border-slate-300 dark:border-slate-600/50 rounded-full py-2.5 pl-4 pr-12 text-xs text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/70"
               />
               <button
                 type="submit"
                 disabled={!inputValue.trim() || isTyping}
                 className={`absolute right-1 rounded-full p-1.5 ${
                   !inputValue.trim() || isTyping
-                    ? "text-slate-500 bg-slate-700/50 cursor-not-allowed"
+                    ? "text-slate-400 dark:text-slate-500 bg-slate-200 dark:bg-slate-700/50 cursor-not-allowed"
                     : "text-white bg-indigo-600 hover:bg-indigo-500"
                 } transition-colors`}
               >

@@ -28,6 +28,7 @@ const AdminLayout = () => {
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
     document.documentElement.classList.toggle('light', isLightMode);
+    document.documentElement.classList.toggle('dark', !isLightMode);
     document.body.classList.toggle('g2c-light-mode', isLightMode);
     localStorage.setItem(THEME_STORAGE_KEY, themeMode);
   }, [isLightMode, themeMode]);
