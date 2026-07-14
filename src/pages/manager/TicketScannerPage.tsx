@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { FaBarcode, FaCamera, FaCheckCircle, FaHistory, FaQrcode, FaStopCircle, FaTimesCircle } from 'react-icons/fa';
+import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser';
 import type { ManagerOutletContext } from '../../layouts/manager/ManagerLayout';
 import { managerService, type ScanTicketResponse } from '../../services/managerService';
 import type { RoomResponse } from '../../services/roomService';
@@ -22,23 +23,13 @@ type ScanHistoryItem = {
   result?: ScanTicketResponse;
 };
 
-type BrowserBarcodeDetector = {
-  detect: (source: CanvasImageSource) => Promise<Array<{ rawValue?: string }>>;
-};
-
-type BrowserBarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BrowserBarcodeDetector;
-
-type WindowWithBarcodeDetector = Window & {
-  BarcodeDetector?: BrowserBarcodeDetectorConstructor;
-};
-
 type CameraStatus = 'idle' | 'starting' | 'scanning' | 'unsupported' | 'denied' | 'error';
 
 const TicketScannerPage = () => {
   const { isLightMode } = useOutletContext<ManagerOutletContext>();
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const detectorRef = useRef<BrowserBarcodeDetector | null>(null);
+  const scannerControlsRef = useRef<IScannerControls | null>(null);
+  const scanHandledRef = useRef(false);
   const [rooms, setRooms] = useState<RoomResponse[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [qrCode, setQrCode] = useState('');
@@ -83,9 +74,9 @@ const TicketScannerPage = () => {
   }, []);
 
   const stopCamera = useCallback((nextStatus: CameraStatus = 'idle') => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    detectorRef.current = null;
+    scannerControlsRef.current?.stop();
+    scannerControlsRef.current = null;
+    scanHandledRef.current = false;
 
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -96,28 +87,47 @@ const TicketScannerPage = () => {
 
   const startCamera = async () => {
     setScanError('');
-    const BarcodeDetector = (window as WindowWithBarcodeDetector).BarcodeDetector;
 
-    if (!BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia) {
       setCameraStatus('unsupported');
+      return;
+    }
+
+    if (!videoRef.current) {
+      setCameraStatus('error');
       return;
     }
 
     try {
       setCameraStatus('starting');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: false,
-      });
+      stopCamera('starting');
+      scanHandledRef.current = false;
 
-      streamRef.current = stream;
-      detectorRef.current = new BarcodeDetector({ formats: ['qr_code'] });
+      const codeReader = new BrowserQRCodeReader();
+      const controls = await codeReader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: 'environment' },
+          },
+          audio: false,
+        },
+        videoRef.current,
+        (result, _error, controlsFromCallback) => {
+          const value = result?.getText().trim();
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+          if (!value || scanHandledRef.current) {
+            return;
+          }
 
+          scanHandledRef.current = true;
+          setQrCode(value);
+          controlsFromCallback.stop();
+          scannerControlsRef.current = null;
+          setCameraStatus('idle');
+        },
+      );
+
+      scannerControlsRef.current = controls;
       setCameraStatus('scanning');
     } catch (error) {
       const permissionName = error instanceof DOMException ? error.name : '';
@@ -125,50 +135,8 @@ const TicketScannerPage = () => {
     }
   };
 
-  useEffect(() => {
-    if (cameraStatus !== 'scanning') {
-      return;
-    }
-
-    let frameId = 0;
-    let isActive = true;
-
-    const scanFrame = async () => {
-      if (!isActive) {
-        return;
-      }
-
-      const detector = detectorRef.current;
-      const video = videoRef.current;
-
-      if (detector && video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && !scanLoading) {
-        try {
-          const [barcode] = await detector.detect(video);
-          const value = barcode?.rawValue?.trim();
-
-          if (value) {
-            setQrCode(value);
-            stopCamera('idle');
-            return;
-          }
-        } catch {
-          // Some browsers throw while the video frame is warming up; keep scanning.
-        }
-      }
-
-      frameId = window.requestAnimationFrame(scanFrame);
-    };
-
-    frameId = window.requestAnimationFrame(scanFrame);
-
-    return () => {
-      isActive = false;
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [cameraStatus, scanLoading, stopCamera]);
-
   useEffect(() => () => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    scannerControlsRef.current?.stop();
   }, []);
 
   const selectedRoom = useMemo(

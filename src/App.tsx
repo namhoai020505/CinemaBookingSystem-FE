@@ -1,12 +1,14 @@
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
 import AdminLayout from './layouts/admin/AdminLayout';
 import ManagerLayout from './layouts/manager/ManagerLayout';
+import StaffLayout from './layouts/staff/StaffLayout';
 import UserLayout from './layouts/user/UserLayout';
 import Dashboard from './pages/admin/Dashboard';
 import ManagerDashboardPage from './pages/manager/ManagerDashboardPage';
 import ManagerShowtimesPage from './pages/manager/ManagerShowtimesPage';
 import ManagerRefundsPage from './pages/manager/ManagerRefundsPage';
 import TicketScannerPage from './pages/manager/TicketScannerPage';
+import StaffTicketScannerPage from './pages/staff/StaffTicketScannerPage';
 import MyCinemaPage from './pages/manager/MyCinemaPage';
 import Home from './pages/user/Home';
 import Profile from './pages/user/Profile';
@@ -29,7 +31,8 @@ import ManageVouchers from './pages/admin/ManageVouchers';
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
-const managerRoles = ['manager', 'staff'];
+const managerRoles = ['manager'];
+const staffRoles = ['staff'];
 
 /**
  * RootLayout: wrapper ngoài cùng, luôn render bên trong RouterProvider
@@ -89,14 +92,14 @@ const router = createBrowserRouter([
               { path: 'staff', element: <ManageStaff /> },
               { path: 'rooms', element: <ManageRooms /> },
               { path: 'rooms/:roomId/seats', element: <ManageSeatLayout /> },
-              { path: 'reviews', element: <ReviewModeration /> },
+              { path: 'review', element: <ReviewModeration /> },
               { path: 'vouchers', element: <ManageVouchers /> },
             ],
           },
         ],
       },
       {
-        // Manager / Staff layout
+        // Manager layout
         element: <RequireAuth allowedRoles={managerRoles} />,
         children: [
           {
@@ -110,6 +113,20 @@ const router = createBrowserRouter([
               { path: 'ticket-scanner', element: <TicketScannerPage /> },
               { path: 'vouchers', element: <ManageVouchers /> },
               { path: 'my-cinema', element: <MyCinemaPage /> },
+            ],
+          },
+        ],
+      },
+      {
+        // Staff layout
+        element: <RequireAuth allowedRoles={staffRoles} />,
+        children: [
+          {
+            path: '/staff',
+            element: <StaffLayout />,
+            children: [
+              { index: true, element: <Navigate to="ticket-scanner" replace /> },
+              { path: 'ticket-scanner', element: <StaffTicketScannerPage /> },
             ],
           },
         ],

@@ -112,7 +112,7 @@ export const getPostLoginRedirect = (role: string | null | undefined) => {
   }
 
   if (isStaffRole(role)) {
-    return '/manager/ticket-scanner';
+    return '/staff/ticket-scanner';
   }
 
   return '/';

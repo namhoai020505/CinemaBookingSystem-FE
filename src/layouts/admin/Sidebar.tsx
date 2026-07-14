@@ -41,7 +41,7 @@ const navItems = [
     icon: <FaTicketAlt />,
   },
   {
-    to: '/admin/reviews',
+    to: '/admin/review',
     label: 'Review',
     description: 'Kiểm duyệt nội dung',
     icon: <FaComments />,
