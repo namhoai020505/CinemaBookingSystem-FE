@@ -370,6 +370,14 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
+const getApiStatus = (error: unknown) => {
+  if (typeof error === "object" && error && "response" in error) {
+    return (error as { response?: { status?: number } }).response?.status;
+  }
+
+  return undefined;
+};
+
 const isNetworkInterruption = (error: unknown) =>
   typeof error === "object"
   && error !== null
@@ -575,9 +583,19 @@ export default function Checkout() {
   }, [booking?.bookingId, navigate, showtimeId, userKey]);
 
   const recoverCheckoutAttempt = useCallback(async (attempt: CheckoutAttempt) => {
-    const recoveryResponse = await bookingService.recoverCheckout(
-      attempt.idempotencyKey,
-    );
+    let recoveryResponse;
+    try {
+      recoveryResponse = await bookingService.recoverCheckout(
+        attempt.idempotencyKey,
+      );
+    } catch (error) {
+      if (getApiStatus(error) === 404) {
+        removeCheckoutAttempt(showtimeId, userKey);
+        setCheckoutAttempt(null);
+      }
+
+      return false;
+    }
 
     if (!recoveryResponse.success || !recoveryResponse.data) {
       return false;
@@ -1098,6 +1116,10 @@ export default function Checkout() {
           );
         }
         return;
+      }
+      if (activeAttempt) {
+        removeCheckoutAttempt(showtimeId, userKey);
+        setCheckoutAttempt(null);
       }
       console.error("Lỗi tạo thanh toán:", error);
       setErrorMessage(getApiErrorMessage(error, "Đã có lỗi xảy ra khi tạo thanh toán."));

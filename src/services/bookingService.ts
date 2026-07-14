@@ -74,12 +74,12 @@ export interface CheckoutPayload {
 
 // Backend CreateBookingRequest shape
 interface CreateBookingRequestPayload {
-  ShowtimeId: string;
-  ShowtimeSeatIds: string[];
-  VoucherCode?: string;
-  FoodAndBeverages?: {
-    FbItemId: string;
-    Quantity: number;
+  showtimeId: string;
+  showtimeSeatIds: string[];
+  voucherCode?: string;
+  foodAndBeverages?: {
+    fbItemId: string;
+    quantity: number;
   }[];
 }
 
@@ -195,16 +195,26 @@ export const bookingService = {
 
   checkout: async (payload: CheckoutPayload, idempotencyKey: string) => {
     // Backend endpoint: POST /api/bookings (CreateBookingRequest)
-    // Maps FE payload fields → BE PascalCase fields
+    // Maps FE payload fields to the backend OpenAPI request shape.
     const bePayload: CreateBookingRequestPayload = {
-      ShowtimeId: String(payload.showtimeId),
-      ShowtimeSeatIds: payload.showtimeSeatIds.map(String),
-      VoucherCode: payload.voucherCode,
-      FoodAndBeverages: payload.foodItems?.map((item) => ({
-        FbItemId: item.fbItemId,
-        Quantity: item.quantity,
-      })),
+      showtimeId: String(payload.showtimeId),
+      showtimeSeatIds: payload.showtimeSeatIds.map(String),
     };
+
+    if (payload.voucherCode?.trim()) {
+      bePayload.voucherCode = payload.voucherCode.trim();
+    }
+
+    const foodAndBeverages = payload.foodItems
+      ?.filter((item) => item.fbItemId && item.quantity > 0)
+      .map((item) => ({
+        fbItemId: item.fbItemId,
+        quantity: item.quantity,
+      }));
+
+    if (foodAndBeverages?.length) {
+      bePayload.foodAndBeverages = foodAndBeverages;
+    }
 
     const raw = await axiosInstance.post('/api/bookings', bePayload, {
       headers: { 'Idempotency-Key': idempotencyKey },
