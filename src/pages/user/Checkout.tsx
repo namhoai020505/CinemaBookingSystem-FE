@@ -945,6 +945,13 @@ export default function Checkout() {
         expiredAt: checkout.expiredAt,
       };
 
+      if (checkout.bookingStatus === "PAID" || checkout.totalAmount === 0) {
+        removePaymentSession(String(showtimeId), userKey);
+        removeSeatLockSession(String(showtimeId), userKey);
+        navigate(`/booking/success/${nextBooking.bookingId}`, { replace: true });
+        return;
+      }
+
       const paymentResponse = await paymentService.createPayment({
         bookingId: nextBooking.bookingId,
         paymentProviderId: PAYMENT_PROVIDER_ID,
