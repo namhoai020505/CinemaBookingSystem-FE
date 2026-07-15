@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { FaBarcode, FaCamera, FaCheckCircle, FaHistory, FaQrcode, FaStopCircle, FaTimesCircle } from 'react-icons/fa';
+import { FaBarcode, FaCamera, FaCheckCircle, FaHistory, FaPrint, FaQrcode, FaStopCircle, FaTimesCircle, FaUtensils, FaUser } from 'react-icons/fa';
 import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser';
 import type { ManagerOutletContext } from '../../layouts/manager/ManagerLayout';
 import { managerService, type ScanTicketResponse } from '../../services/managerService';
@@ -25,6 +25,13 @@ type ScanHistoryItem = {
 
 type CameraStatus = 'idle' | 'starting' | 'scanning' | 'unsupported' | 'denied' | 'error';
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(value);
+
 const TicketScannerPage = () => {
   const { isLightMode } = useOutletContext<ManagerOutletContext>();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -39,6 +46,7 @@ const TicketScannerPage = () => {
   const [roomError, setRoomError] = useState('');
   const [scanError, setScanError] = useState('');
   const [lastScan, setLastScan] = useState<ScanTicketResponse | null>(null);
+  const [ticketModal, setTicketModal] = useState<ScanTicketResponse | null>(null);
   const [history, setHistory] = useState<ScanHistoryItem[]>([]);
 
   useEffect(() => {
@@ -119,11 +127,11 @@ const TicketScannerPage = () => {
             return;
           }
 
-          scanHandledRef.current = true;
-          setQrCode(value);
           controlsFromCallback.stop();
           scannerControlsRef.current = null;
           setCameraStatus('idle');
+          scanHandledRef.current = true;
+          void scanTicketCode(value);
         },
       );
 
@@ -158,14 +166,13 @@ const TicketScannerPage = () => {
   const cameraMessage = {
     idle: 'Camera đang tắt. Có thể bật camera hoặc nhập mã thủ công.',
     starting: 'Đang xin quyền camera...',
-    scanning: 'Đưa mã QR vào khung hình để tự điền mã vé.',
+    scanning: 'Đưa mã QR vào khung hình để tự xác nhận vé.',
     unsupported: 'Trình duyệt hiện tại chưa hỗ trợ quét QR bằng camera. Hãy dùng nhập mã thủ công.',
     denied: 'Camera bị từ chối quyền truy cập. Hãy cấp quyền camera hoặc nhập mã thủ công.',
     error: 'Không mở được camera trên thiết bị này. Hãy dùng nhập mã thủ công.',
   }[cameraStatus];
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  async function scanTicketCode(rawQrCode: string) {
     setScanError('');
     setLastScan(null);
 
@@ -174,7 +181,8 @@ const TicketScannerPage = () => {
       return;
     }
 
-    if (!qrCode.trim()) {
+    const normalizedQrCode = rawQrCode.trim();
+    if (!normalizedQrCode) {
       setScanError('Vui lòng nhập hoặc quét mã QR của vé.');
       return;
     }
@@ -183,18 +191,25 @@ const TicketScannerPage = () => {
       setScanLoading(true);
       const result = await managerService.scanTicket({
         roomId: selectedRoomId,
-        qrCode: qrCode.trim(),
+        qrCode: normalizedQrCode,
       });
       setLastScan(result);
+      setTicketModal(result);
       setQrCode('');
       addHistory({ success: true, message: 'Vé hợp lệ', result });
     } catch (error) {
       const message = getApiErrorMessage(error, 'Không soát được vé. Kiểm tra lại mã hoặc phòng chiếu.');
+      setQrCode(normalizedQrCode);
       setScanError(message);
       addHistory({ success: false, message });
     } finally {
       setScanLoading(false);
     }
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await scanTicketCode(qrCode);
   };
 
   return (
@@ -353,6 +368,98 @@ const TicketScannerPage = () => {
           </section>
         </div>
       )}
+      {ticketModal ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+          <section className={`max-h-[90vh] w-full max-w-3xl overflow-auto rounded-xl border shadow-2xl ${isLightMode ? 'border-slate-200 bg-white text-slate-950' : 'border-white/10 bg-slate-950 text-white'}`}>
+            <div className={`flex items-start justify-between gap-4 border-b p-5 ${isLightMode ? 'border-slate-200' : 'border-white/10'}`}>
+              <div className="flex items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                  <FaCheckCircle />
+                </span>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider text-emerald-400">Vé đã xác nhận</p>
+                  <h2 className="mt-1 text-xl font-black">{ticketModal.movieTitle}</h2>
+                  <p className={`mt-1 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    {formatDateTime(ticketModal.showtimeStartTime)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTicketModal(null)}
+                className={`grid h-9 w-9 place-items-center rounded-lg border text-sm font-black transition ${isLightMode ? 'border-slate-200 text-slate-500 hover:bg-slate-100' : 'border-white/10 text-slate-300 hover:bg-white/10'}`}
+                aria-label="Đóng popup"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid gap-4 p-5 md:grid-cols-2">
+              <div className={`rounded-lg border p-4 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'}`}>
+                <div className="flex items-center gap-2 text-sm font-black uppercase text-cyan-300">
+                  <FaUser />
+                  Khách hàng
+                </div>
+                <p className="mt-3 text-lg font-black">{ticketModal.customerName || 'Khách vãng lai'}</p>
+                <p className={`mt-1 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {ticketModal.customerPhone || 'Chưa có số điện thoại'}
+                </p>
+              </div>
+
+              <div className={`rounded-lg border p-4 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'}`}>
+                <div className="text-sm font-black uppercase text-cyan-300">Rạp / phòng</div>
+                <p className="mt-3 text-base font-black">{ticketModal.cinemaName}</p>
+                <p className={`mt-1 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{ticketModal.roomName}</p>
+              </div>
+
+              <div className={`rounded-lg border p-4 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'}`}>
+                <div className="text-sm font-black uppercase text-cyan-300">Ghế đã đặt</div>
+                <p className="mt-3 text-lg font-black">
+                  {(ticketModal.seatCodes?.length ? ticketModal.seatCodes : [ticketModal.seatCode]).join(', ')}
+                </p>
+              </div>
+
+              <div className={`rounded-lg border p-4 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'}`}>
+                <div className="text-sm font-black uppercase text-cyan-300">Mã đơn</div>
+                <p className="mt-3 break-all font-mono text-sm font-black">{ticketModal.bookingId}</p>
+              </div>
+
+              <div className={`rounded-lg border p-4 md:col-span-2 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'}`}>
+                <div className="flex items-center gap-2 text-sm font-black uppercase text-cyan-300">
+                  <FaUtensils />
+                  F&B của vé
+                </div>
+                {ticketModal.foodAndBeverageItems?.length ? (
+                  <div className={`mt-3 divide-y ${isLightMode ? 'divide-slate-200' : 'divide-white/10'}`}>
+                    {ticketModal.foodAndBeverageItems.map((item) => (
+                      <div key={item.fbItemId} className="flex items-center justify-between gap-4 py-3 text-sm">
+                        <div>
+                          <p className="font-black">{item.itemName}</p>
+                          <p className={isLightMode ? 'text-slate-500' : 'text-slate-400'}>Số lượng: {item.quantity}</p>
+                        </div>
+                        <p className="font-black">{formatCurrency(item.subtotal)}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`mt-3 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Vé này không có F&B.</p>
+                )}
+              </div>
+            </div>
+
+            <div className={`flex justify-end border-t p-5 ${isLightMode ? 'border-slate-200' : 'border-white/10'}`}>
+              <button
+                type="button"
+                onClick={() => setTicketModal(null)}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-500"
+              >
+                <FaPrint />
+                In vé
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </PageShell>
   );
 };

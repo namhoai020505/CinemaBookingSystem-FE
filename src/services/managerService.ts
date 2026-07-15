@@ -67,12 +67,22 @@ export type ScanTicketRequest = {
   roomId: string;
 };
 
+export type ScanTicketFoodAndBeverageItem = {
+  fbItemId: string;
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+};
+
 export type ScanTicketResponse = {
   ticketId: string;
   ticketStatus: string;
   checkInLogId: string;
   scanTime: string;
   bookingId: string;
+  customerName: string;
+  customerPhone?: string | null;
   cinemaId: string;
   cinemaName: string;
   roomId: string;
@@ -82,6 +92,8 @@ export type ScanTicketResponse = {
   showtimeEndTime: string;
   movieTitle: string;
   seatCode: string;
+  seatCodes?: string[];
+  foodAndBeverageItems?: ScanTicketFoodAndBeverageItem[];
 };
 
 const unwrap = <T>(response: ApiEnvelope<T>) => response?.data as T;
