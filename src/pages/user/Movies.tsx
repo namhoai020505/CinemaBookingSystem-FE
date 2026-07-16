@@ -52,6 +52,14 @@ type MovieResponseAliases = MovieResponse & {
   isHot?: boolean;
 };
 
+type SearchFilter = "director" | "genre" | "title";
+
+const searchFilterOptions: Array<{ value: SearchFilter; label: string }> = [
+  { value: "director", label: "Đạo diễn" },
+  { value: "genre", label: "Thể loại" },
+  { value: "title", label: "Tên phim" },
+];
+
 const BUY_TICKET_VISIBILITY_REFRESH_MS = 30_000;
 
 const normalizeText = (value: string) =>
@@ -120,6 +128,14 @@ const mapMovieToCard = (movie: MovieResponseAliases): MovieCard => {
   };
 };
 
+const getMovieGenreNames = (genreText: string) =>
+  genreText
+    .split(",")
+    .map((item) => item.trim())
+    .filter(
+      (item) => item && normalizeText(item) !== normalizeText("Đang cập nhật"),
+    );
+
 const buildGenreOptions = (genres: GenreResponse[], movies: MovieCard[]) => {
   const genreNames = new Set<string>();
 
@@ -130,11 +146,7 @@ const buildGenreOptions = (genres: GenreResponse[], movies: MovieCard[]) => {
   });
 
   movies.forEach((movie) => {
-    movie.genre
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item && item !== "Đang cập nhật")
-      .forEach((item) => genreNames.add(item));
+    getMovieGenreNames(movie.genre).forEach((genre) => genreNames.add(genre));
   });
 
   return Array.from(genreNames).sort((left, right) =>
@@ -154,12 +166,14 @@ export default function Movies() {
   const [selectedShowtimeMovie, setSelectedShowtimeMovie] =
     useState<MovieCard | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedGenre, setSelectedGenre] = useState("all");
+  const [selectedSearchFilter, setSelectedSearchFilter] =
+    useState<SearchFilter>("title");
+  const [selectedGenreNames, setSelectedGenreNames] = useState<string[]>([]);
   const [loadingMovies, setLoadingMovies] = useState(true);
   const [movieError, setMovieError] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
-  const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
-  const genreFilterRef = useRef<HTMLDivElement>(null);
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchMoviesPageData = async () => {
@@ -221,10 +235,10 @@ export default function Movies() {
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       if (
-        genreFilterRef.current &&
-        !genreFilterRef.current.contains(event.target as Node)
+        filterDropdownRef.current &&
+        !filterDropdownRef.current.contains(event.target as Node)
       ) {
-        setIsGenreDropdownOpen(false);
+        setIsFilterDropdownOpen(false);
       }
     };
 
@@ -255,32 +269,53 @@ export default function Movies() {
 
   const filteredMovies = useMemo(() => {
     const normalizedSearch = normalizeText(searchTerm);
-    const normalizedGenre =
-      selectedGenre === "all" ? "" : normalizeText(selectedGenre);
+    const selectedGenreKeys = selectedGenreNames.map(normalizeText);
 
     return movies.filter((movie) => {
-      const matchesSearch =
-        !normalizedSearch ||
-        normalizeText(`${movie.title} ${movie.director} ${movie.genre}`).includes(
-          normalizedSearch,
-        );
-      const matchesGenre =
-        !normalizedGenre || normalizeText(movie.genre).includes(normalizedGenre);
+      if (selectedSearchFilter === "genre") {
+        const normalizedGenre = normalizeText(movie.genre);
+        const matchesCheckedGenres =
+          selectedGenreKeys.length === 0 ||
+          selectedGenreKeys.some((genre) => normalizedGenre.includes(genre));
+        const matchesSearch =
+          !normalizedSearch || normalizedGenre.includes(normalizedSearch);
 
-      return matchesSearch && matchesGenre;
+        return matchesCheckedGenres && matchesSearch;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const searchableValue =
+        selectedSearchFilter === "director"
+          ? movie.director
+          : movie.title;
+
+      return normalizeText(searchableValue).includes(normalizedSearch);
     });
-  }, [movies, searchTerm, selectedGenre]);
+  }, [movies, searchTerm, selectedGenreNames, selectedSearchFilter]);
 
-  const selectedGenreLabel = selectedGenre === "all" ? "Thể loại" : selectedGenre;
+  const selectedSearchFilterLabel =
+    searchFilterOptions.find((option) => option.value === selectedSearchFilter)
+      ?.label || "Tên phim";
 
-  const handleSelectGenre = (genre: string) => {
-    setSelectedGenre(genre);
-    setIsGenreDropdownOpen(false);
+  const handleSelectSearchFilter = (filter: SearchFilter) => {
+    setSelectedSearchFilter(filter);
+    setIsFilterDropdownOpen(false);
   };
 
-  const handleGenreDropdownKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleToggleGenre = (genre: string) => {
+    setSelectedGenreNames((currentGenres) =>
+      currentGenres.includes(genre)
+        ? currentGenres.filter((item) => item !== genre)
+        : [...currentGenres, genre],
+    );
+  };
+
+  const handleFilterDropdownKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
-      setIsGenreDropdownOpen(false);
+      setIsFilterDropdownOpen(false);
     }
   };
 
@@ -326,74 +361,64 @@ export default function Movies() {
                 type="search"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Tìm kiếm"
+                placeholder={`Tìm theo ${selectedSearchFilterLabel.toLowerCase()}`}
                 className="h-11 w-full border-0 bg-transparent pl-10 pr-4 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-[#FFD166] dark:text-white dark:placeholder:text-white/45"
               />
             </div>
 
             <div
               className="relative z-30 border-t border-slate-300 dark:border-[#474747] sm:border-l sm:border-t-0"
-              ref={genreFilterRef}
-              onKeyDown={handleGenreDropdownKeyDown}
+              ref={filterDropdownRef}
+              onKeyDown={handleFilterDropdownKeyDown}
             >
               <button
                 type="button"
                 aria-haspopup="listbox"
-                aria-expanded={isGenreDropdownOpen}
-                aria-label="Lọc theo thể loại"
-                onClick={() => setIsGenreDropdownOpen((current) => !current)}
+                aria-expanded={isFilterDropdownOpen}
+                aria-label="Chọn phạm vi tìm kiếm"
+                onClick={() => setIsFilterDropdownOpen((current) => !current)}
                 className="flex h-11 w-full cursor-pointer items-center gap-3 bg-transparent px-4 text-left text-sm font-bold text-slate-700 transition-colors duration-200 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD166] dark:text-white dark:hover:bg-white/[0.06]"
               >
                 <FiFilter
                   className="h-4 w-4 shrink-0 text-slate-400 dark:text-white/50"
                   aria-hidden="true"
                 />
-                <span className="min-w-0 flex-1 truncate">{selectedGenreLabel}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {selectedSearchFilterLabel}
+                </span>
                 <FiChevronDown
                   className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 dark:text-white/50 ${
-                    isGenreDropdownOpen ? "rotate-180" : ""
+                    isFilterDropdownOpen ? "rotate-180" : ""
                   }`}
                   aria-hidden="true"
                 />
               </button>
 
-              {isGenreDropdownOpen ? (
+              {isFilterDropdownOpen ? (
                 <div
                   role="listbox"
-                  aria-label="Danh sách thể loại"
+                  aria-label="Danh sách phạm vi tìm kiếm"
                   className="absolute left-0 right-0 top-[calc(100%+6px)] z-40 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-2xl shadow-slate-900/15 dark:border-[#474747] dark:bg-[#1E293B] dark:text-white dark:shadow-black/40"
                 >
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={selectedGenre === "all"}
-                    onClick={() => handleSelectGenre("all")}
-                    className={`flex min-h-[42px] w-full cursor-pointer items-center rounded-md px-3 text-left text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] ${
-                      selectedGenre === "all"
-                        ? "bg-[#FFD166] text-[#111827]"
-                        : "text-slate-700 hover:bg-slate-100 dark:text-white dark:hover:bg-white/[0.08]"
-                    }`}
-                  >
-                    Tất cả thể loại
-                  </button>
-
-                  {genreOptions.map((genre) => {
-                    const isSelected = selectedGenre === genre;
+                  {searchFilterOptions.map((option, index) => {
+                    const isSelected = selectedSearchFilter === option.value;
 
                     return (
                       <button
-                        key={genre}
+                        key={option.value}
                         type="button"
                         role="option"
                         aria-selected={isSelected}
-                        onClick={() => handleSelectGenre(genre)}
-                        className={`mt-1 flex min-h-[42px] w-full cursor-pointer items-center rounded-md px-3 text-left text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] ${
+                        onClick={() => handleSelectSearchFilter(option.value)}
+                        className={`flex min-h-[42px] w-full cursor-pointer items-center rounded-md px-3 text-left text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] ${
+                          index > 0 ? "mt-1" : ""
+                        } ${
                           isSelected
                             ? "bg-[#FFD166] text-[#111827]"
                             : "text-slate-700 hover:bg-slate-100 dark:text-white dark:hover:bg-white/[0.08]"
                         }`}
                       >
-                        <span className="truncate">{genre}</span>
+                        <span className="truncate">{option.label}</span>
                       </button>
                     );
                   })}
@@ -401,6 +426,62 @@ export default function Movies() {
               ) : null}
             </div>
           </div>
+
+          {selectedSearchFilter === "genre" ? (
+            <div className="mx-auto -mt-4 mb-8 max-w-2xl rounded-lg border border-slate-300 bg-white p-3 shadow-sm dark:border-[#474747] dark:bg-[#1E293B]">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500 dark:text-white/50">
+                    Chọn thể loại
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-white/55">
+                    Tick một hoặc nhiều thể loại để lọc danh sách phim.
+                  </p>
+                </div>
+
+                {selectedGenreNames.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGenreNames([])}
+                    className="min-h-[36px] rounded-md border border-slate-300 px-3 text-xs font-black text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] dark:border-white/15 dark:text-white dark:hover:bg-white/[0.08]"
+                  >
+                    Bỏ chọn
+                  </button>
+                ) : null}
+              </div>
+
+              {genreOptions.length === 0 ? (
+                <div className="mt-3 rounded-md border border-dashed border-slate-300 px-3 py-4 text-sm font-semibold text-slate-500 dark:border-white/15 dark:text-white/55">
+                  Chưa có dữ liệu thể loại.
+                </div>
+              ) : (
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {genreOptions.map((genre) => {
+                    const checked = selectedGenreNames.includes(genre);
+
+                    return (
+                      <label
+                        key={genre}
+                        className={`flex min-h-[42px] cursor-pointer items-center gap-3 rounded-md border px-3 text-sm font-bold transition-colors duration-200 ${
+                          checked
+                            ? "border-[#FFD166] bg-[#FFD166] text-[#111827]"
+                            : "border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:text-white dark:hover:bg-white/[0.08]"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleToggleGenre(genre)}
+                          className="h-4 w-4 cursor-pointer accent-[#FFD166]"
+                        />
+                        <span className="truncate">{genre}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : null}
 
           {loadingMovies ? (
             <div className="py-20 text-center text-sm font-bold text-slate-500 dark:text-white/60">
