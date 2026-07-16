@@ -69,7 +69,33 @@ const weekdays = [
   "Thứ Bảy",
 ];
 
-const getDateKey = (value: string) => value.split("T")[0] || "";
+const SHOWTIME_VISIBILITY_REFRESH_MS = 30_000;
+
+const getShowtimeTimestamp = (value: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const normalizedValue = value.includes("T") ? value : value.replace(" ", "T");
+  const timestamp = Date.parse(normalizedValue);
+
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
+const isShowtimeVisibleToCustomer = (
+  showtime: Pick<ShowtimeResponse, "startTime" | "status">,
+  nowMs: number,
+) => {
+  const status = showtime.status?.toUpperCase();
+  const startTimestamp = getShowtimeTimestamp(showtime.startTime);
+
+  return status === "OPEN" && startTimestamp !== null && startTimestamp > nowMs;
+};
+
+const getDateKey = (value: string) => {
+  const normalizedValue = value.includes("T") ? value : value.replace(" ", "T");
+  return normalizedValue.split("T")[0] || "";
+};
 
 const getTodayKey = () => {
   const today = new Date();
@@ -177,6 +203,7 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
   const [showtimes, setShowtimes] = useState<ShowtimeSlot[]>([]);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedSlot, setSelectedSlot] = useState<ShowtimeSlot | null>(null);
+  const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -187,6 +214,14 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
     return () => {
       document.body.style.overflow = originalOverflow;
     };
+  }, []);
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, SHOWTIME_VISIBILITY_REFRESH_MS);
+
+    return () => window.clearInterval(timerId);
   }, []);
 
   useEffect(() => {
@@ -267,8 +302,11 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
         */
 
         setShowtimes(nextShowtimes);
+        const visibleShowtimes = nextShowtimes.filter((showtime) =>
+          isShowtimeVisibleToCustomer(showtime, Date.now()),
+        );
         setSelectedDate(
-          Array.from(new Set(nextShowtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean))).sort()[0] ||
+          Array.from(new Set(visibleShowtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean))).sort()[0] ||
             "",
         );
       } catch (error) {
@@ -291,17 +329,35 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
     };
   }, [movie.movieId]);
 
+  const visibleShowtimes = useMemo(
+    () => showtimes.filter((showtime) => isShowtimeVisibleToCustomer(showtime, currentTimeMs)),
+    [currentTimeMs, showtimes],
+  );
+
   const daysFilter = useMemo(() => {
     const dateValues = Array.from(
-      new Set(showtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean)),
+      new Set(visibleShowtimes.map((showtime) => getDateKey(showtime.startTime)).filter(Boolean)),
     ).sort();
 
     return dateValues.map(buildDayTab);
-  }, [showtimes]);
+  }, [visibleShowtimes]);
+
+  useEffect(() => {
+    if (daysFilter.length === 0) {
+      setSelectedDate("");
+      setSelectedSlot(null);
+      return;
+    }
+
+    if (!daysFilter.some((day) => day.dateValue === selectedDate)) {
+      setSelectedDate(daysFilter[0].dateValue);
+      setSelectedSlot(null);
+    }
+  }, [daysFilter, selectedDate]);
 
   const groupedCinemas = useMemo(
-    () => groupShowtimesByCinema(showtimes, selectedDate),
-    [selectedDate, showtimes],
+    () => groupShowtimesByCinema(visibleShowtimes, selectedDate),
+    [selectedDate, visibleShowtimes],
   );
 
   const selectedSlotCinema =
@@ -311,6 +367,12 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
 
   const handleConfirm = () => {
     if (!selectedSlot) {
+      return;
+    }
+
+    if (!isShowtimeVisibleToCustomer(selectedSlot, Date.now())) {
+      setSelectedSlot(null);
+      setErrorMessage("Suất chiếu này đã quá giờ. Vui lòng chọn suất chiếu khác.");
       return;
     }
 

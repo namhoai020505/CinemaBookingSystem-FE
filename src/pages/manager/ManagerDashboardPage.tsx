@@ -1,16 +1,12 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { FaCalendarAlt, FaChartLine, FaCoins, FaReceipt, FaTicketAlt } from 'react-icons/fa';
 import type { ManagerOutletContext } from '../../layouts/manager/ManagerLayout';
 import {
-  managerService,
-} from '../../services/managerService';
-import type {
-  DashboardFilter,
-  DashboardOverview,
-  MovieRankingItem,
-  OccupancyAndFbBreakdown,
-} from '../../services/dashboardService';
+  managerDashboardService,
+  type ManagerDashboardFilter,
+  type ManagerDashboardResponse,
+} from '../../services/managerDashboardService';
 import {
   formatCurrency,
   formatNumber,
@@ -24,26 +20,26 @@ import {
   toDateInputValue,
 } from './managerUi';
 
-const emptyOverview: DashboardOverview = {
+const emptyDashboard: ManagerDashboardResponse = {
+  cinemaId: null,
+  cinemaName: '',
+  from: '',
+  to: '',
+  movieId: null,
   grossRevenue: 0,
-  totalRefunds: 0,
+  refundedAmount: 0,
+  pendingRefundAmount: 0,
+  manualRefundAmount: 0,
   netRevenue: 0,
-  averageOrderValue: 0,
-  totalTicketsSold: 0,
-  totalSuccessfulBookings: 0,
-};
-
-const emptyOccupancy: OccupancyAndFbBreakdown = {
+  grossTicketsSold: 0,
+  refundedTickets: 0,
+  netTicketsSold: 0,
+  sellableSeatCapacity: 0,
+  occupiedSeats: 0,
   occupancyRate: 0,
-  totalSoldSeats: 0,
-  totalAvailableSeatsCapacity: 0,
-  ticketRevenue: 0,
-  fbRevenue: 0,
-  fbRevenuePercentage: 0,
-  fbItems: [],
 };
 
-const getRange = (range: string): DashboardFilter => {
+const getRange = (range: string): ManagerDashboardFilter => {
   const today = new Date();
   if (range === 'today') {
     const value = toDateInputValue(today);
@@ -105,14 +101,37 @@ const StatCard = ({
   </article>
 );
 
+const MetricBar = ({
+  label,
+  value,
+  percent,
+  isLightMode,
+}: {
+  label: string;
+  value: string;
+  percent: number;
+  isLightMode: boolean;
+}) => (
+  <div className="grid gap-2">
+    <div className="flex items-center justify-between gap-4">
+      <span className={`text-sm font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>{label}</span>
+      <span className="text-sm font-black text-emerald-500">{value}</span>
+    </div>
+    <div className={`h-2 overflow-hidden rounded-full ${isLightMode ? 'bg-slate-200' : 'bg-white/10'}`}>
+      <div
+        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
+        style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
+      />
+    </div>
+  </div>
+);
+
 const ManagerDashboardPage = () => {
   const { isLightMode } = useOutletContext<ManagerOutletContext>();
   const [rangePreset, setRangePreset] = useState('7d');
-  const [draftFilter, setDraftFilter] = useState<DashboardFilter>(() => getRange('7d'));
-  const [appliedFilter, setAppliedFilter] = useState<DashboardFilter>(() => getRange('7d'));
-  const [overview, setOverview] = useState<DashboardOverview>(emptyOverview);
-  const [occupancy, setOccupancy] = useState<OccupancyAndFbBreakdown>(emptyOccupancy);
-  const [ranking, setRanking] = useState<MovieRankingItem[]>([]);
+  const [draftFilter, setDraftFilter] = useState<ManagerDashboardFilter>(() => getRange('7d'));
+  const [appliedFilter, setAppliedFilter] = useState<ManagerDashboardFilter>(() => getRange('7d'));
+  const [dashboard, setDashboard] = useState<ManagerDashboardResponse>(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -123,19 +142,13 @@ const ManagerDashboardPage = () => {
       try {
         setLoading(true);
         setErrorMessage('');
-        const [overviewData, occupancyData, rankingData] = await Promise.all([
-          managerService.getDashboardOverview(appliedFilter),
-          managerService.getOccupancyAndFb(appliedFilter),
-          managerService.getMovieRanking(appliedFilter),
-        ]);
+        const dashboardData = await managerDashboardService.getDashboard(appliedFilter);
 
         if (!isMounted) {
           return;
         }
 
-        setOverview(overviewData ?? emptyOverview);
-        setOccupancy({ ...emptyOccupancy, ...(occupancyData ?? {}) });
-        setRanking(rankingData ?? []);
+        setDashboard(dashboardData ?? emptyDashboard);
       } catch (error) {
         if (isMounted) {
           setErrorMessage(getApiErrorMessage(error, 'Không tải được dashboard của rạp.'));
@@ -154,19 +167,14 @@ const ManagerDashboardPage = () => {
     };
   }, [appliedFilter]);
 
-  const maxTickets = Math.max(...ranking.map((movie) => movie.ticketsSold), 1);
-  const revenueMix = useMemo(() => {
-    const total = occupancy.ticketRevenue + occupancy.fbRevenue;
-    const ticketPercent = total > 0 ? (occupancy.ticketRevenue / total) * 100 : 0;
-    const fbPercent = total > 0 ? 100 - ticketPercent : 0;
-    return { ticketPercent, fbPercent };
-  }, [occupancy.fbRevenue, occupancy.ticketRevenue]);
-
   const handlePresetChange = (value: string) => {
     setRangePreset(value);
     const nextFilter = getRange(value);
     setDraftFilter(nextFilter);
-    setAppliedFilter(nextFilter);
+
+    if (value !== 'custom') {
+      setAppliedFilter(nextFilter);
+    }
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -178,13 +186,20 @@ const ManagerDashboardPage = () => {
     });
   };
 
+  const ticketPercent = dashboard.grossTicketsSold > 0
+    ? (dashboard.netTicketsSold / dashboard.grossTicketsSold) * 100
+    : 0;
+  const seatPercent = dashboard.sellableSeatCapacity > 0
+    ? (dashboard.occupiedSeats / dashboard.sellableSeatCapacity) * 100
+    : 0;
+
   return (
     <PageShell
       eyebrow="Manager reporting"
       title="Dashboard rạp của tôi"
       description="Theo dõi doanh thu, vé bán và hiệu suất ghế trong phạm vi rạp backend đã phân quyền cho tài khoản Manager."
       isLightMode={isLightMode}
-      action={<StatusBadge status="Scope by backend" />}
+      action={<StatusBadge status={dashboard.cinemaName || 'Scope by backend'} />}
     >
       <form
         onSubmit={handleSubmit}
@@ -245,29 +260,29 @@ const ManagerDashboardPage = () => {
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="Tổng doanh thu"
-              value={formatCurrency(overview.grossRevenue)}
-              meta={`${formatNumber(overview.totalSuccessfulBookings)} booking thành công`}
+              value={formatCurrency(dashboard.grossRevenue)}
+              meta={dashboard.cinemaName || 'Rạp được backend phân quyền'}
               icon={<FaCoins />}
               isLightMode={isLightMode}
             />
             <StatCard
               label="Doanh thu sau refund"
-              value={formatCurrency(overview.netRevenue)}
-              meta={`Refund ${formatCurrency(overview.totalRefunds)}`}
+              value={formatCurrency(dashboard.netRevenue)}
+              meta={`Refund thành công ${formatCurrency(dashboard.refundedAmount)}`}
               icon={<FaReceipt />}
               isLightMode={isLightMode}
             />
             <StatCard
-              label="Vé đã bán"
-              value={formatNumber(overview.totalTicketsSold)}
-              meta={`${formatPercent(occupancy.occupancyRate)} ghế đã bán / sức chứa`}
+              label="Vé net đã bán"
+              value={formatNumber(dashboard.netTicketsSold)}
+              meta={`${formatNumber(dashboard.grossTicketsSold)} vé bán, ${formatNumber(dashboard.refundedTickets)} vé hoàn`}
               icon={<FaTicketAlt />}
               isLightMode={isLightMode}
             />
             <StatCard
-              label="Doanh thu F&B"
-              value={formatCurrency(occupancy.fbRevenue)}
-              meta={`${formatPercent(occupancy.fbRevenuePercentage)} trong cơ cấu`}
+              label="Tỷ lệ ghế đã bán"
+              value={formatPercent(dashboard.occupancyRate)}
+              meta={`${formatNumber(dashboard.occupiedSeats)} / ${formatNumber(dashboard.sellableSeatCapacity)} ghế`}
               icon={<FaChartLine />}
               isLightMode={isLightMode}
             />
@@ -275,64 +290,42 @@ const ManagerDashboardPage = () => {
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
             <section className={`${panelClass(isLightMode)} p-5`}>
-              <div className="mb-5 flex items-center justify-between gap-4">
-                <div>
-                  <h2 className={`text-base font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>Top phim trong rạp</h2>
-                  <p className={`mt-1 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Sắp xếp theo số vé bán ra.</p>
-                </div>
+              <div className="mb-5">
+                <h2 className={`text-base font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>Hiệu suất vé và ghế</h2>
+                <p className={`mt-1 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Dữ liệu được scope theo rạp của tài khoản Manager.
+                </p>
               </div>
-              {ranking.length === 0 ? (
-                <StatePanel
-                  title="Chưa có dữ liệu phim"
-                  description="Không có vé bán trong bộ lọc hiện tại."
+              <div className="grid gap-5">
+                <MetricBar
+                  label="Vé còn hiệu lực sau refund"
+                  value={`${formatNumber(dashboard.netTicketsSold)} / ${formatNumber(dashboard.grossTicketsSold)} vé`}
+                  percent={ticketPercent}
                   isLightMode={isLightMode}
                 />
-              ) : (
-                <div className="grid gap-4">
-                  {ranking.map((movie, index) => (
-                    <div key={movie.movieId || movie.movieTitle} className="grid gap-2">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className={`truncate text-sm font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>
-                            #{index + 1} {movie.movieTitle}
-                          </p>
-                          <p className={`mt-1 text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                            {formatCurrency(movie.ticketRevenue)}
-                          </p>
-                        </div>
-                        <p className="shrink-0 text-sm font-black text-emerald-500">
-                          {formatNumber(movie.ticketsSold)} vé
-                        </p>
-                      </div>
-                      <div className={`h-2 overflow-hidden rounded-full ${isLightMode ? 'bg-slate-200' : 'bg-white/10'}`}>
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
-                          style={{ width: `${Math.max(5, (movie.ticketsSold / maxTickets) * 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                <MetricBar
+                  label="Ghế đã bán trên tổng sức chứa ghế"
+                  value={`${formatNumber(dashboard.occupiedSeats)} / ${formatNumber(dashboard.sellableSeatCapacity)} ghế`}
+                  percent={seatPercent}
+                  isLightMode={isLightMode}
+                />
+              </div>
             </section>
 
             <section className={`${panelClass(isLightMode)} p-5`}>
-              <h2 className={`text-base font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>Cơ cấu doanh thu</h2>
-              <p className={`mt-1 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Vé và F&B trong bộ lọc hiện tại.</p>
-              <div className="mt-6 grid gap-4">
+              <h2 className={`text-base font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>Refund theo trạng thái</h2>
+              <p className={`mt-1 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                Chỉ refund thành công mới trừ vào doanh thu net.
+              </p>
+              <div className={`mt-5 divide-y ${isLightMode ? 'divide-slate-200' : 'divide-white/10'}`}>
                 {[
-                  { label: 'Vé', value: occupancy.ticketRevenue, percent: revenueMix.ticketPercent, color: 'bg-cyan-500' },
-                  { label: 'F&B', value: occupancy.fbRevenue, percent: revenueMix.fbPercent, color: 'bg-amber-500' },
+                  { label: 'Đã hoàn tiền', value: dashboard.refundedAmount },
+                  { label: 'Đang chờ refund', value: dashboard.pendingRefundAmount },
+                  { label: 'Cần xử lý thủ công', value: dashboard.manualRefundAmount },
                 ].map((item) => (
-                  <div key={item.label} className="grid gap-2">
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-2 text-sm font-bold">
-                        <span className={`h-3 w-3 rounded-full ${item.color}`} />
-                        {item.label}
-                      </span>
-                      <span className="text-sm font-black">{formatPercent(item.percent)}</span>
-                    </div>
-                    <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{formatCurrency(item.value)}</p>
+                  <div key={item.label} className="flex items-center justify-between gap-4 py-3">
+                    <span className={`text-sm font-bold ${isLightMode ? 'text-slate-600' : 'text-slate-300'}`}>{item.label}</span>
+                    <span className={`text-sm font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>{formatCurrency(item.value)}</span>
                   </div>
                 ))}
               </div>

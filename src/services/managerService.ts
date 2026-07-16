@@ -1,12 +1,4 @@
 import api from '../lib/api';
-import {
-  dashboardService,
-  type DashboardFilter,
-  type DashboardOverview,
-  type MovieRankingItem,
-  type OccupancyAndFbBreakdown,
-  type SalesChannelBreakdown,
-} from './dashboardService';
 import { roomService, type CinemaResponse, type RoomResponse } from './roomService';
 import type { ShowtimeResponse } from './showtimeService';
 
@@ -99,18 +91,6 @@ export type ScanTicketResponse = {
 const unwrap = <T>(response: ApiEnvelope<T>) => response?.data as T;
 
 export const managerService = {
-  getDashboardOverview: (filter: DashboardFilter): Promise<DashboardOverview> =>
-    dashboardService.getOverview(filter),
-
-  getMovieRanking: (filter: DashboardFilter): Promise<MovieRankingItem[]> =>
-    dashboardService.getMovieRanking(filter),
-
-  getOccupancyAndFb: (filter: DashboardFilter): Promise<OccupancyAndFbBreakdown> =>
-    dashboardService.getOccupancyAndFb(filter),
-
-  getSalesChannels: (filter: DashboardFilter): Promise<SalesChannelBreakdown[]> =>
-    dashboardService.getSalesChannels(filter),
-
   getShowtimes: async (): Promise<ShowtimeResponse[]> => {
     const response = (await api.get('/api/manager/showtimes')) as unknown as ApiEnvelope<ShowtimeResponse[]>;
     return unwrap(response) ?? [];
