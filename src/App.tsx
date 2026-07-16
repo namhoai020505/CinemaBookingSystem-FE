@@ -29,6 +29,7 @@ import ReviewModeration from './pages/admin/ReviewModeration';
 import BookingSuccess from './pages/user/BookingSuccess';
 import MyBookings from './pages/user/MyBookings';
 import ManageVouchers from './pages/admin/ManageVouchers';
+import ManageBanner from './pages/admin/ManageBanner';
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
@@ -96,6 +97,7 @@ const router = createBrowserRouter([
               { path: 'rooms/:roomId/seats', element: <ManageSeatLayout /> },
               { path: 'review', element: <ReviewModeration /> },
               { path: 'vouchers', element: <ManageVouchers /> },
+              { path: 'banners', element: <ManageBanner /> },
             ],
           },
         ],
@@ -114,6 +116,7 @@ const router = createBrowserRouter([
               { path: 'refunds', element: <ManagerRefundsPage /> },
               { path: 'ticket-scanner', element: <TicketScannerPage /> },
               { path: 'vouchers', element: <ManageVouchers /> },
+              { path: 'banners', element: <ManageBanner /> },
               { path: 'my-cinema', element: <MyCinemaPage /> },
             ],
           },

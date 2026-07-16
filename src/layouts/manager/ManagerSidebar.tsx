@@ -47,6 +47,12 @@ const navItems = [
     icon: <FaTicketAlt />,
   },
   {
+    to: '/manager/banners',
+    label: 'Banners',
+    description: 'Quản lý banner Carousel của rạp',
+    icon: <FaDoorOpen />,
+  },
+  {
     to: '/manager/my-cinema',
     label: 'My Cinema',
     description: 'Rạp và phòng của tôi',

@@ -24,6 +24,7 @@ export interface MovieResponse {
   genres?: string[];
   duration: number;
   imagePoster?: string;
+  imageBanner?: string;
   avgRating: number;
   highlight?: string;
   viewCount: number;
@@ -51,6 +52,7 @@ export interface MovieDetailResponse {
   description?: string;
   posterUrl?: string;
   trailerUrl?: string;
+  bannerUrl?: string;
   movieStatus: string;
   viewCount: number;
   ageRating?: string;
@@ -68,6 +70,7 @@ export interface MovieAutofillResponse {
   director?: string;
   trailerUrl?: string;
   posterUrl?: string;
+  bannerUrl?: string;
 }
 
 // Khớp cấu trúc PagedList từ backend
@@ -156,5 +159,27 @@ export const movieService = {
   autofillMovie: async (url: string): Promise<MovieAutofillResponse> => {
     const envelope = await axiosInstance.post('/api/movies/autofill', { url }) as unknown as ApiEnvelope<MovieAutofillResponse>;
     return envelope.data;
+  },
+
+  // POST: Upload banner cho phim (hỗ trợ file upload hoặc banner URL)
+  uploadMovieBanner: async (movieId: string, bannerFile?: File, bannerUrl?: string): Promise<string> => {
+    const formData = new FormData();
+    if (bannerFile) {
+      formData.append('bannerFile', bannerFile);
+    }
+    if (bannerUrl) {
+      formData.append('bannerUrl', bannerUrl);
+    }
+    const envelope = await axiosInstance.post(`/api/movies/${movieId}/banner`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    }) as unknown as ApiEnvelope<string>;
+    return envelope.data;
+  },
+
+  // DELETE: Xóa banner của phim
+  deleteMovieBanner: async (movieId: string): Promise<void> => {
+    await axiosInstance.delete(`/api/movies/${movieId}/banner`);
   }
 };

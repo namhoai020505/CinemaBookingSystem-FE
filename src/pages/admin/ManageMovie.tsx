@@ -39,6 +39,7 @@ export default function ManageMovie() {
     ageRating: "",
     description: "",
     trailerUrl: "",
+    bannerUrl: "",
     highlight: "",
     movieStatus: "",
     director: "",
@@ -48,6 +49,9 @@ export default function ManageMovie() {
   const [posterFile, setPosterFile] = useState<File | null>(null);
   const [posterPreview, setPosterPreview] = useState<string>("");
   const [originalPosterUrl, setOriginalPosterUrl] = useState<string>("");
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string>("");
+  const [isUploadingBanner, setIsUploadingBanner] = useState<boolean>(false);
 
   const [errors, setErrors] = useState<{ title?: string; durationMinutes?: string }>({});
 
@@ -191,6 +195,7 @@ export default function ManageMovie() {
       ageRating: "P",
       description: "",
       trailerUrl: "",
+      bannerUrl: "",
       highlight: "",
       movieStatus: "",
       director: "",
@@ -199,6 +204,8 @@ export default function ManageMovie() {
     setPosterFile(null);
     setPosterPreview("");
     setOriginalPosterUrl("");
+    setBannerFile(null);
+    setBannerPreview("");
     setErrors({});
     setAutofillUrl("");
     setIsModalOpen(true);
@@ -219,6 +226,7 @@ export default function ManageMovie() {
           ageRating: detail.ageRating || "P",
           description: detail.description || "",
           trailerUrl: detail.trailerUrl || "",
+          bannerUrl: detail.bannerUrl || "",
           highlight: detail.highlight || "",
           movieStatus: detail.movieStatus || "",
           director: detail.director || "",
@@ -233,6 +241,8 @@ export default function ManageMovie() {
         setPosterFile(null);
         setPosterPreview(getMediaUrl(detail.posterUrl) || "");
         setOriginalPosterUrl(detail.posterUrl || "");
+        setBannerFile(null);
+        setBannerPreview((detail.bannerUrl && detail.bannerUrl !== "none") ? getMediaUrl(detail.bannerUrl) : "");
         setErrors({});
         setAutofillUrl("");
         setIsModalOpen(true);
@@ -329,12 +339,16 @@ export default function ManageMovie() {
         ageRating: data.ageRating || prev.ageRating,
         description: data.description || prev.description,
         trailerUrl: data.trailerUrl || prev.trailerUrl,
+        bannerUrl: data.bannerUrl || prev.bannerUrl,
         director: data.director || prev.director,
       }));
 
       // Set poster preview to the extracted URL
       if (data.posterUrl) {
         setPosterPreview(data.posterUrl);
+      }
+      if (data.bannerUrl && data.bannerUrl !== "none") {
+        setBannerPreview(data.bannerUrl);
       }
 
       if (data.genres && data.genres.length > 0) {
@@ -376,6 +390,74 @@ export default function ManageMovie() {
     }
   };
 
+  const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 8 * 1024 * 1024) {
+        toast.error("File banner không được vượt quá 8MB.");
+        e.target.value = "";
+        return;
+      }
+      setBannerFile(file);
+      setBannerPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleUploadBanner = async () => {
+    if (!editingMovieId) {
+      toast.error("Vui lòng lưu thông tin phim trước khi tải banner.");
+      return;
+    }
+    if (!bannerFile && !formData.bannerUrl) {
+      toast.error("Vui lòng chọn file banner hoặc nhập banner URL.");
+      return;
+    }
+
+    try {
+      setIsUploadingBanner(true);
+      const updatedBannerUrl = await movieService.uploadMovieBanner(
+        editingMovieId,
+        bannerFile || undefined,
+        bannerFile ? undefined : formData.bannerUrl
+      );
+      
+      setFormData(prev => ({ ...prev, bannerUrl: updatedBannerUrl }));
+      setBannerPreview(getMediaUrl(updatedBannerUrl));
+      setBannerFile(null);
+      toast.success("Tải banner phim lên thành công!");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Không thể tải banner lên."));
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
+  const handleDeleteBanner = async () => {
+    if (!editingMovieId) {
+      setBannerFile(null);
+      setBannerPreview("");
+      setFormData(prev => ({ ...prev, bannerUrl: "" }));
+      return;
+    }
+
+    if (!window.confirm("Bạn có chắc chắn muốn xóa banner của phim này?")) {
+      return;
+    }
+
+    try {
+      setIsUploadingBanner(true);
+      await movieService.deleteMovieBanner(editingMovieId);
+      setFormData(prev => ({ ...prev, bannerUrl: "none" }));
+      setBannerPreview("");
+      setBannerFile(null);
+      toast.success("Xóa banner phim thành công!");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Không thể xóa banner."));
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim()) {
@@ -406,6 +488,7 @@ export default function ManageMovie() {
       if (formData.ageRating) submitData.append("AgeRating", formData.ageRating);
       if (formData.description) submitData.append("Description", formData.description);
       if (formData.trailerUrl) submitData.append("TrailerUrl", formData.trailerUrl);
+      if (formData.bannerUrl) submitData.append("BannerUrl", formData.bannerUrl);
       if (formData.highlight) submitData.append("Highlight", formData.highlight);
       if (formData.director) submitData.append("Director", formData.director);
 
@@ -434,6 +517,8 @@ export default function ManageMovie() {
       setPosterFile(null);
       setPosterPreview("");
       setOriginalPosterUrl("");
+      setBannerFile(null);
+      setBannerPreview("");
       await handleReloadAfterSave();
     } catch (error) {
       toast.error(getApiErrorMessage(error, TEXT.MOVIE.ERR_SAVE));
@@ -1099,6 +1184,67 @@ export default function ManageMovie() {
                   placeholder="https://youtube.com/watch?v=..."
                   className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* Banner URL & Upload */}
+              <div>
+                <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                  Banner (Ảnh ngang hiển thị trang chủ)
+                </label>
+                
+                {/* Cách 1: URL Link */}
+                <input
+                  type="text"
+                  name="bannerUrl"
+                  value={formData.bannerUrl}
+                  onChange={handleInputChange}
+                  placeholder="https://example.com/banner.jpg hoặc để trống nếu tải file"
+                  className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                />
+
+                {/* Cách 2: File Upload */}
+                <div className="flex gap-4 items-center">
+                  {bannerPreview ? (
+                    <div className="relative w-32 h-20 rounded-xl overflow-hidden border border-gray-700 shadow-md bg-[#0F172A]">
+                      <img src={bannerPreview} alt="Banner Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={handleDeleteBanner}
+                        disabled={isUploadingBanner}
+                        className="absolute top-1 right-1 w-5 h-5 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center text-[10px] shadow"
+                        title="Xóa Banner"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-32 h-20 rounded-xl bg-[#0F172A] border border-dashed border-gray-700 flex flex-col items-center justify-center text-gray-500 text-xs text-center p-2">
+                      <span>Chưa có Banner</span>
+                    </div>
+                  )}
+
+                  <div className="flex-1 flex gap-2">
+                    <div className="flex-1 border border-dashed border-gray-700 rounded-xl p-2 text-center hover:border-blue-500 transition cursor-pointer relative bg-[#0F172A]">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleBannerFileChange}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <span className="text-xs text-gray-400">Chọn file ảnh</span>
+                    </div>
+                    {(bannerFile || (formData.bannerUrl && editingMovieId)) && (
+                      <button
+                        type="button"
+                        onClick={handleUploadBanner}
+                        disabled={isUploadingBanner}
+                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-xl text-xs font-semibold shadow transition"
+                      >
+                        {isUploadingBanner ? "Đang tải..." : "Tải lên"}
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Tải ảnh poster trực quan */}
