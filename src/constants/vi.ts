@@ -139,7 +139,7 @@ export const TEXT = {
     
     // Modal Form
     MODAL_UPDATE_TITLE: "✏️ Cập Nhật Thông Tin Phim",
-    MODAL_ADD_TITLE: "✨ Thêm Phim Mới Vào Hệ Thống",
+    MODAL_ADD_TITLE: "Thêm Phim Mới Vào Hệ Thống",
     LABEL_TITLE: "Tên Phim",
     PLACEHOLDER_TITLE: "Nhập tên tiếng Việt...",
     LABEL_DURATION: "Thời Lượng (Phút)",

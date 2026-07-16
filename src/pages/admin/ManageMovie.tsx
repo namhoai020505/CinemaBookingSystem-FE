@@ -23,6 +23,8 @@ export default function ManageMovie() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
+  const [autofillUrl, setAutofillUrl] = useState("");
+  const [isAutofilling, setIsAutofilling] = useState(false);
 
   // Pagination states
   const [pageIndex, setPageIndex] = useState(1);
@@ -198,6 +200,7 @@ export default function ManageMovie() {
     setPosterPreview("");
     setOriginalPosterUrl("");
     setErrors({});
+    setAutofillUrl("");
     setIsModalOpen(true);
   };
 
@@ -231,6 +234,7 @@ export default function ManageMovie() {
         setPosterPreview(getMediaUrl(detail.posterUrl) || "");
         setOriginalPosterUrl(detail.posterUrl || "");
         setErrors({});
+        setAutofillUrl("");
         setIsModalOpen(true);
       }
     } catch {
@@ -310,6 +314,44 @@ export default function ManageMovie() {
     }
   };
 
+  const handleAutofillClick = async () => {
+    if (!autofillUrl) return;
+    setIsAutofilling(true);
+    try {
+      const data = await movieService.autofillMovie(autofillUrl);
+      
+      setFormData(prev => ({
+        ...prev,
+        title: data.title || prev.title,
+        durationMinutes: data.durationMinutes || prev.durationMinutes,
+        language: data.language || prev.language,
+        releaseDate: data.releaseDate || prev.releaseDate,
+        ageRating: data.ageRating || prev.ageRating,
+        description: data.description || prev.description,
+        trailerUrl: data.trailerUrl || prev.trailerUrl,
+        director: data.director || prev.director,
+      }));
+
+      // Set poster preview to the extracted URL
+      if (data.posterUrl) {
+        setPosterPreview(data.posterUrl);
+      }
+
+      if (data.genres && data.genres.length > 0) {
+        const matchedIds = data.genres
+          .map(name => genres.find(g => g.name.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(g.name.toLowerCase()))?.genreId)
+          .filter((id): id is number => id !== undefined);
+        setSelectedGenreIds(matchedIds);
+      }
+
+      toast.success("Tự động trích xuất thông tin phim thành công!");
+    } catch {
+      toast.error("Không thể đọc thông tin phim từ link này. Vui lòng kiểm tra lại!");
+    } finally {
+      setIsAutofilling(false);
+    }
+  };
+
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
   ) => {
@@ -370,11 +412,9 @@ export default function ManageMovie() {
       // Gửi MovieStatus cho cả create và update
       submitData.append("MovieStatus", formData.movieStatus);
 
-      if (editingMovieId) {
-        // Nếu giữ ảnh cũ, gửi lại URL để BE lưu trữ
-        if (posterPreview && !posterFile) {
-          submitData.append("PosterUrl", originalPosterUrl);
-        }
+      // Nếu không upload file mới, gửi URL poster cũ hoặc URL poster trích xuất từ Gemini
+      if (!posterFile && posterPreview) {
+        submitData.append("PosterUrl", originalPosterUrl || posterPreview);
       }
 
       if (posterFile) {
@@ -774,6 +814,44 @@ export default function ManageMovie() {
               onSubmit={handleSubmit}
               className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin scrollbar-track-[#0F172A] scrollbar-thumb-[#1E293B]"
             >
+              {/* Tự động điền với Gemini */}
+              <div className="bg-[#1e293b]/40 p-4 rounded-xl border border-gray-800 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                    Tự động điền thông tin phim
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    Nhập link IMDb, Wikipedia... rồi ấn Trích xuất để Gemini điền form
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="Ví dụ: https://www.imdb.com/title/tt11858890/"
+                    value={autofillUrl}
+                    onChange={(e) => setAutofillUrl(e.target.value)}
+                    className="flex-1 px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    disabled={isAutofilling || !autofillUrl}
+                    onClick={handleAutofillClick}
+                    className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-400 rounded-xl text-xs font-semibold transition shrink-0 flex items-center gap-1.5 shadow-md text-white"
+                  >
+                    {isAutofilling ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Đang trích xuất...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Trích xuất</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
               {/* Tên phim & Thời lượng */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">

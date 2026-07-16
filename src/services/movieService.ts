@@ -57,6 +57,19 @@ export interface MovieDetailResponse {
   highlight?: string;
 }
 
+export interface MovieAutofillResponse {
+  title: string;
+  durationMinutes: number;
+  genres?: string[];
+  language?: string;
+  releaseDate?: string;
+  ageRating?: string;
+  description?: string;
+  director?: string;
+  trailerUrl?: string;
+  posterUrl?: string;
+}
+
 // Khớp cấu trúc PagedList từ backend
 export interface PagedList<T> {
   items: T[];
@@ -136,6 +149,12 @@ export const movieService = {
   // 5. GET: Lấy danh sách thể loại từ DB
   getGenres: async (): Promise<GenreResponse[]> => {
     const envelope = await axiosInstance.get('/api/genres') as unknown as ApiEnvelope<GenreResponse[]>;
+    return envelope.data;
+  },
+
+  // POST: Gọi AI Gemini để trích xuất thông tin phim từ URL
+  autofillMovie: async (url: string): Promise<MovieAutofillResponse> => {
+    const envelope = await axiosInstance.post('/api/movies/autofill', { url }) as unknown as ApiEnvelope<MovieAutofillResponse>;
     return envelope.data;
   }
 };
