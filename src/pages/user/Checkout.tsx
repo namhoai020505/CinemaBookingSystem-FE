@@ -87,6 +87,7 @@ type CheckoutRouteState = {
   totalAmount?: number;
   seatMap?: CheckoutSeatMap;
   resumeBooking?: BookingSummary;
+  freshCheckout?: boolean;
 };
 
 type ShowtimeDetailResponse = {
@@ -389,13 +390,23 @@ export default function Checkout() {
   const navigate = useNavigate();
   const routeState = location.state as CheckoutRouteState | null;
   const resumeBooking = routeState?.resumeBooking ?? null;
+  const isFreshCheckoutFlow = routeState?.freshCheckout === true && !resumeBooking;
   const [userKey] = useState(() => getUserKey());
   const [userProfile] = useState(() => getCurrentUserProfile());
+  const [previousCheckoutAttempt] = useState<CheckoutAttempt | null>(() =>
+    isFreshCheckoutFlow ? readCheckoutAttempt(showtimeId, userKey) : null,
+  );
+  const [previousPaymentSession] = useState<PaymentSession | null>(() =>
+    isFreshCheckoutFlow ? readPaymentSession(showtimeId, userKey) : null,
+  );
   const [storedPaymentSession] = useState(() =>
-    readPaymentSession(showtimeId, userKey),
+    isFreshCheckoutFlow ? null : readPaymentSession(showtimeId, userKey),
   );
   const [checkoutAttempt, setCheckoutAttempt] = useState<CheckoutAttempt | null>(() =>
-    readCheckoutAttempt(showtimeId, userKey),
+    isFreshCheckoutFlow ? null : readCheckoutAttempt(showtimeId, userKey),
+  );
+  const [freshCheckoutReady, setFreshCheckoutReady] = useState(
+    () => !isFreshCheckoutFlow,
   );
   const [selectedSeats] = useState<CheckoutSeat[]>(() =>
     routeState?.selectedSeats?.length
@@ -581,6 +592,68 @@ export default function Checkout() {
 
     navigate("/", { replace: true });
   }, [booking?.bookingId, navigate, showtimeId, userKey]);
+
+  useEffect(() => {
+    if (!isFreshCheckoutFlow || !showtimeId) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const prepareFreshCheckout = async () => {
+      removePaymentSession(showtimeId, userKey);
+      removeCheckoutAttempt(showtimeId, userKey);
+
+      let bookingIdToCancel =
+        previousCheckoutAttempt?.bookingId ||
+        previousPaymentSession?.booking?.bookingId ||
+        "";
+
+      if (!bookingIdToCancel && previousCheckoutAttempt?.idempotencyKey) {
+        try {
+          const recoveryResponse = await bookingService.recoverCheckout(
+            previousCheckoutAttempt.idempotencyKey,
+          );
+
+          if (
+            recoveryResponse.success &&
+            recoveryResponse.data?.bookingStatus === "PENDING_PAYMENT"
+          ) {
+            bookingIdToCancel = recoveryResponse.data.bookingId;
+          }
+        } catch {
+          // The stale attempt may already be gone; a fresh checkout can continue.
+        }
+      }
+
+      if (bookingIdToCancel) {
+        try {
+          await bookingService.cancelPendingBooking(bookingIdToCancel);
+        } catch (error) {
+          if (![404, 409].includes(getApiStatus(error) ?? 0)) {
+            console.warn("Unable to cancel previous pending booking.", error);
+          }
+        }
+      }
+
+      if (isMounted) {
+        setFreshCheckoutReady(true);
+      }
+    };
+
+    void prepareFreshCheckout();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    isFreshCheckoutFlow,
+    previousCheckoutAttempt?.bookingId,
+    previousCheckoutAttempt?.idempotencyKey,
+    previousPaymentSession?.booking?.bookingId,
+    showtimeId,
+    userKey,
+  ]);
 
   const recoverCheckoutAttempt = useCallback(async (attempt: CheckoutAttempt) => {
     let recoveryResponse;
@@ -1000,6 +1073,11 @@ export default function Checkout() {
   };
 
   const handleCreatePayment = async () => {
+    if (!freshCheckoutReady) {
+      setErrorMessage("Đang chuẩn bị phiên đặt vé mới. Vui lòng thử lại sau vài giây.");
+      return;
+    }
+
     if (!showtimeId || selectedSeats.length === 0) {
       setErrorMessage("Không tìm thấy thông tin ghế đã chọn.");
       return;
@@ -1762,13 +1840,13 @@ export default function Checkout() {
               <button
                 type="button"
                 onClick={() => void handleCreatePayment()}
-                disabled={submitting || seatHoldSeconds <= 0}
-                className={`rounded-md py-3 text-xs font-black uppercase transition ${submitting || seatHoldSeconds <= 0
+                disabled={submitting || seatHoldSeconds <= 0 || !freshCheckoutReady}
+                className={`rounded-md py-3 text-xs font-black uppercase transition ${submitting || seatHoldSeconds <= 0 || !freshCheckoutReady
                   ? "cursor-not-allowed bg-slate-700 text-slate-400"
                   : "bg-[#FFD166] text-white hover:bg-[#FFE7A3] hover:text-slate-950"
                   }`}
               >
-                {submitting ? "Đang tạo..." : "Tiếp tục"}
+                {!freshCheckoutReady ? "Đang chuẩn bị..." : submitting ? "Đang tạo..." : "Tiếp tục"}
               </button>
             </div>
           </aside>

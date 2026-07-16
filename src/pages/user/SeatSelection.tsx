@@ -934,6 +934,7 @@ export default function SeatSelection() {
           selectedSeats: nextSelectedSeats,
           totalAmount,
           seatMap,
+          freshCheckout: true,
         },
       });
     } catch (error) {
