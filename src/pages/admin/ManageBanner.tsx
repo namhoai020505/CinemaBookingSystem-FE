@@ -355,7 +355,7 @@ export default function ManageBanner() {
               {/* Upload file banner */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                  Tải lên File ảnh (Khuyên dùng)
+                  Tải lên File ảnh (Khuyên dùng tỉ lệ ngang rộng 2:1 hoặc 16:9, ví dụ: 1920x620)
                 </label>
                 <div className="flex gap-4 items-center mt-1">
                   {bannerPreview ? (

@@ -1189,7 +1189,7 @@ export default function ManageMovie() {
               {/* Banner URL & Upload */}
               <div>
                 <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
-                  Banner (Ảnh ngang hiển thị trang chủ)
+                  Banner (Ảnh ngang hiển thị trang chủ, khuyên dùng tỉ lệ ngang rộng 2:1 hoặc 16:9, ví dụ: 1920x620)
                 </label>
                 
                 {/* Cách 1: URL Link */}

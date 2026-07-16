@@ -63,16 +63,6 @@ const mockHeroSlides: HeroSlide[] = [
   { id: "slide-6", imageUrl: slide6, alt: "Movie banner slide 6" },
 ];
 
-const FIRST_REAL_SLIDE_INDEX = 1;
-const LAST_REAL_SLIDE_INDEX = mockHeroSlides.length;
-const CLONED_FIRST_SLIDE_INDEX = LAST_REAL_SLIDE_INDEX + 1;
-
-const getRealSlideIndex = (index: number) =>
-  ((((index - FIRST_REAL_SLIDE_INDEX) % LAST_REAL_SLIDE_INDEX) +
-    LAST_REAL_SLIDE_INDEX) %
-    LAST_REAL_SLIDE_INDEX) +
-  FIRST_REAL_SLIDE_INDEX;
-
 
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -552,7 +542,7 @@ export default function Home() {
               const isClickable = !!(slide.movieId || slide.linkUrl);
               return (
                 <div
-                  className={`h-full min-w-full ${isClickable ? "cursor-pointer" : ""}`}
+                  className={`h-full min-w-full relative overflow-hidden ${isClickable ? "cursor-pointer" : ""}`}
                   key={`${slide.id}-${index}`}
                   onClick={() => {
                     if (slide.movieId) {
@@ -566,10 +556,18 @@ export default function Home() {
                     }
                   }}
                 >
+                  {/* Backdrop blur image to fill empty areas beautifully */}
+                  <img
+                    src={getMediaUrl(slide.imageUrl)}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover object-center blur-2xl scale-110 opacity-60 select-none pointer-events-none"
+                    draggable={false}
+                  />
+                  {/* Crisp content image fitted perfectly inside the banner frame */}
                   <img
                     src={getMediaUrl(slide.imageUrl)}
                     alt={slide.alt}
-                    className="h-full w-full object-cover object-center"
+                    className="relative z-10 h-full w-full object-contain object-center"
                     draggable={false}
                   />
                 </div>
