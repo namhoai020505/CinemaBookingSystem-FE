@@ -199,8 +199,12 @@ export default function ManageShowtime() {
   }, [isDirty]);
 
   // ---------- Computed: Phòng chiếu lọc theo rạp đã chọn ----------
-  const filteredRooms = rooms.filter(
-    (r) => r.cinemaId === selectedCinemaId && r.roomStatus === "ACTIVE"
+  const filteredRooms = React.useMemo(
+    () =>
+      rooms.filter(
+        (r) => r.cinemaId === selectedCinemaId && r.roomStatus === "ACTIVE",
+      ),
+    [rooms, selectedCinemaId],
   );
 
   // ---------- Computed: Danh sách phim chờ (sidebar) ----------
@@ -224,7 +228,7 @@ export default function ManageShowtime() {
       if (activeCinemas.length > 0 && !selectedCinemaId) {
         setSelectedCinemaId(activeCinemas[0].cinemaId);
       }
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SHOWTIME.ERR_FETCH_CINEMAS);
     }
   }, [selectedCinemaId]);
@@ -233,7 +237,7 @@ export default function ManageShowtime() {
     try {
       const data = await showtimeService.getRooms();
       setRooms(data);
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SHOWTIME.ERR_FETCH_ROOMS);
     }
   }, []);
@@ -242,7 +246,7 @@ export default function ManageShowtime() {
     try {
       const data = await showtimeService.getMoviesForScheduling();
       setMovies(data);
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SHOWTIME.ERR_FETCH_MOVIES);
     }
   }, []);
@@ -251,7 +255,7 @@ export default function ManageShowtime() {
     try {
       const data = await showtimeService.getShowtimes();
       setAllShowtimes(data);
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SHOWTIME.ERR_FETCH_SHOWTIMES);
     }
   }, []);
@@ -276,61 +280,64 @@ export default function ManageShowtime() {
   // 💡 BUILD SCHEDULE TỪ SHOWTIMES + FILTERS
   // =================================================================
   useEffect(() => {
-    if (isDirty) return;
+    if (isDirty) return undefined;
 
-    if (filteredRooms.length === 0) {
-      setSchedule({});
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      if (filteredRooms.length === 0) {
+        setSchedule({});
+        return;
+      }
 
-    // Khởi tạo schedule rỗng cho mỗi phòng
-    const newSchedule: Schedule = {};
-    for (const room of filteredRooms) {
-      newSchedule[room.roomId] = [];
-    }
+      // Khởi tạo schedule rỗng cho mỗi phòng
+      const newSchedule: Schedule = {};
+      for (const room of filteredRooms) {
+        newSchedule[room.roomId] = [];
+      }
 
-    // Lọc showtime theo cinema + ngày + status
-    for (const st of allShowtimes) {
-      // Chỉ hiển thị showtimes thuộc cinema đang chọn
-      if (st.cinemaId !== selectedCinemaId) continue;
+      // Lọc showtime theo cinema + ngày + status
+      for (const st of allShowtimes) {
+        // Chỉ hiển thị showtimes thuộc cinema đang chọn
+        if (st.cinemaId !== selectedCinemaId) continue;
 
-      // Chỉ hiển thị OPEN/CLOSED (bỏ CANCELLED)
-      if (st.status === "CANCELLED") continue;
+        // Chỉ hiển thị OPEN/CLOSED (bỏ CANCELLED)
+        if (st.status === "CANCELLED") continue;
 
-      // Lọc theo ngày đã chọn (tách chuỗi trực tiếp để tránh lệch múi giờ)
-      const stDateStr = st.startTime.split("T")[0];
-      if (stDateStr !== selectedDate) continue;
+        // Lọc theo ngày đã chọn (tách chuỗi trực tiếp để tránh lệch múi giờ)
+        const stDateStr = st.startTime.split("T")[0];
+        if (stDateStr !== selectedDate) continue;
 
-      // Chỉ thêm nếu phòng thuộc cinema đang chọn
-      if (!newSchedule[st.roomId]) continue;
+        // Chỉ thêm nếu phòng thuộc cinema đang chọn
+        if (!newSchedule[st.roomId]) continue;
 
-      const CLEAN_UP_BUFFER = 15;
-      const durationMin = diffMinutes(st.startTime, st.endTime) - CLEAN_UP_BUFFER;
-      const startMin = isoToMinutesFrom8AM(st.startTime);
+        const CLEAN_UP_BUFFER = 15;
+        const durationMin = diffMinutes(st.startTime, st.endTime) - CLEAN_UP_BUFFER;
+        const startMin = isoToMinutesFrom8AM(st.startTime);
 
-      // Khấu trừ 15 phút dọn phòng để tính endTime hiển thị thực tế của bộ phim
-      const endTimeDate = new Date(st.endTime);
-      endTimeDate.setMinutes(endTimeDate.getMinutes() - CLEAN_UP_BUFFER);
-      const endTimeISO = endTimeDate.toISOString();
+        // Khấu trừ 15 phút dọn phòng để tính endTime hiển thị thực tế của bộ phim
+        const endTimeDate = new Date(st.endTime);
+        endTimeDate.setMinutes(endTimeDate.getMinutes() - CLEAN_UP_BUFFER);
+        const endTimeISO = endTimeDate.toISOString();
 
-      newSchedule[st.roomId].push({
-        id: st.showtimeId,
-        movieId: st.movieId,
-        roomId: st.roomId,
-        movieNameVn: st.movieTitle,
-        startMinutesFrom8AM: startMin,
-        duration: durationMin,
-        color: getMovieColor(st.movieId),
-        startTime: st.startTime,
-        endTime: endTimeISO,
-        basePrice: st.basePrice,
-        status: st.status,
-      });
-    }
+        newSchedule[st.roomId].push({
+          id: st.showtimeId,
+          movieId: st.movieId,
+          roomId: st.roomId,
+          movieNameVn: st.movieTitle,
+          startMinutesFrom8AM: startMin,
+          duration: durationMin,
+          color: getMovieColor(st.movieId),
+          startTime: st.startTime,
+          endTime: endTimeISO,
+          basePrice: st.basePrice,
+          status: st.status,
+        });
+      }
 
-    setSchedule(newSchedule);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allShowtimes, selectedCinemaId, selectedDate, filteredRooms.length, isDirty]);
+      setSchedule(newSchedule);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [allShowtimes, selectedCinemaId, selectedDate, filteredRooms, isDirty]);
 
   // =================================================================
   // 💡 DRAG & DROP HANDLERS

@@ -2,7 +2,39 @@ import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import { FaTicketAlt, FaPlus, FaEdit, FaTrashAlt, FaTimes, FaSearch, FaPercent, FaMoneyBillWave } from 'react-icons/fa';
 import { voucherService } from '../../services/voucherService';
-import type { Voucher, CreateVoucherPayload, UpdateVoucherPayload } from '../../services/voucherService';
+import type {
+  Voucher,
+  CreateVoucherPayload,
+  DiscountType,
+  UpdateVoucherPayload,
+  VoucherStatus,
+} from '../../services/voucherService';
+
+type VoucherFilterType = 'ALL' | DiscountType;
+type VoucherFilterStatus = 'ALL' | Extract<VoucherStatus, 'ACTIVE' | 'INACTIVE'>;
+type EditableVoucherStatus = Extract<VoucherStatus, 'ACTIVE' | 'INACTIVE'>;
+
+type ApiErrorLike = {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+};
+
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  const apiError = error as ApiErrorLike;
+  return apiError.response?.data?.message || fallback;
+};
+
+const isDiscountType = (value: string): value is DiscountType =>
+  value === 'PERCENT' || value === 'AMOUNT';
+
+const isVoucherFilterType = (value: string): value is VoucherFilterType =>
+  value === 'ALL' || isDiscountType(value);
+
+const isVoucherFilterStatus = (value: string): value is VoucherFilterStatus =>
+  value === 'ALL' || value === 'ACTIVE' || value === 'INACTIVE';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
@@ -33,8 +65,8 @@ export default function ManageVouchers() {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'ALL' | 'PERCENT' | 'AMOUNT'>('ALL');
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [filterType, setFilterType] = useState<VoucherFilterType>('ALL');
+  const [filterStatus, setFilterStatus] = useState<VoucherFilterStatus>('ALL');
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -44,7 +76,7 @@ export default function ManageVouchers() {
   const [voucherCode, setVoucherCode] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [discountType, setDiscountType] = useState<'PERCENT' | 'AMOUNT'>('PERCENT');
+  const [discountType, setDiscountType] = useState<DiscountType>('PERCENT');
   const [discountValue, setDiscountValue] = useState<number>(0);
   const [minOrderAmount, setMinOrderAmount] = useState<number>(0);
   const [maxDiscountAmount, setMaxDiscountAmount] = useState<number>(0);
@@ -52,7 +84,7 @@ export default function ManageVouchers() {
   const [endDate, setEndDate] = useState('');
   const [usageLimit, setUsageLimit] = useState<number>(100);
   const [perCustomerLimit, setPerCustomerLimit] = useState<number>(1);
-  const [voucherStatus, setVoucherStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [voucherStatus, setVoucherStatus] = useState<EditableVoucherStatus>('ACTIVE');
   const [submitting, setSubmitting] = useState(false);
 
   // Load vouchers
@@ -68,15 +100,19 @@ export default function ManageVouchers() {
       } else {
         toast.error(response?.message || 'Không thể tải danh sách voucher');
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Lỗi khi tải danh sách voucher');
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Lỗi khi tải danh sách voucher'));
     } finally {
       setLoading(false);
     }
   }, [searchTerm, filterStatus]);
 
   useEffect(() => {
-    fetchVouchers();
+    const timeoutId = window.setTimeout(() => {
+      void fetchVouchers();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [fetchVouchers]);
 
   // Esc key close modal
@@ -185,7 +221,7 @@ export default function ManageVouchers() {
           toast.success(response.message || 'Cập nhật voucher thành công');
           setIsModalOpen(false);
           setEditingVoucher(null);
-          fetchVouchers();
+          void fetchVouchers();
         } else {
           toast.error(response.message || 'Cập nhật voucher thất bại');
         }
@@ -207,13 +243,13 @@ export default function ManageVouchers() {
         if (response.success) {
           toast.success(response.message || 'Thêm voucher mới thành công');
           setIsModalOpen(false);
-          fetchVouchers();
+          void fetchVouchers();
         } else {
           toast.error(response.message || 'Thêm voucher mới thất bại');
         }
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Có lỗi xảy ra khi lưu thông tin voucher');
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Có lỗi xảy ra khi lưu thông tin voucher'));
     } finally {
       setSubmitting(false);
     }
@@ -229,19 +265,20 @@ export default function ManageVouchers() {
       const response = await voucherService.deleteVoucher(voucher.voucherId);
       if (response.success) {
         toast.success(response.message || 'Xóa voucher thành công');
-        fetchVouchers();
+        void fetchVouchers();
       } else {
         toast.error(response.message || 'Xóa voucher thất bại');
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Có lỗi xảy ra khi xóa voucher');
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Có lỗi xảy ra khi xóa voucher'));
     }
   };
 
   // Toggle quick status
   const handleToggleStatus = async (voucher: Voucher) => {
     try {
-      const newStatus = voucher.voucherStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const newStatus: EditableVoucherStatus =
+        voucher.voucherStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
       const payload: UpdateVoucherPayload = {
         title: voucher.title,
         description: voucher.description,
@@ -256,12 +293,12 @@ export default function ManageVouchers() {
       const response = await voucherService.updateVoucher(voucher.voucherId, payload);
       if (response.success) {
         toast.success(`Đã ${newStatus === 'ACTIVE' ? 'kích hoạt' : 'vô hiệu hóa'} voucher ${voucher.voucherCode}`);
-        fetchVouchers();
+        void fetchVouchers();
       } else {
         toast.error(response.message || 'Thay đổi trạng thái voucher thất bại');
       }
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Lỗi khi thay đổi trạng thái voucher');
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Lỗi khi thay đổi trạng thái voucher'));
     }
   };
 
@@ -312,7 +349,11 @@ export default function ManageVouchers() {
         <div>
           <select
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value as any)}
+            onChange={(e) => {
+              if (isVoucherFilterType(e.target.value)) {
+                setFilterType(e.target.value);
+              }
+            }}
             className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition"
           >
             <option value="ALL">Tất cả loại giảm giá</option>
@@ -325,7 +366,11 @@ export default function ManageVouchers() {
         <div>
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
+            onChange={(e) => {
+              if (isVoucherFilterStatus(e.target.value)) {
+                setFilterStatus(e.target.value);
+              }
+            }}
             className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition"
           >
             <option value="ALL">Tất cả trạng thái</option>
@@ -569,8 +614,10 @@ export default function ManageVouchers() {
                     value={discountType}
                     disabled={!!editingVoucher}
                     onChange={(e) => {
-                      setDiscountType(e.target.value as any);
-                      setDiscountValue(0);
+                      if (isDiscountType(e.target.value)) {
+                        setDiscountType(e.target.value);
+                        setDiscountValue(0);
+                      }
                     }}
                     className={`w-full px-4 py-2.5 rounded-xl bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition ${
                       editingVoucher ? 'opacity-50 cursor-not-allowed' : ''

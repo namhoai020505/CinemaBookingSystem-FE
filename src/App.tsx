@@ -65,10 +65,10 @@ const router = createBrowserRouter([
         children: [
           { path: '/', element: <Home /> },
           { path: '/movie/:movieId/showtimes', element: <MovieShowtimes /> },
-          { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
           {
             element: <RequireAuth allowedRoles={customerRoles} />,
             children: [
+              { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
               { path: '/booking/checkout/:showtimeId', element: <Checkout /> },
               { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
               { path: '/my-bookings', element: <MyBookings /> },

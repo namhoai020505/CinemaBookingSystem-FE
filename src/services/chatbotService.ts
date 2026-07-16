@@ -13,12 +13,33 @@ export interface ChatbotApiResponse {
   response?: string;
   message?: string;
   reply?: string;
+  text?: string;
 }
+
+type ApiErrorLike = {
+  response?: {
+    data?: {
+      message?: string;
+      response?: string;
+    };
+  };
+  message?: string;
+};
+
+const getChatbotErrorMessage = (error: unknown) => {
+  const apiError = error as ApiErrorLike;
+  return (
+    apiError.response?.data?.message ||
+    apiError.response?.data?.response ||
+    apiError.message ||
+    'Không thể kết nối tới chatbot lúc này.'
+  );
+};
 
 export const chatbotService = {
   sendMessage: async (message: string): Promise<string> => {
     try {
-      const response = await api.post<unknown, any>('/api/Chatbot', { message });
+      const response = await api.post<unknown, ChatbotApiResponse | string>('/api/Chatbot', { message });
       
       // Handle various potential backend response formats
       if (typeof response === 'string') {
@@ -40,11 +61,9 @@ export const chatbotService = {
       }
       
       return 'Xin lỗi, tôi gặp sự cố khi kết nối với máy chủ.';
-    } catch (err: any) {
-      console.error('Chatbot API Error:', err);
-      // Check if there is an error response from server
-      const errMsg = err.response?.data?.message || err.response?.data?.response || err.message;
-      return `Lỗi: ${errMsg || 'Không thể kết nối tới chatbot lúc này.'}`;
+    } catch (error) {
+      console.error('Chatbot API Error:', error);
+      return `Lỗi: ${getChatbotErrorMessage(error)}`;
     }
   }
 };

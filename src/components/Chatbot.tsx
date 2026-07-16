@@ -24,6 +24,22 @@ export default function Chatbot() {
   const [isFocused, setIsFocused] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageIdRef = useRef(0);
+
+  const createMessage = (
+    sender: Message['sender'],
+    text: string,
+    prefix: string,
+  ): Message => {
+    messageIdRef.current += 1;
+
+    return {
+      id: `${prefix}-${messageIdRef.current}`,
+      sender,
+      text,
+      timestamp: new Date(),
+    };
+  };
 
   // Auto scroll to bottom
   const scrollToBottom = () => {
@@ -42,12 +58,7 @@ export default function Chatbot() {
     if (!text) return;
 
     // Add user message
-    const userMsg: Message = {
-      id: `user-${Date.now()}`,
-      sender: 'user',
-      text,
-      timestamp: new Date(),
-    };
+    const userMsg = createMessage('user', text, 'user');
     
     setMessages((prev) => [...prev, userMsg]);
     setInputValue('');
@@ -56,20 +67,14 @@ export default function Chatbot() {
     try {
       const responseText = await chatbotService.sendMessage(text);
       
-      const botMsg: Message = {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: responseText,
-        timestamp: new Date(),
-      };
+      const botMsg = createMessage('bot', responseText, 'bot');
       setMessages((prev) => [...prev, botMsg]);
-    } catch (err) {
-      const errorMsg: Message = {
-        id: `bot-err-${Date.now()}`,
-        sender: 'bot',
-        text: 'Xin lỗi, tôi không thể xử lý yêu cầu lúc này.',
-        timestamp: new Date(),
-      };
+    } catch {
+      const errorMsg = createMessage(
+        'bot',
+        'Xin lỗi, tôi không thể xử lý yêu cầu lúc này.',
+        'bot-err',
+      );
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsTyping(false);

@@ -1,9 +1,22 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { movieService } from "../../services/movieService";
 import type { MovieResponse } from "../../services/movieService";
 import { getMediaUrl } from "../../lib/media";
 import { TEXT } from "../../constants/vi";
+
+type ApiErrorLike = {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+};
+
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  const apiError = error as ApiErrorLike;
+  return apiError.response?.data?.message || fallback;
+};
 
 export default function ManageMovie() {
   const [allMovies, setAllMovies] = useState<MovieResponse[]>([]);
@@ -53,32 +66,30 @@ export default function ManageMovie() {
   const [filterGenreSearchInput, setFilterGenreSearchInput] = useState("");
   const filterGenreDropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!isGenreDropdownOpen) {
-      setGenreSearchInput("");
-    }
-  }, [isGenreDropdownOpen]);
+  const closeGenreDropdown = useCallback(() => {
+    setIsGenreDropdownOpen(false);
+    setGenreSearchInput("");
+  }, []);
 
-  useEffect(() => {
-    if (!isFilterGenreDropdownOpen) {
-      setFilterGenreSearchInput("");
-    }
-  }, [isFilterGenreDropdownOpen]);
+  const closeFilterGenreDropdown = useCallback(() => {
+    setIsFilterGenreDropdownOpen(false);
+    setFilterGenreSearchInput("");
+  }, []);
 
   // 1. Hàm lấy danh sách phim (Fetch tất cả để xử lý client-side)
-  const fetchMovies = async () => {
+  const fetchMovies = useCallback(async () => {
     try {
       setLoading(true);
       const response = await movieService.getMoviesWithPagination(1, 1000, "");
       if (response) {
         setAllMovies(response.items || []);
       }
-    } catch (error) {
+    } catch {
       toast.error(TEXT.MOVIE.ERR_FETCH_MOVIES);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const filteredMovies = React.useMemo(() => {
     return allMovies.filter(movie => {
@@ -100,18 +111,22 @@ export default function ManageMovie() {
   const totalPages = Math.ceil(totalCount / pageSize);
   const movies = filteredMovies.slice((pageIndex - 1) * pageSize, pageIndex * pageSize);
 
-  const fetchGenres = async () => {
+  const fetchGenres = useCallback(async () => {
     try {
       const data = await movieService.getGenres();
       setGenres(data || []);
-    } catch (error) {
+    } catch {
       toast.error(TEXT.MOVIE.ERR_FETCH_GENRES);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    void fetchGenres();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void fetchGenres();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchGenres]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -119,25 +134,28 @@ export default function ManageMovie() {
         genreDropdownRef.current &&
         !genreDropdownRef.current.contains(event.target as Node)
       ) {
-        setIsGenreDropdownOpen(false);
+        closeGenreDropdown();
       }
       if (
         filterGenreDropdownRef.current &&
         !filterGenreDropdownRef.current.contains(event.target as Node)
       ) {
-        setIsFilterGenreDropdownOpen(false);
+        closeFilterGenreDropdown();
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [closeFilterGenreDropdown, closeGenreDropdown]);
 
   useEffect(() => {
-    void fetchMovies();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void fetchMovies();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchMovies]);
 
 
 
@@ -215,7 +233,7 @@ export default function ManageMovie() {
         setErrors({});
         setIsModalOpen(true);
       }
-    } catch (error) {
+    } catch {
       toast.error(TEXT.MOVIE.ERR_FETCH_DETAIL_EDIT);
     } finally {
       setLoading(false);
@@ -230,7 +248,7 @@ export default function ManageMovie() {
         await movieService.deleteMovie(movie.id);
         toast.success(TEXT.MOVIE.SUCCESS_HIDE);
         await handleReloadAfterSave();
-      } catch (error) {
+      } catch {
         toast.error(TEXT.MOVIE.ERR_HIDE);
       } finally {
         setLoading(false);
@@ -284,9 +302,8 @@ export default function ManageMovie() {
         await movieService.updateMovie(detail.movieId, submitData);
         toast.success(TEXT.MOVIE.SUCCESS_REACTIVATE);
         await handleReloadAfterSave();
-      } catch (error: any) {
-        const errorMsg = error?.response?.data?.message || TEXT.MOVIE.ERR_REACTIVATE;
-        toast.error(errorMsg);
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, TEXT.MOVIE.ERR_REACTIVATE));
       } finally {
         setLoading(false);
       }
@@ -378,9 +395,8 @@ export default function ManageMovie() {
       setPosterPreview("");
       setOriginalPosterUrl("");
       await handleReloadAfterSave();
-    } catch (error: any) {
-      const errorMsg = error?.response?.data?.message || TEXT.MOVIE.ERR_SAVE;
-      toast.error(errorMsg);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, TEXT.MOVIE.ERR_SAVE));
     } finally {
       setLoading(false);
     }
@@ -475,7 +491,13 @@ export default function ManageMovie() {
               />
               <div
                 className="absolute right-3 cursor-pointer"
-                onClick={() => setIsFilterGenreDropdownOpen(!isFilterGenreDropdownOpen)}
+                onClick={() => {
+                  if (isFilterGenreDropdownOpen) {
+                    closeFilterGenreDropdown();
+                  } else {
+                    setIsFilterGenreDropdownOpen(true);
+                  }
+                }}
               >
                 <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -490,7 +512,7 @@ export default function ManageMovie() {
                     onClick={() => {
                       setSearchGenres([]);
                       setPageIndex(1);
-                      setIsFilterGenreDropdownOpen(false);
+                      closeFilterGenreDropdown();
                     }}
                     className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${searchGenres.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
                       }`}
@@ -812,10 +834,16 @@ export default function ManageMovie() {
                       placeholder={TEXT.MOVIE.PLACEHOLDER_GENRE}
                       className="w-full px-4 py-2 pr-10 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] truncate"
                     />
-                    <div
-                      className="absolute right-3 cursor-pointer"
-                      onClick={() => setIsGenreDropdownOpen(!isGenreDropdownOpen)}
-                    >
+                      <div
+                        className="absolute right-3 cursor-pointer"
+                        onClick={() => {
+                          if (isGenreDropdownOpen) {
+                            closeGenreDropdown();
+                          } else {
+                            setIsGenreDropdownOpen(true);
+                          }
+                        }}
+                      >
                       <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                       </svg>
@@ -828,7 +856,7 @@ export default function ManageMovie() {
                         <div
                           onClick={() => {
                             setSelectedGenreIds([]);
-                            setIsGenreDropdownOpen(false);
+                            closeGenreDropdown();
                           }}
                           className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${selectedGenreIds.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
                             }`}

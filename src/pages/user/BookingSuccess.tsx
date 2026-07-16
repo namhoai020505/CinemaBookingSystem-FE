@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FaExclamationCircle, FaRegCheckCircle, FaTimesCircle } from "react-icons/fa";
 import { Link, useParams } from "react-router-dom";
+import ConfirmDialog from "../../components/ConfirmDialog";
 import { getCurrentUserProfile } from "../../lib/auth";
 import {
   bookingService,
@@ -80,6 +81,7 @@ export default function BookingSuccess() {
   const [bookingInfo, setBookingInfo] = useState<BookingDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancellingBooking, setCancellingBooking] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
@@ -164,14 +166,6 @@ export default function BookingSuccess() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Bạn có chắc muốn hủy giao dịch này? Ghế đang giữ sẽ được mở lại cho người khác đặt.",
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     try {
       setCancellingBooking(true);
       setErrorMessage("");
@@ -179,6 +173,7 @@ export default function BookingSuccess() {
       localStorage.removeItem(getPaymentStorageKey(bookingInfo.showtimeId));
       removeCheckoutAttempt(bookingInfo.showtimeId, getUserKey());
       setBookingInfo({ ...bookingInfo, status: "CANCELLED" });
+      setCancelDialogOpen(false);
     } catch (error) {
       console.error("Lỗi hủy giao dịch:", error);
       setErrorMessage(getApiErrorMessage(error, "Không thể hủy giao dịch. Vui lòng thử lại."));
@@ -363,7 +358,7 @@ export default function BookingSuccess() {
           {isPendingPayment && (
             <button
               type="button"
-              onClick={() => void handleCancelBooking()}
+              onClick={() => setCancelDialogOpen(true)}
               disabled={cancellingBooking}
               className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
             >
@@ -384,6 +379,20 @@ export default function BookingSuccess() {
             Vé của tôi
           </Link>
         </div>
+        <ConfirmDialog
+          open={cancelDialogOpen}
+          title="Hủy giao dịch đặt vé?"
+          message="Giao dịch chưa thanh toán sẽ bị hủy và ghế đang giữ sẽ được mở lại cho người khác đặt."
+          confirmLabel="Hủy giao dịch"
+          cancelLabel="Giữ giao dịch"
+          loading={cancellingBooking}
+          onClose={() => {
+            if (!cancellingBooking) {
+              setCancelDialogOpen(false);
+            }
+          }}
+          onConfirm={() => void handleCancelBooking()}
+        />
       </div>
     </div>
   );

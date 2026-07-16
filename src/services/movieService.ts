@@ -128,8 +128,8 @@ export const movieService = {
   },
 
   // 6. POST: Tăng lượt xem phim theo ID
-  incrementMovieView: async (movieId: string): Promise<any> => {
-    const envelope = await axiosInstance.post(`/api/movies/${movieId}/view`) as unknown as ApiEnvelope<any>;
+  incrementMovieView: async (movieId: string): Promise<unknown> => {
+    const envelope = await axiosInstance.post(`/api/movies/${movieId}/view`) as unknown as ApiEnvelope<unknown>;
     return envelope.data;
   },
 

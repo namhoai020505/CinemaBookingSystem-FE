@@ -32,6 +32,26 @@ const getHttpStatus = (error: unknown) =>
     ? error.response.status
     : undefined;
 
+const readAisleColumns = (roomId: string) => {
+  if (!roomId) {
+    return [];
+  }
+
+  const saved = localStorage.getItem(`aisles-${roomId}`);
+  if (!saved) {
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(saved);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is number => typeof value === "number")
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 type RouteState = {
   movie?: {
     movieId?: string;
@@ -417,23 +437,7 @@ export default function SeatSelection() {
   const [displayDetails, setDisplayDetails] =
     useState<ShowtimeDisplayDetails | null>(null);
   const [roomId, setRoomId] = useState<string>("");
-  const [aisleCols, setAisleCols] = useState<number[]>([]);
-
-  // Tải cấu hình lối đi khi roomId thay đổi
-  useEffect(() => {
-    if (roomId) {
-      const saved = localStorage.getItem(`aisles-${roomId}`);
-      if (saved) {
-        try {
-          setAisleCols(JSON.parse(saved));
-        } catch (e) {
-          setAisleCols([]);
-        }
-      } else {
-        setAisleCols([]);
-      }
-    }
-  }, [roomId]);
+  const aisleCols = useMemo(() => readAisleColumns(roomId), [roomId]);
 
   const persistSelectedLockedSeats = useCallback(
     (nextSelectedSeats: SeatItem[]) => {
@@ -657,8 +661,6 @@ export default function SeatSelection() {
     routeStartTime,
     showtimeId,
     userKey,
-    navigate,
-    location.pathname,
   ]);
 
   useEffect(() => {

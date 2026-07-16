@@ -17,6 +17,7 @@ import {
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import fallbackPoster from "../../assets/movie1.jpg";
+import ConfirmDialog from "../../components/ConfirmDialog";
 import api from "../../lib/api";
 import { getCurrentUserProfile } from "../../lib/auth";
 import { getMediaUrl } from "../../lib/media";
@@ -37,6 +38,10 @@ import {
   paymentService,
   type CreatePaymentResponse,
 } from "../../services/paymentService";
+import {
+  fbItemService,
+  type FbItem,
+} from "../../services/fbItemService";
 import { voucherService, type Voucher } from "../../services/voucherService";
 
 const PAYMENT_PROVIDER_ID = "PP_SEPAY";
@@ -44,25 +49,27 @@ const PAYMENT_WINDOW_SECONDS = 600;
 const DEFAULT_LOCK_SECONDS = 600;
 const PAYMENT_STATUS_POLL_MS = 5000;
 
-
-const FNB_ITEMS = [
+const FNB_CARD_STYLES = [
   {
-    id: "FB_POPCORN_PEPSI_L",
-    name: "Beta Combo 69oz",
-    price: 75000,
-    badge: "BEST COMBO",
+    badge: "COMBO",
     accent: "from-amber-300 to-orange-500",
-    desc: "TIẾT KIỆM 28K!!! Gồm: 1 Bắp (69oz) + 1 Nước có gas (22oz)",
   },
   {
-    id: "FB_CHEESE_POPCORN_M",
-    name: "Sweet Combo 69oz",
-    price: 55000,
-    badge: "SWEET COMBO",
+    badge: "F&B",
     accent: "from-sky-300 to-blue-600",
-    desc: "TIẾT KIỆM 46K!!! Gồm: 1 Bắp (69oz) + 2 Nước có gas (22oz)",
+  },
+  {
+    badge: "SNACK",
+    accent: "from-emerald-300 to-teal-600",
+  },
+  {
+    badge: "DRINK",
+    accent: "from-fuchsia-300 to-pink-600",
   },
 ];
+
+const getFnbCardStyle = (index: number) =>
+  FNB_CARD_STYLES[index % FNB_CARD_STYLES.length];
 
 type CheckoutSeat = {
   seatId: string;
@@ -141,6 +148,8 @@ type PaymentSession = {
   expiresAt: string;
   createdAt: string;
 };
+
+type AppliedVoucher = Pick<Voucher, "voucherCode">;
 
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
@@ -456,10 +465,14 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [cancellingBooking, setCancellingBooking] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [paymentConfigRefreshTried, setPaymentConfigRefreshTried] = useState(false);
   const [paymentExpiredDialogOpen, setPaymentExpiredDialogOpen] =
     useState(false);
   const [copiedField, setCopiedField] = useState("");
+  const [fnbItems, setFnbItems] = useState<FbItem[]>([]);
+  const [fnbLoading, setFnbLoading] = useState(false);
+  const [fnbError, setFnbError] = useState("");
   const [fnbCart, setFnbCart] = useState<Record<string, number>>({});
   const [errorMessage, setErrorMessage] = useState("");
   const [paymentStatusMessage, setPaymentStatusMessage] = useState("");
@@ -475,16 +488,16 @@ export default function Checkout() {
 
   const fnbTotalAmount = useMemo(
     () =>
-      FNB_ITEMS.reduce(
-        (sum, item) => sum + (fnbCart[item.id] || 0) * item.price,
+      fnbItems.reduce(
+        (sum, item) => sum + (fnbCart[item.fbItemId] || 0) * item.price,
         0,
       ),
-    [fnbCart],
+    [fnbCart, fnbItems],
   );
 
   const estimatedTotalAmount = seatsTotalAmount + fnbTotalAmount;
   const [voucherCodeInput, setVoucherCodeInput] = useState("");
-  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
+  const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
   const [voucherDiscount, setVoucherDiscount] = useState(0);
   const [activeVouchers, setActiveVouchers] = useState<Voucher[]>([]);
   const [voucherError, setVoucherError] = useState("");
@@ -500,7 +513,7 @@ export default function Checkout() {
       if (response && response.success && response.data) {
         const validateData = response.data;
         if (validateData.isValid) {
-          setAppliedVoucher({ voucherCode: codeStr.trim().toUpperCase() } as any);
+          setAppliedVoucher({ voucherCode: codeStr.trim().toUpperCase() });
           setVoucherDiscount(validateData.discountAmount);
           setVoucherError("");
         } else {
@@ -513,8 +526,8 @@ export default function Checkout() {
         setAppliedVoucher(null);
         setVoucherDiscount(0);
       }
-    } catch (err: any) {
-      setVoucherError(err.response?.data?.message || "Lỗi khi kiểm tra mã voucher");
+    } catch (error) {
+      setVoucherError(getApiErrorMessage(error, "Lỗi khi kiểm tra mã voucher"));
       setAppliedVoucher(null);
       setVoucherDiscount(0);
     }
@@ -525,6 +538,51 @@ export default function Checkout() {
     setVoucherCodeInput("");
     setVoucherDiscount(0);
     setVoucherError("");
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchActiveFnbItems = async () => {
+      try {
+        setFnbLoading(true);
+        setFnbError("");
+
+        const response = await fbItemService.getActiveItems();
+
+        if (!response.success) {
+          throw new Error(response.message || "Không thể tải danh sách bắp nước.");
+        }
+
+        const activeItems = (response.data || []).filter(
+          (item) =>
+            item.fbItemId &&
+            item.itemName &&
+            item.itemStatus?.toUpperCase() === "AVAILABLE",
+        );
+
+        if (isMounted) {
+          setFnbItems(activeItems);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setFnbItems([]);
+          setFnbError(
+            getApiErrorMessage(error, "Không thể tải danh sách bắp nước."),
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setFnbLoading(false);
+        }
+      }
+    };
+
+    void fetchActiveFnbItems();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Fetch active vouchers
@@ -546,12 +604,20 @@ export default function Checkout() {
     };
   }, []);
 
+  const appliedVoucherCode = appliedVoucher?.voucherCode || "";
+
   // Re-validate when amount changes
   useEffect(() => {
-    if (appliedVoucher) {
-      handleApplyVoucher(appliedVoucher.voucherCode);
+    if (!appliedVoucherCode) {
+      return undefined;
     }
-  }, [estimatedTotalAmount, handleApplyVoucher]);
+
+    const timeoutId = window.setTimeout(() => {
+      void handleApplyVoucher(appliedVoucherCode);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [appliedVoucherCode, estimatedTotalAmount, handleApplyVoucher]);
 
   const pointDiscount = 0;
   const payableAmount = Math.max(
@@ -1213,14 +1279,6 @@ export default function Checkout() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Bạn có chắc muốn hủy giao dịch này? Ghế đang giữ sẽ được mở lại cho người khác đặt.",
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     try {
       setCancellingBooking(true);
       setErrorMessage("");
@@ -1232,6 +1290,7 @@ export default function Checkout() {
         removeSeatLockSession(showtimeId, userKey);
       }
 
+      setCancelDialogOpen(false);
       navigate("/my-bookings", { replace: true });
     } catch (error) {
       console.error("Lỗi hủy giao dịch:", error);
@@ -1430,7 +1489,7 @@ export default function Checkout() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void handleCancelPendingBooking()}
+                  onClick={() => setCancelDialogOpen(true)}
                   disabled={cancellingBooking || checkingPayment}
                   className="flex items-center justify-center gap-2 rounded-md border border-rose-400/40 bg-rose-500/10 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
                 >
@@ -1527,6 +1586,20 @@ export default function Checkout() {
             </div>
           </div>
         )}
+        <ConfirmDialog
+          open={cancelDialogOpen}
+          title="Hủy giao dịch đặt vé?"
+          message="Giao dịch chưa thanh toán sẽ bị hủy và ghế đang giữ sẽ được mở lại cho người khác đặt."
+          confirmLabel="Hủy giao dịch"
+          cancelLabel="Tiếp tục thanh toán"
+          loading={cancellingBooking}
+          onClose={() => {
+            if (!cancellingBooking) {
+              setCancelDialogOpen(false);
+            }
+          }}
+          onConfirm={() => void handleCancelPendingBooking()}
+        />
       </div>
     );
   }
@@ -1592,63 +1665,75 @@ export default function Checkout() {
               </div>
 
               <div className="divide-y divide-white/20">
-                {FNB_ITEMS.map((item) => {
-                  const quantity = fnbCart[item.id] || 0;
+                {fnbLoading ? (
+                  <div className="py-5 text-sm font-semibold text-slate-300">
+                    Đang tải danh sách combo...
+                  </div>
+                ) : fnbError ? (
+                  <div className="py-5 text-sm font-semibold text-amber-200">
+                    {fnbError}
+                  </div>
+                ) : fnbItems.length === 0 ? (
+                  <div className="py-5 text-sm font-semibold text-slate-300">
+                    Hiện chưa có combo khả dụng.
+                  </div>
+                ) : (
+                  fnbItems.map((item, index) => {
+                    const quantity = fnbCart[item.fbItemId] || 0;
+                    const cardStyle = getFnbCardStyle(index);
 
-                  return (
-                    <div
-                      key={item.id}
-                      className="grid gap-4 py-5 sm:grid-cols-[1fr_110px] sm:items-center"
-                    >
-                      <div className="flex min-w-0 gap-4">
-                        <div
-                          className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${item.accent} p-1 shadow-lg`}
-                        >
-                          <div className="flex h-full w-full flex-col items-center justify-center rounded-full border-2 border-white bg-slate-900/15 text-center">
-                            <FaGift className="mb-1 h-5 w-5 text-white" />
-                            <span className="px-2 text-[8px] font-black uppercase leading-tight text-white">
-                              {item.badge}
-                            </span>
+                    return (
+                      <div
+                        key={item.fbItemId}
+                        className="grid gap-4 py-5 sm:grid-cols-[1fr_110px] sm:items-center"
+                      >
+                        <div className="flex min-w-0 gap-4">
+                          <div
+                            className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${cardStyle.accent} p-1 shadow-lg`}
+                          >
+                            <div className="flex h-full w-full flex-col items-center justify-center rounded-full border-2 border-white bg-slate-900/15 text-center">
+                              <FaGift className="mb-1 h-5 w-5 text-white" />
+                              <span className="px-2 text-[8px] font-black uppercase leading-tight text-white">
+                                {cardStyle.badge}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="min-w-0 pt-1">
+                            <h3 className="text-sm font-black text-blue-400">
+                              {item.itemName}
+                            </h3>
+                            <p className="mt-2 text-xs font-black text-[#FFD166]">
+                              {formatCurrency(item.price)}
+                            </p>
                           </div>
                         </div>
-                        <div className="min-w-0 pt-1">
-                          <h3 className="text-sm font-black text-blue-400">
-                            {item.name}
-                          </h3>
-                          <p className="mt-1 text-[11px] font-semibold leading-5 text-slate-300">
-                            {item.desc}
-                          </p>
-                          <p className="mt-1 text-xs font-black text-[#FFD166]">
-                            {formatCurrency(item.price)}
-                          </p>
+
+                        <div className="flex items-center justify-start gap-3 sm:justify-center">
+                          <button
+                            type="button"
+                            onClick={() => handleQuantityChange(item.fbItemId, -1)}
+                            disabled={quantity === 0}
+                            className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-500 text-white transition hover:bg-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label={`Giảm ${item.itemName}`}
+                          >
+                            <FaMinus className="h-3 w-3" />
+                          </button>
+                          <span className="w-5 text-center text-sm font-black">
+                            {quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleQuantityChange(item.fbItemId, 1)}
+                            className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-white transition hover:bg-blue-500"
+                            aria-label={`Tăng ${item.itemName}`}
+                          >
+                            <FaPlus className="h-3 w-3" />
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex items-center justify-start gap-3 sm:justify-center">
-                        <button
-                          type="button"
-                          onClick={() => handleQuantityChange(item.id, -1)}
-                          disabled={quantity === 0}
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-500 text-white transition hover:bg-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
-                          aria-label={`Giảm ${item.name}`}
-                        >
-                          <FaMinus className="h-3 w-3" />
-                        </button>
-                        <span className="w-5 text-center text-sm font-black">
-                          {quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleQuantityChange(item.id, 1)}
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-white transition hover:bg-blue-500"
-                          aria-label={`Tăng ${item.name}`}
-                        >
-                          <FaPlus className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
 

@@ -343,16 +343,20 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
   }, [visibleShowtimes]);
 
   useEffect(() => {
-    if (daysFilter.length === 0) {
-      setSelectedDate("");
-      setSelectedSlot(null);
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      if (daysFilter.length === 0) {
+        setSelectedDate("");
+        setSelectedSlot(null);
+        return;
+      }
 
-    if (!daysFilter.some((day) => day.dateValue === selectedDate)) {
-      setSelectedDate(daysFilter[0].dateValue);
-      setSelectedSlot(null);
-    }
+      if (!daysFilter.some((day) => day.dateValue === selectedDate)) {
+        setSelectedDate(daysFilter[0].dateValue);
+        setSelectedSlot(null);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [daysFilter, selectedDate]);
 
   const groupedCinemas = useMemo(
