@@ -11,6 +11,7 @@ import TicketScannerPage from './pages/manager/TicketScannerPage';
 import StaffTicketScannerPage from './pages/staff/StaffTicketScannerPage';
 import MyCinemaPage from './pages/manager/MyCinemaPage';
 import Home from './pages/user/Home';
+import Movies from './pages/user/Movies';
 import Profile from './pages/user/Profile';
 import Login from './pages/auth/Login';
 import StaffSetPassword from './pages/auth/StaffSetPassword';
@@ -64,6 +65,7 @@ const router = createBrowserRouter([
         element: <UserLayout />,
         children: [
           { path: '/', element: <Home /> },
+          { path: '/movies', element: <Movies /> },
           { path: '/movie/:movieId/showtimes', element: <MovieShowtimes /> },
           {
             element: <RequireAuth allowedRoles={customerRoles} />,

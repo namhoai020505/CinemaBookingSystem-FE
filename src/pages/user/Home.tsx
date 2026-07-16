@@ -13,6 +13,11 @@ import {
   getAccessToken,
   isAccessTokenExpired,
 } from "../../lib/auth";
+import {
+  CINEMA_SELECTION_EVENT,
+  CINEMA_SELECTION_STORAGE_KEY,
+  readSelectedCinemaId,
+} from "../../lib/cinemaSelection";
 import { getMediaUrl } from "../../lib/media";
 import { movieService } from "../../services/movieService";
 import {
@@ -208,6 +213,9 @@ export default function Home() {
   const [loadingMovies, setLoadingMovies] = useState(true);
   const [movieError, setMovieError] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
+  const [selectedCinemaId, setSelectedCinemaId] = useState(() =>
+    readSelectedCinemaId(),
+  );
   const [selectedShowtimeMovie, setSelectedShowtimeMovie] =
     useState<Movie | null>(null);
 
@@ -299,17 +307,42 @@ export default function Home() {
     return () => window.clearInterval(timerId);
   }, []);
 
+  useEffect(() => {
+    const syncSelectedCinema = () => {
+      setSelectedCinemaId(readSelectedCinemaId());
+      setPageIndex(1);
+    };
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === CINEMA_SELECTION_STORAGE_KEY) {
+        syncSelectedCinema();
+      }
+    };
+
+    window.addEventListener(CINEMA_SELECTION_EVENT, syncSelectedCinema);
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      window.removeEventListener(CINEMA_SELECTION_EVENT, syncSelectedCinema);
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
+
   const bookableMovieIds = useMemo(() => {
     const movieIds = new Set<string>();
 
     showtimes.forEach((showtime) => {
+      if (selectedCinemaId && showtime.cinemaId !== selectedCinemaId) {
+        return;
+      }
+
       if (isBookableShowtime(showtime, currentTimeMs)) {
         movieIds.add(String(showtime.movieId));
       }
     });
 
     return movieIds;
-  }, [currentTimeMs, showtimes]);
+  }, [currentTimeMs, selectedCinemaId, showtimes]);
 
   // Save scroll position when user scrolls the Home page
   useEffect(() => {
@@ -649,11 +682,7 @@ export default function Home() {
                       >
                         Mua vé
                       </button>
-                    ) : (
-                      <div className="mt-5 h-10 w-full flex items-center justify-center rounded-md border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-[#1E2E4A]/20 text-[10px] font-bold uppercase text-slate-400 dark:text-white/45">
-                        Sắp có suất chiếu
-                      </div>
-                    )}
+                    ) : null}
                   </article>
                 ))}
               </div>
@@ -727,11 +756,7 @@ export default function Home() {
                       >
                         Mua vé
                       </button>
-                    ) : (
-                      <div className="mt-4 h-9 w-full flex items-center justify-center rounded border border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-[#1E2E4A]/10 text-[9px] font-bold uppercase text-slate-400 dark:text-white/40">
-                        Sắp có suất
-                      </div>
-                    )}
+                    ) : null}
                   </article>
                 ))}
               </div>
@@ -814,6 +839,7 @@ export default function Home() {
       {selectedShowtimeMovie && (
         <ShowtimePickerModal
           movie={selectedShowtimeMovie}
+          selectedCinemaId={selectedCinemaId}
           onClose={() => setSelectedShowtimeMovie(null)}
         />
       )}

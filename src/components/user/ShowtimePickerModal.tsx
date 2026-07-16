@@ -56,6 +56,7 @@ type DayTab = {
 
 type Props = {
   movie: ShowtimePickerMovie;
+  selectedCinemaId?: string;
   onClose: () => void;
 };
 
@@ -198,7 +199,11 @@ const groupShowtimesByCinema = (
   }));
 };
 
-export default function ShowtimePickerModal({ movie, onClose }: Props) {
+export default function ShowtimePickerModal({
+  movie,
+  selectedCinemaId = "",
+  onClose,
+}: Props) {
   const navigate = useNavigate();
   const [showtimes, setShowtimes] = useState<ShowtimeSlot[]>([]);
   const [selectedDate, setSelectedDate] = useState("");
@@ -260,9 +265,13 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
           throw new Error(showtimeResponse.message || "Không tải được lịch chiếu.");
         }
 
-        const movieShowtimes = showtimeResponse.data.filter(
-          (showtime) => String(showtime.movieId) === String(movie.movieId),
-        );
+        const movieShowtimes = showtimeResponse.data.filter((showtime) => {
+          const isSameMovie = String(showtime.movieId) === String(movie.movieId);
+          const isSelectedCinema =
+            !selectedCinemaId || showtime.cinemaId === selectedCinemaId;
+
+          return isSameMovie && isSelectedCinema;
+        });
 
         const nextShowtimes = movieShowtimes;
         /*
@@ -327,7 +336,7 @@ export default function ShowtimePickerModal({ movie, onClose }: Props) {
     return () => {
       isMounted = false;
     };
-  }, [movie.movieId]);
+  }, [movie.movieId, selectedCinemaId]);
 
   const visibleShowtimes = useMemo(
     () => showtimes.filter((showtime) => isShowtimeVisibleToCustomer(showtime, currentTimeMs)),
