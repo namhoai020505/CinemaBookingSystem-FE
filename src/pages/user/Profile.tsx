@@ -42,6 +42,7 @@ type PasswordFormState = {
 type EmailFormState = {
   newEmail: string;
   otp: string;
+  oldEmailOtp: string;
 };
 
 type ApiErrorBody = {
@@ -64,6 +65,8 @@ const apiErrorMessages: Record<string, string> = {
   WEAK_PASSWORD: 'Mật khẩu mới chưa đủ mạnh.',
   DUPLICATE_EMAIL: 'Email này đã được sử dụng.',
   INVALID_OTP: 'Mã OTP không hợp lệ hoặc đã hết hạn.',
+  INVALID_OLD_OTP: 'Mã OTP gửi đến email hiện tại (cũ) không chính xác hoặc đã hết hạn.',
+  INVALID_NEW_OTP: 'Mã OTP gửi đến email mới không chính xác hoặc đã hết hạn.',
   EMAIL_SEND_FAILED: 'Không gửi được email OTP. Vui lòng thử lại sau.',
 };
 
@@ -85,6 +88,7 @@ const emptyPasswordForm: PasswordFormState = {
 const emptyEmailForm: EmailFormState = {
   newEmail: '',
   otp: '',
+  oldEmailOtp: '',
 };
 
 const formatDateTime = (value: Date | string | null | undefined) => {
@@ -393,8 +397,9 @@ export default function Profile() {
       setEmailForm((current) => ({
         ...current,
         otp: '',
+        oldEmailOtp: '',
       }));
-      setEmailSuccess('OTP đã được gửi tới email mới.');
+      setEmailSuccess('Mã OTP đã được gửi tới cả email hiện tại của bạn và email mới.');
     } catch (error) {
       setEmailError(getErrorMessage(error, 'Không gửi được OTP đổi email.'));
     } finally {
@@ -408,15 +413,24 @@ export default function Profile() {
     setEmailSuccess('');
 
     const otp = emailForm.otp.trim();
-    if (!pendingEmail || !otp) {
-      setEmailError('Vui lòng nhập mã OTP.');
+    const oldEmailOtp = emailForm.oldEmailOtp.trim();
+    if (!pendingEmail) {
+      setEmailError('Thông tin yêu cầu không hợp lệ.');
+      return;
+    }
+    if (!oldEmailOtp) {
+      setEmailError('Vui lòng nhập mã OTP gửi tới email cũ.');
+      return;
+    }
+    if (!otp) {
+      setEmailError('Vui lòng nhập mã OTP gửi tới email mới.');
       return;
     }
 
     setIsVerifyingEmail(true);
 
     try {
-      const response = await customerService.verifyEmailChange(pendingEmail, otp);
+      const response = await customerService.verifyEmailChange(pendingEmail, otp, oldEmailOtp);
 
       if (!response.success) {
         throw new Error(response.message || 'Xác thực email thất bại.');
@@ -561,7 +575,7 @@ export default function Profile() {
                 <StatusMessage message={profileSuccess} type="success" />
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <label className="space-y-2 text-sm font-semibold text-white/70">
+                  <label className="block space-y-2 text-sm font-semibold text-white/70">
                     Họ tên
                     <input
                       value={profileForm.fullName}
@@ -571,7 +585,7 @@ export default function Profile() {
                     />
                   </label>
 
-                  <label className="space-y-2 text-sm font-semibold text-white/70">
+                  <label className="block space-y-2 text-sm font-semibold text-white/70">
                     Số điện thoại
                     <input
                       value={profileForm.phoneNumber}
@@ -581,7 +595,7 @@ export default function Profile() {
                     />
                   </label>
 
-                  <label className="space-y-2 text-sm font-semibold text-white/70">
+                  <label className="block space-y-2 text-sm font-semibold text-white/70">
                     Giới tính
                     <select
                       value={profileForm.gender}
@@ -595,7 +609,7 @@ export default function Profile() {
                     </select>
                   </label>
 
-                  <label className="space-y-2 text-sm font-semibold text-white/70">
+                  <label className="block space-y-2 text-sm font-semibold text-white/70">
                     Ngày sinh
                     <input
                       type="date"
@@ -606,7 +620,7 @@ export default function Profile() {
                   </label>
                 </div>
 
-                <label className="space-y-2 text-sm font-semibold text-white/70">
+                <label className="block space-y-2 text-sm font-semibold text-white/70">
                   Địa chỉ
                   <div className="relative">
                     <FiMapPin className="pointer-events-none absolute left-4 top-3.5 text-white/35" />
@@ -619,7 +633,7 @@ export default function Profile() {
                   </div>
                 </label>
 
-                <label className="space-y-2 text-sm font-semibold text-white/70">
+                <label className="block space-y-2 text-sm font-semibold text-white/70">
                   Avatar URL
                   <input
                     value={profileForm.avatarUrl}
@@ -629,7 +643,7 @@ export default function Profile() {
                   />
                 </label>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end mt-6">
                   <button
                     type="submit"
                     disabled={isSavingProfile}
@@ -654,7 +668,7 @@ export default function Profile() {
                   <StatusMessage message={passwordError} type="error" />
                   <StatusMessage message={passwordSuccess} type="success" />
 
-                  <label className="space-y-2 text-sm font-semibold text-white/70">
+                  <label className="block space-y-2 text-sm font-semibold text-white/70">
                     Mật khẩu hiện tại
                     <input
                       type="password"
@@ -664,7 +678,7 @@ export default function Profile() {
                     />
                   </label>
 
-                  <label className="space-y-2 text-sm font-semibold text-white/70">
+                  <label className="block space-y-2 text-sm font-semibold text-white/70">
                     Mật khẩu mới
                     <input
                       type="password"
@@ -674,7 +688,7 @@ export default function Profile() {
                     />
                   </label>
 
-                  <label className="space-y-2 text-sm font-semibold text-white/70">
+                  <label className="block space-y-2 text-sm font-semibold text-white/70">
                     Xác nhận mật khẩu mới
                     <input
                       type="password"
@@ -689,7 +703,7 @@ export default function Profile() {
                   <button
                     type="submit"
                     disabled={isChangingPassword}
-                    className="w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] px-6 py-3 text-sm font-extrabold uppercase text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] px-6 py-3 text-sm font-extrabold uppercase text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60 mt-2"
                   >
                     {isChangingPassword ? 'Đang đổi...' : 'Đổi mật khẩu'}
                   </button>
@@ -706,7 +720,7 @@ export default function Profile() {
                   <StatusMessage message={emailError} type="error" />
                   <StatusMessage message={emailSuccess} type="success" />
 
-                  <label className="space-y-2 text-sm font-semibold text-white/70">
+                  <label className="block space-y-2 text-sm font-semibold text-white/70">
                     Email mới
                     <input
                       type="email"
@@ -720,7 +734,7 @@ export default function Profile() {
                   <button
                     type="submit"
                     disabled={isRequestingEmailOtp}
-                    className="w-full rounded-md border border-[#FFD166] px-6 py-3 text-sm font-extrabold uppercase text-[#FFD166] transition hover:bg-[#FFD166] hover:text-black disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full rounded-md border border-[#FFD166] px-6 py-3 text-sm font-extrabold uppercase text-[#FFD166] transition hover:bg-[#FFD166] hover:text-black disabled:cursor-not-allowed disabled:opacity-60 mt-2"
                   >
                     {isRequestingEmailOtp ? 'Đang gửi...' : 'Gửi OTP đổi email'}
                   </button>
@@ -728,27 +742,37 @@ export default function Profile() {
 
                 {pendingEmail ? (
                   <form onSubmit={handleVerifyEmail} className="mt-5 space-y-4 border-t border-white/10 pt-5">
-                    <div className="rounded-md bg-white/5 p-3 text-sm text-white/70">
-                      OTP đã gửi tới <span className="font-bold text-white">{pendingEmail}</span>
+                    <div className="rounded-md bg-[#FFD166]/10 border border-[#FFD166]/30 p-3 text-sm text-[#FFD166]">
+                      Hệ thống đã gửi mã OTP xác thực đến cả email hiện tại của bạn và email mới <span className="font-bold text-white">({pendingEmail})</span> để bảo mật.
                       {emailOtpExpiresAt ? (
-                        <span>. Hết hạn lúc {formatDateTime(emailOtpExpiresAt)}.</span>
+                        <span className="block mt-1 text-xs text-white/60">Hết hạn lúc {formatDateTime(emailOtpExpiresAt)}.</span>
                       ) : null}
                     </div>
 
-                    <label className="space-y-2 text-sm font-semibold text-white/70">
-                      Mã OTP
+                    <label className="block space-y-2 text-sm font-semibold text-white/70">
+                      Mã OTP gửi đến email hiện tại (cũ)
+                      <input
+                        value={emailForm.oldEmailOtp}
+                        onChange={(event) => updateEmailForm('oldEmailOtp', event.target.value)}
+                        className="w-full rounded-md border border-white/10 bg-[#111827] px-4 py-3 text-white outline-none transition focus:border-[#FFD166]"
+                        placeholder="Nhập OTP gửi đến email cũ"
+                      />
+                    </label>
+
+                    <label className="block space-y-2 text-sm font-semibold text-white/70">
+                      Mã OTP gửi đến email mới
                       <input
                         value={emailForm.otp}
                         onChange={(event) => updateEmailForm('otp', event.target.value)}
                         className="w-full rounded-md border border-white/10 bg-[#111827] px-4 py-3 text-white outline-none transition focus:border-[#FFD166]"
-                        placeholder="Nhập OTP"
+                        placeholder="Nhập OTP gửi đến email mới"
                       />
                     </label>
 
                     <button
                       type="submit"
                       disabled={isVerifyingEmail}
-                      className="w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] px-6 py-3 text-sm font-extrabold uppercase text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="w-full rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFEBA4] px-6 py-3 text-sm font-extrabold uppercase text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60 mt-2"
                     >
                       {isVerifyingEmail ? 'Đang xác thực...' : 'Xác nhận đổi email'}
                     </button>
