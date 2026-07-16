@@ -9,14 +9,17 @@ import {
   FaReceipt,
   FaRegCheckCircle,
   FaTicketAlt,
+  FaTimesCircle,
   FaWallet,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
+import { getCurrentUserProfile } from "../../lib/auth";
 import {
   bookingService,
   shouldHideBookingFromHistory,
   type BookingSummary,
 } from "../../services/bookingService";
+import { removeCheckoutAttempt } from "../../services/checkoutAttempt";
 
 type BookingFilter = "ALL" | "PENDING_PAYMENT" | "PAID";
 
@@ -179,11 +182,32 @@ const isPendingPayment = (booking: BookingSummary) =>
 const isPaid = (booking: BookingSummary) =>
   booking.status.toUpperCase() === "PAID";
 
+const getUserKey = () => {
+  const profile = getCurrentUserProfile();
+  return profile?.userId || profile?.email || "anonymous";
+};
+
+const getPaymentStorageKey = (showtimeId: string) =>
+  `g2c-payment:${getUserKey()}:${showtimeId}`;
+
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "object" && error && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string } } })
+      .response;
+    if (response?.data?.message) {
+      return response.data.message;
+    }
+  }
+
+  return error instanceof Error ? error.message : fallback;
+};
+
 export default function MyBookings() {
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [activeFilter, setActiveFilter] = useState<BookingFilter>("ALL");
+  const [cancellingBookingId, setCancellingBookingId] = useState("");
 
   useEffect(() => {
     const fetchMyBookings = async () => {
@@ -255,6 +279,40 @@ export default function MyBookings() {
     ALL: visibleBookings.length,
     PENDING_PAYMENT: stats.pending,
     PAID: stats.paid,
+  };
+
+  const handleCancelBooking = async (booking: BookingSummary) => {
+    if (cancellingBookingId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Bạn có chắc muốn hủy giao dịch này? Ghế đang giữ sẽ được mở lại cho người khác đặt.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setCancellingBookingId(booking.bookingId);
+      setErrorMessage("");
+      await bookingService.cancelPendingBooking(booking.bookingId);
+      localStorage.removeItem(getPaymentStorageKey(booking.showtimeId));
+      removeCheckoutAttempt(booking.showtimeId, getUserKey());
+      setBookings((currentBookings) =>
+        currentBookings.map((currentBooking) =>
+          currentBooking.bookingId === booking.bookingId
+            ? { ...currentBooking, status: "CANCELLED" }
+            : currentBooking,
+        ),
+      );
+    } catch (error) {
+      console.error("Lỗi hủy giao dịch:", error);
+      setErrorMessage(getApiErrorMessage(error, "Không thể hủy giao dịch. Vui lòng thử lại."));
+    } finally {
+      setCancellingBookingId("");
+    }
   };
 
   if (loading) {
@@ -532,14 +590,27 @@ export default function MyBookings() {
 
                       <div className="flex flex-col gap-3 lg:min-w-40 lg:justify-end">
                         {pendingPayment && (
-                          <Link
-                            to={`/booking/checkout/${booking.showtimeId}`}
-                            state={{ resumeBooking: booking }}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FFD166] px-5 py-3 text-center text-sm font-black uppercase tracking-wider text-black transition hover:bg-[#FFE7A3]"
-                          >
-                            <FaCreditCard />
-                            Thanh toán
-                          </Link>
+                          <>
+                            <Link
+                              to={`/booking/checkout/${booking.showtimeId}`}
+                              state={{ resumeBooking: booking }}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FFD166] px-5 py-3 text-center text-sm font-black uppercase tracking-wider text-black transition hover:bg-[#FFE7A3]"
+                            >
+                              <FaCreditCard />
+                              Thanh toán
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => void handleCancelBooking(booking)}
+                              disabled={cancellingBookingId === booking.bookingId}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-5 py-3 text-center text-sm font-black uppercase tracking-wider text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+                            >
+                              <FaTimesCircle />
+                              {cancellingBookingId === booking.bookingId
+                                ? "Đang hủy"
+                                : "Hủy giao dịch"}
+                            </button>
+                          </>
                         )}
                         <Link
                           to={`/booking/success/${booking.bookingId}`}

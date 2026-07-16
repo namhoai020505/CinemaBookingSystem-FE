@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaRegCheckCircle } from "react-icons/fa";
+import { FaExclamationCircle, FaRegCheckCircle, FaTimesCircle } from "react-icons/fa";
 import { Link, useParams } from "react-router-dom";
 import { getCurrentUserProfile } from "../../lib/auth";
 import {
@@ -50,19 +50,37 @@ const getTicketQrImage = (qrCode?: string | null) => {
   return `https://api.qrserver.com/v1/create-qr-code/?${query.toString()}`;
 };
 
-const getPaymentStorageKey = (showtimeId: string) => {
+const getUserKey = () => {
   const profile = getCurrentUserProfile();
-  const userKey = profile?.userId || profile?.email || "anonymous";
+  return profile?.userId || profile?.email || "anonymous";
+};
+
+const getPaymentStorageKey = (showtimeId: string) => {
+  const userKey = getUserKey();
   return `g2c-payment:${userKey}:${showtimeId}`;
 };
 
 const getSeatLabel = (seat: BookingSeatDetail) =>
   `${seat.rowLabel}${seat.seatNumber}`;
 
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "object" && error && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string } } })
+      .response;
+    if (response?.data?.message) {
+      return response.data.message;
+    }
+  }
+
+  return error instanceof Error ? error.message : fallback;
+};
+
 export default function BookingSuccess() {
   const { bookingId } = useParams();
   const [bookingInfo, setBookingInfo] = useState<BookingDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cancellingBooking, setCancellingBooking] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     const fetchBooking = async () => {
@@ -77,9 +95,7 @@ export default function BookingSuccess() {
 
           if (response.data.status === "PAID") {
             localStorage.removeItem(getPaymentStorageKey(response.data.showtimeId));
-            const profile = getCurrentUserProfile();
-            const userKey = profile?.userId || profile?.email || "anonymous";
-            removeCheckoutAttempt(response.data.showtimeId, userKey);
+            removeCheckoutAttempt(response.data.showtimeId, getUserKey());
           }
         }
       } catch (error) {
@@ -118,8 +134,58 @@ export default function BookingSuccess() {
     );
   }
 
-  const isPaid = bookingInfo.status === "PAID";
+  const normalizedStatus = bookingInfo.status.toUpperCase();
+  const isPaid = normalizedStatus === "PAID";
+  const isPendingPayment = normalizedStatus === "PENDING_PAYMENT";
   const ticketSeats = bookingInfo.seats.filter((seat) => seat.ticketQrCode);
+  const statusContent = isPaid
+    ? {
+      eyebrow: "Thanh toán thành công",
+      title: "Cảm ơn bạn đã thanh toán",
+      description:
+        "Vé của bạn đã sẵn sàng. Khi đến rạp, hãy mở mã QR bên dưới để nhân viên quét vé nhanh hơn.",
+    }
+    : isPendingPayment
+      ? {
+        eyebrow: "Đơn đang chờ thanh toán",
+        title: "Chờ xác nhận thanh toán",
+        description:
+          "Đơn hàng vẫn đang chờ hệ thống xác nhận. Bạn có thể quay lại màn thanh toán để kiểm tra tiếp.",
+      }
+      : {
+        eyebrow: "Giao dịch đã hủy",
+        title: "Đơn đặt vé không còn hiệu lực",
+        description:
+          "Giao dịch này đã được hủy hoặc không còn chờ thanh toán. Bạn có thể quay lại trang chủ để đặt vé mới.",
+      };
+
+  const handleCancelBooking = async () => {
+    if (cancellingBooking) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Bạn có chắc muốn hủy giao dịch này? Ghế đang giữ sẽ được mở lại cho người khác đặt.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setCancellingBooking(true);
+      setErrorMessage("");
+      await bookingService.cancelPendingBooking(bookingInfo.bookingId);
+      localStorage.removeItem(getPaymentStorageKey(bookingInfo.showtimeId));
+      removeCheckoutAttempt(bookingInfo.showtimeId, getUserKey());
+      setBookingInfo({ ...bookingInfo, status: "CANCELLED" });
+    } catch (error) {
+      console.error("Lỗi hủy giao dịch:", error);
+      setErrorMessage(getApiErrorMessage(error, "Không thể hủy giao dịch. Vui lòng thử lại."));
+    } finally {
+      setCancellingBooking(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#182437] p-6 text-white">
@@ -132,15 +198,13 @@ export default function BookingSuccess() {
               </div>
             ) : null}
             <p className="text-xs font-black uppercase tracking-widest text-[#FFD166]">
-              {isPaid ? "Thanh toán thành công" : "Đơn đang chờ thanh toán"}
+              {statusContent.eyebrow}
             </p>
             <h1 className="mt-2 text-2xl font-black">
-              {isPaid ? "Cảm ơn bạn đã thanh toán" : "Chờ xác nhận thanh toán"}
+              {statusContent.title}
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-gray-400">
-              {isPaid
-                ? "Vé của bạn đã sẵn sàng. Khi đến rạp, hãy mở mã QR bên dưới để nhân viên quét vé nhanh hơn."
-                : "Đơn hàng vẫn đang chờ hệ thống xác nhận. Bạn có thể quay lại màn thanh toán để kiểm tra tiếp."}
+              {statusContent.description}
             </p>
             <p className="mt-2 text-sm text-gray-400">
               Mã đơn:{" "}
@@ -151,12 +215,21 @@ export default function BookingSuccess() {
             className={`w-fit rounded-full border px-4 py-2 text-xs font-black uppercase ${
               isPaid
                 ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                : "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                : isPendingPayment
+                  ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                  : "border-rose-500/40 bg-rose-500/15 text-rose-300"
             }`}
           >
             {bookingInfo.status}
           </span>
         </div>
+
+        {errorMessage && (
+          <div className="mt-5 flex gap-3 rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm font-bold text-rose-100">
+            <FaExclamationCircle className="mt-0.5 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px]">
           <section className="space-y-4">
@@ -266,7 +339,7 @@ export default function BookingSuccess() {
           >
             Về trang chủ
           </Link>
-          {!isPaid && (
+          {isPendingPayment && (
             <Link
               to={`/booking/checkout/${bookingInfo.showtimeId}`}
               state={{
@@ -286,6 +359,19 @@ export default function BookingSuccess() {
             >
               Thanh toán
             </Link>
+          )}
+          {isPendingPayment && (
+            <button
+              type="button"
+              onClick={() => void handleCancelBooking()}
+              disabled={cancellingBooking}
+              className="rounded-xl border border-rose-400/40 bg-rose-500/10 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <span className="inline-flex items-center justify-center gap-2">
+                <FaTimesCircle />
+                {cancellingBooking ? "Đang hủy..." : "Hủy giao dịch"}
+              </span>
+            </button>
           )}
           <Link
             to="/my-bookings"

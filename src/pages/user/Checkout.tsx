@@ -12,6 +12,7 @@ import {
   FaRegCheckCircle,
   FaSyncAlt,
   FaTicketAlt,
+  FaTimesCircle,
   FaUserCircle,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -454,6 +455,7 @@ export default function Checkout() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
+  const [cancellingBooking, setCancellingBooking] = useState(false);
   const [paymentConfigRefreshTried, setPaymentConfigRefreshTried] = useState(false);
   const [paymentExpiredDialogOpen, setPaymentExpiredDialogOpen] =
     useState(false);
@@ -1206,6 +1208,39 @@ export default function Checkout() {
     }
   };
 
+  const handleCancelPendingBooking = async () => {
+    if (!booking?.bookingId || cancellingBooking) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Bạn có chắc muốn hủy giao dịch này? Ghế đang giữ sẽ được mở lại cho người khác đặt.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setCancellingBooking(true);
+      setErrorMessage("");
+      await bookingService.cancelPendingBooking(booking.bookingId);
+
+      if (showtimeId) {
+        removePaymentSession(showtimeId, userKey);
+        removeCheckoutAttempt(showtimeId, userKey);
+        removeSeatLockSession(showtimeId, userKey);
+      }
+
+      navigate("/my-bookings", { replace: true });
+    } catch (error) {
+      console.error("Lỗi hủy giao dịch:", error);
+      setErrorMessage(getApiErrorMessage(error, "Không thể hủy giao dịch. Vui lòng thử lại."));
+    } finally {
+      setCancellingBooking(false);
+    }
+  };
+
   if (!storedPaymentSession && !resumeBooking && selectedSeats.length === 0) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#182437] p-6 text-center text-white">
@@ -1387,11 +1422,20 @@ export default function Checkout() {
                 <button
                   type="button"
                   onClick={() => void handleCheckPaymentStatus()}
-                  disabled={checkingPayment}
+                  disabled={checkingPayment || cancellingBooking}
                   className="flex items-center justify-center gap-2 rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <FaSyncAlt className={checkingPayment ? "animate-spin" : ""} />
                   {checkingPayment ? "Đang kiểm tra..." : "Tôi đã thanh toán"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCancelPendingBooking()}
+                  disabled={cancellingBooking || checkingPayment}
+                  className="flex items-center justify-center gap-2 rounded-md border border-rose-400/40 bg-rose-500/10 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  <FaTimesCircle />
+                  {cancellingBooking ? "Đang hủy..." : "Hủy giao dịch"}
                 </button>
                 <Link
                   to="/my-bookings"
