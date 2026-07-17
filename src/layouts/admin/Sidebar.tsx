@@ -53,6 +53,12 @@ const navItems = [
     icon: <FaTicketAlt />,
   },
   {
+    to: '/admin/banners',
+    label: 'Banners',
+    description: 'Quản lý ảnh banner Carousel',
+    icon: <FaFilm />,
+  },
+  {
     to: '/admin/staff',
     label: 'Staff',
     description: 'Tài khoản nội bộ',

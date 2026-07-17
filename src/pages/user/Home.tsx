@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import slide1 from "../../assets/slide1.png";
@@ -20,6 +20,8 @@ import {
 } from "../../lib/cinemaSelection";
 import { getMediaUrl } from "../../lib/media";
 import { movieService } from "../../services/movieService";
+import { bannerService } from "../../services/bannerService";
+import type { BannerResponse } from "../../services/bannerService";
 import {
   showtimeService,
   type ShowtimeResponse,
@@ -29,6 +31,8 @@ type HeroSlide = {
   id: string;
   imageUrl: string;
   alt: string;
+  movieId?: string;
+  linkUrl?: string;
 };
 
 type Movie = {
@@ -38,6 +42,7 @@ type Movie = {
   duration: string;
   director?: string;
   posterUrl: string;
+  bannerUrl?: string;
   ageRating: string;
   highlight?: string;
   movieStatus?: string;
@@ -57,16 +62,6 @@ const mockHeroSlides: HeroSlide[] = [
   { id: "slide-5", imageUrl: slide5, alt: "Movie banner slide 5" },
   { id: "slide-6", imageUrl: slide6, alt: "Movie banner slide 6" },
 ];
-
-const FIRST_REAL_SLIDE_INDEX = 1;
-const LAST_REAL_SLIDE_INDEX = mockHeroSlides.length;
-const CLONED_FIRST_SLIDE_INDEX = LAST_REAL_SLIDE_INDEX + 1;
-
-const getRealSlideIndex = (index: number) =>
-  ((((index - FIRST_REAL_SLIDE_INDEX) % LAST_REAL_SLIDE_INDEX) +
-    LAST_REAL_SLIDE_INDEX) %
-    LAST_REAL_SLIDE_INDEX) +
-  FIRST_REAL_SLIDE_INDEX;
 
 
 
@@ -188,6 +183,9 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
   const posterUrl = getMediaUrl(
     getStringValue(movie, ["imagePoster", "posterUrl", "imageUrl", "poster"]),
   );
+  const bannerUrl = getMediaUrl(
+    getStringValue(movie, ["imageBanner", "bannerUrl"]),
+  );
   const isHot = movie.isHot === true || movie.highlight === true;
 
   return {
@@ -197,6 +195,7 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     duration: durationValue ? `${durationValue} phút` : "Đang cập nhật",
     director: getStringValue(movie, ["director", "Director"]) || "Đang cập nhật",
     posterUrl,
+    bannerUrl: bannerUrl || undefined,
     ageRating: getStringValue(movie, ["ageRating", "rating", "rated"]) || "P",
     highlight: isHot ? "HOT" : undefined,
     movieStatus: getStringValue(movie, ["movieStatus", "status"]) || "NOW_SHOWING",
@@ -209,6 +208,7 @@ export default function Home() {
   const [slideIndex, setSlideIndex] = useState(1);
   const [withTransition, setWithTransition] = useState(true);
   const [movies, setMovies] = useState<Movie[]>([]);
+  const [customBanners, setCustomBanners] = useState<BannerResponse[]>([]);
   const [showtimes, setShowtimes] = useState<ShowtimeResponse[]>([]);
   const [loadingMovies, setLoadingMovies] = useState(true);
   const [movieError, setMovieError] = useState("");
@@ -276,18 +276,21 @@ export default function Home() {
         setLoadingMovies(true);
         setMovieError("");
 
-        const [moviesResponse, showtimesResponse] = await Promise.all([
+        const [moviesResponse, showtimesResponse, activeBanners] = await Promise.all([
           movieService.getActiveMovies(),
           showtimeService.getShowtimes(),
+          bannerService.getActiveBanners().catch(() => []),
         ]);
 
         const moviesData = extractMovieList(moviesResponse);
         setMovies(moviesData.map(mapApiMovieToCard));
         setShowtimes(showtimesResponse);
+        setCustomBanners(activeBanners);
       } catch (error) {
-        console.error("Lỗi lấy danh sách phim:", error);
+        console.error("Lỗi lấy danh sách phim hoặc banner:", error);
         setMovies([]);
         setShowtimes([]);
+        setCustomBanners([]);
         setMovieError("Không tải được danh sách phim từ hệ thống.");
       } finally {
         setLoadingMovies(false);
@@ -371,54 +374,97 @@ export default function Home() {
     }
   }, [loadingMovies]);
 
-  const carouselSlides = useMemo(() => {
-    const lastSlide = mockHeroSlides[mockHeroSlides.length - 1];
-    const firstSlide = mockHeroSlides[0];
+  const activeHeroSlides = useMemo<HeroSlide[]>(() => {
+    // 1. Chuyển đổi các banner sự kiện/bắp nước của rạp từ DB
+    const customSlides: HeroSlide[] = customBanners.map(b => ({
+      id: `custom-slide-${b.bannerId}`,
+      imageUrl: b.imageUrl,
+      alt: b.title,
+      linkUrl: b.linkUrl,
+    }));
 
-    return [lastSlide, ...mockHeroSlides, firstSlide];
-  }, []);
+    // 2. Chuyển đổi các banner phim tự động đang chiếu
+    const nowShowingWithBanner = movies.filter(
+      (m) => m.movieStatus === "NOW_SHOWING" && m.bannerUrl && m.bannerUrl !== "none"
+    );
+    const movieSlides: HeroSlide[] = nowShowingWithBanner.map((m) => ({
+      id: `slide-${m.movieId}`,
+      imageUrl: m.bannerUrl!,
+      alt: m.title,
+      movieId: m.movieId,
+    }));
+
+    // 3. Gộp cả hai loại banner
+    const combined = [...customSlides, ...movieSlides];
+
+    if (combined.length > 0) {
+      return combined;
+    }
+
+    // Nếu không có bất cứ banner nào, fallback về mockHeroSlides cũ
+    return mockHeroSlides;
+  }, [movies, customBanners]);
+
+  const lastRealSlideIndex = activeHeroSlides.length;
+  const clonedFirstSlideIndex = lastRealSlideIndex + 1;
+
+  const getRealSlideIndexDynamic = useCallback((index: number) => {
+    if (lastRealSlideIndex === 0) return 0;
+    return ((((index - 1) % lastRealSlideIndex) + lastRealSlideIndex) % lastRealSlideIndex) + 1;
+  }, [lastRealSlideIndex]);
+
+  const carouselSlides = useMemo(() => {
+    if (activeHeroSlides.length === 0) return [];
+    const lastSlide = activeHeroSlides[activeHeroSlides.length - 1];
+    const firstSlide = activeHeroSlides[0];
+
+    return [lastSlide, ...activeHeroSlides, firstSlide];
+  }, [activeHeroSlides]);
 
   const safeSlideIndex =
-    slideIndex < 0 || slideIndex > CLONED_FIRST_SLIDE_INDEX
-      ? getRealSlideIndex(slideIndex)
+    slideIndex < 0 || slideIndex > clonedFirstSlideIndex
+      ? getRealSlideIndexDynamic(slideIndex)
       : slideIndex;
-  const activeSlideIndex = getRealSlideIndex(slideIndex) - 1;
+  const activeSlideIndex = getRealSlideIndexDynamic(slideIndex) - 1;
 
   useEffect(() => {
+    if (lastRealSlideIndex === 0) return;
     const timer = window.setInterval(() => {
-      setSlideIndex((currentIndex) => getRealSlideIndex(currentIndex) + 1);
+      setSlideIndex((currentIndex) => getRealSlideIndexDynamic(currentIndex) + 1);
     }, AUTO_PLAY_MS);
 
     return () => window.clearInterval(timer);
-  }, []);
+  }, [lastRealSlideIndex, getRealSlideIndexDynamic]);
 
   useEffect(() => {
-    if (slideIndex >= 0 && slideIndex <= CLONED_FIRST_SLIDE_INDEX) {
+    if (lastRealSlideIndex === 0) return;
+    if (slideIndex >= 0 && slideIndex <= clonedFirstSlideIndex) {
       return;
     }
 
     const resetTimer = window.setTimeout(() => {
       setWithTransition(false);
-      setSlideIndex(getRealSlideIndex(slideIndex));
+      setSlideIndex(getRealSlideIndexDynamic(slideIndex));
     }, 0);
 
     return () => window.clearTimeout(resetTimer);
-  }, [slideIndex]);
+  }, [slideIndex, lastRealSlideIndex, clonedFirstSlideIndex, getRealSlideIndexDynamic]);
 
   useEffect(() => {
-    if (slideIndex !== 0 && slideIndex !== CLONED_FIRST_SLIDE_INDEX) {
+    if (lastRealSlideIndex === 0) return;
+    if (slideIndex !== 0 && slideIndex !== clonedFirstSlideIndex) {
       return;
     }
 
     const fallbackTimer = window.setTimeout(() => {
       setWithTransition(false);
       setSlideIndex(
-        slideIndex === 0 ? LAST_REAL_SLIDE_INDEX : FIRST_REAL_SLIDE_INDEX,
+        slideIndex === 0 ? lastRealSlideIndex : 1,
       );
     }, SLIDE_TRANSITION_MS + 50);
 
     return () => window.clearTimeout(fallbackTimer);
-  }, [slideIndex]);
+  }, [slideIndex, lastRealSlideIndex, clonedFirstSlideIndex]);
 
   useEffect(() => {
     if (withTransition) {
@@ -433,11 +479,11 @@ export default function Home() {
   }, [withTransition]);
 
   const goToPreviousSlide = () => {
-    setSlideIndex((currentIndex) => getRealSlideIndex(currentIndex) - 1);
+    setSlideIndex((currentIndex) => getRealSlideIndexDynamic(currentIndex) - 1);
   };
 
   const goToNextSlide = () => {
-    setSlideIndex((currentIndex) => getRealSlideIndex(currentIndex) + 1);
+    setSlideIndex((currentIndex) => getRealSlideIndexDynamic(currentIndex) + 1);
   };
 
   const goToSlide = (nextSlideIndex: number) => {
@@ -463,15 +509,15 @@ export default function Home() {
   };
 
   const handleSlideTransitionEnd = () => {
-    if (slideIndex === CLONED_FIRST_SLIDE_INDEX) {
+    if (slideIndex === clonedFirstSlideIndex) {
       setWithTransition(false);
-      setSlideIndex(FIRST_REAL_SLIDE_INDEX);
+      setSlideIndex(1);
       return;
     }
 
     if (slideIndex === 0) {
       setWithTransition(false);
-      setSlideIndex(LAST_REAL_SLIDE_INDEX);
+      setSlideIndex(lastRealSlideIndex);
     }
   };
 
@@ -492,16 +538,41 @@ export default function Home() {
                 : "none",
             }}
           >
-            {carouselSlides.map((slide, index) => (
-              <div className="h-full min-w-full" key={`${slide.id}-${index}`}>
-                <img
-                  src={slide.imageUrl}
-                  alt={slide.alt}
-                  className="h-full w-full object-cover object-center"
-                  draggable={false}
-                />
-              </div>
-            ))}
+            {carouselSlides.map((slide, index) => {
+              const isClickable = !!(slide.movieId || slide.linkUrl);
+              return (
+                <div
+                  className={`h-full min-w-full relative overflow-hidden ${isClickable ? "cursor-pointer" : ""}`}
+                  key={`${slide.id}-${index}`}
+                  onClick={() => {
+                    if (slide.movieId) {
+                      navigate(`/movie/${slide.movieId}/showtimes`);
+                    } else if (slide.linkUrl) {
+                      if (slide.linkUrl.startsWith("http")) {
+                        window.open(slide.linkUrl, "_blank");
+                      } else {
+                        navigate(slide.linkUrl);
+                      }
+                    }
+                  }}
+                >
+                  {/* Backdrop blur image to fill empty areas beautifully */}
+                  <img
+                    src={getMediaUrl(slide.imageUrl)}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover object-center blur-2xl scale-110 opacity-60 select-none pointer-events-none"
+                    draggable={false}
+                  />
+                  {/* Crisp content image fitted perfectly inside the banner frame */}
+                  <img
+                    src={getMediaUrl(slide.imageUrl)}
+                    alt={slide.alt}
+                    className="relative z-10 h-full w-full object-contain object-center"
+                    draggable={false}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-black/45 to-transparent" />
@@ -532,7 +603,7 @@ export default function Home() {
           </button>
 
           <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
-            {mockHeroSlides.map((slide, index) => (
+            {activeHeroSlides.map((slide, index) => (
               <button
                 type="button"
                 key={slide.id}
