@@ -20,6 +20,8 @@ import ManageShowtime from './pages/admin/ManageShowtime';
 import ManageStaff from './pages/admin/ManageStaff';
 import ManageRooms from './pages/admin/ManageRooms';
 import ManageSeatLayout from './pages/admin/ManageSeatLayout';
+
+import ManageRefunds from './pages/admin/ManageRefunds';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import MovieShowtimes from './pages/user/MovieShowtimes';
 import SeatSelection from './pages/user/SeatSelection';
@@ -28,6 +30,8 @@ import ReviewModeration from './pages/admin/ReviewModeration';
 import BookingSuccess from './pages/user/BookingSuccess';
 import MyBookings from './pages/user/MyBookings';
 import ManageVouchers from './pages/admin/ManageVouchers';
+import RefundClaimPage from './pages/user/RefundClaimPage';
+import VnpayReturn from './pages/user/VnpayReturn';
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
@@ -70,9 +74,11 @@ const router = createBrowserRouter([
             element: <RequireAuth allowedRoles={customerRoles} />,
             children: [
               { path: '/booking/checkout/:showtimeId', element: <Checkout /> },
+              { path: '/vnpay-return', element: <VnpayReturn /> },
               { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
               { path: '/my-bookings', element: <MyBookings /> },
               { path: 'profile', element: <Profile /> },
+              { path: '/refund-claim', element: <RefundClaimPage /> },
             ],
           },
         ],
@@ -94,6 +100,7 @@ const router = createBrowserRouter([
               { path: 'rooms/:roomId/seats', element: <ManageSeatLayout /> },
               { path: 'review', element: <ReviewModeration /> },
               { path: 'vouchers', element: <ManageVouchers /> },
+              { path: 'refunds', element: <ManageRefunds /> },
             ],
           },
         ],

@@ -26,15 +26,27 @@ const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
 const formatDateTime = (value?: string | null) => {
-  const timestamp = parseBackendTime(value);
-  if (!timestamp) {
+  if (!value) {
     return "Đang cập nhật";
   }
 
-  return new Date(timestamp).toLocaleString("vi-VN", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  const [datePart, timePart = ""] = value.includes("T")
+    ? value.split("T")
+    : value.split(" ");
+  const [year, month, date] = datePart.split("-");
+  const shortTime = timePart.substring(0, 5);
+
+  if (year && month && date && shortTime) {
+    return `${shortTime} ${date}/${month}/${year}`;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp)
+    ? "Đang cập nhật"
+    : new Date(timestamp).toLocaleString("vi-VN", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
 };
 
 const getTicketQrImage = (qrCode?: string | null) => {

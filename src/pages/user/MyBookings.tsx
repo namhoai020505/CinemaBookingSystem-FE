@@ -10,6 +10,7 @@ import {
   FaRegCheckCircle,
   FaTicketAlt,
   FaWallet,
+  FaUniversity,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import {
@@ -55,38 +56,52 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-const formatShortDate = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
+const stripTimezone = (value?: string | null) => {
+  if (!value) return "";
+  return value.replace(/(?:Z|[+-]\d{2}:\d{2})$/i, "");
+};
 
-  if (timestamp === 0) {
+const formatShowtimeDateTime = (value?: string | null) => {
+  const localValue = stripTimezone(value);
+  const timestamp = localValue ? Date.parse(localValue) : 0;
+  if (!timestamp || Number.isNaN(timestamp)) {
+    return "Đang cập nhật";
+  }
+  return new Date(timestamp).toLocaleString("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+};
+
+const formatShowtimeShortDate = (value?: string | null) => {
+  const localValue = stripTimezone(value);
+  const timestamp = localValue ? Date.parse(localValue) : 0;
+  if (!timestamp || Number.isNaN(timestamp)) {
     return "--/--";
   }
-
   return new Date(timestamp).toLocaleDateString("vi-VN", {
     day: "2-digit",
     month: "2-digit",
   });
 };
 
-const formatWeekday = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
-
-  if (timestamp === 0) {
+const formatShowtimeWeekday = (value?: string | null) => {
+  const localValue = stripTimezone(value);
+  const timestamp = localValue ? Date.parse(localValue) : 0;
+  if (!timestamp || Number.isNaN(timestamp)) {
     return "Ngày chiếu";
   }
-
   return new Date(timestamp).toLocaleDateString("vi-VN", {
     weekday: "short",
   });
 };
 
-const formatShortTime = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
-
-  if (timestamp === 0) {
+const formatShowtimeShortTime = (value?: string | null) => {
+  const localValue = stripTimezone(value);
+  const timestamp = localValue ? Date.parse(localValue) : 0;
+  if (!timestamp || Number.isNaN(timestamp)) {
     return "--:--";
   }
-
   return new Date(timestamp).toLocaleTimeString("vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -443,13 +458,13 @@ export default function MyBookings() {
                       <div className="flex items-center gap-4 lg:block">
                         <div className="rounded-lg border border-white/10 bg-[#17264a] p-4 text-center">
                           <p className="text-xs font-black uppercase text-slate-400">
-                            {formatWeekday(booking.startTime)}
+                            {formatShowtimeWeekday(booking.startTime)}
                           </p>
                           <p className="mt-2 text-2xl font-black text-white">
-                            {formatShortDate(booking.startTime)}
+                            {formatShowtimeShortDate(booking.startTime)}
                           </p>
                           <p className="mt-1 text-sm font-black text-[#FFD166]">
-                            {formatShortTime(booking.startTime)}
+                            {formatShowtimeShortTime(booking.startTime)}
                           </p>
                         </div>
                         <span
@@ -489,7 +504,7 @@ export default function MyBookings() {
                               Suất chiếu
                             </p>
                             <p className="mt-2 text-sm font-bold">
-                              {formatDateTime(booking.startTime)}
+                              {formatShowtimeDateTime(booking.startTime)}
                             </p>
                           </div>
 
@@ -539,6 +554,15 @@ export default function MyBookings() {
                           >
                             <FaCreditCard />
                             Thanh toán
+                          </Link>
+                        )}
+                        {(booking.status.toUpperCase() === "CANCELLED" || booking.status.toUpperCase() === "CANCELED") && (
+                          <Link
+                            to={`/refund-claim?bookingId=${booking.bookingId}`}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500/20 border border-amber-500/30 px-5 py-3 text-center text-sm font-black uppercase tracking-wider text-amber-200 transition hover:bg-amber-500/30"
+                          >
+                            <FaUniversity />
+                            Nhận hoàn tiền
                           </Link>
                         )}
                         <Link

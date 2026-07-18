@@ -13,6 +13,8 @@ import {
   FaSyncAlt,
   FaTicketAlt,
   FaUserCircle,
+  FaCreditCard,
+  FaExternalLinkAlt,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import fallbackPoster from "../../assets/movie1.jpg";
@@ -87,6 +89,14 @@ type CheckoutRouteState = {
   totalAmount?: number;
   seatMap?: CheckoutSeatMap;
   resumeBooking?: BookingSummary;
+  movie?: {
+    movieId?: string;
+    title?: string;
+    genre?: string;
+    duration?: string;
+    posterUrl?: string;
+    ageRating?: string;
+  };
 };
 
 type ShowtimeDetailResponse = {
@@ -103,6 +113,7 @@ type MovieDetailResponse = {
   title: string;
   durationMinutes?: number;
   genre?: string | null;
+  genres?: string[] | null;
   ageRating?: string | null;
   posterUrl?: string | null;
 };
@@ -171,15 +182,27 @@ const formatTimer = (seconds: number) => {
 };
 
 const formatDateTime = (value?: string | null) => {
-  const timestamp = parseBackendTime(value);
-  if (!timestamp) {
+  if (!value) {
     return "Đang cập nhật";
   }
 
-  return new Date(timestamp).toLocaleString("vi-VN", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  const [datePart, timePart = ""] = value.includes("T")
+    ? value.split("T")
+    : value.split(" ");
+  const [year, month, date] = datePart.split("-");
+  const shortTime = timePart.substring(0, 5);
+
+  if (year && month && date && shortTime) {
+    return `${shortTime} ${date}/${month}/${year}`;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp)
+    ? "Đang cập nhật"
+    : new Date(timestamp).toLocaleString("vi-VN", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
 };
 
 // Lấy định danh user hiện tại để tách session theo tài khoản.
@@ -423,6 +446,7 @@ export default function Checkout() {
   const [step, setStep] = useState<"extras" | "payment">(
     storedPaymentSession || resumeBooking ? "payment" : "extras",
   );
+  const [selectedProvider, setSelectedProvider] = useState<string>("PP_SEPAY");
   const [seatHoldSeconds, setSeatHoldSeconds] = useState(() =>
     getSeatHoldRemainingSeconds(showtimeId, userKey, selectedSeats),
   );
@@ -451,7 +475,22 @@ export default function Checkout() {
   const [errorMessage, setErrorMessage] = useState("");
   const [paymentStatusMessage, setPaymentStatusMessage] = useState("");
   const [displayDetails, setDisplayDetails] =
-    useState<CheckoutDisplayDetails | null>(null);
+    useState<CheckoutDisplayDetails | null>(() => {
+      if (routeState?.movie) {
+        return {
+          movieId: routeState.movie.movieId,
+          title: routeState.movie.title,
+          genre: routeState.movie.genre,
+          duration: routeState.movie.duration,
+          ageRating: routeState.movie.ageRating,
+          posterUrl: routeState.movie.posterUrl,
+          cinemaName: routeState.seatMap?.cinemaName,
+          roomName: routeState.seatMap?.roomName,
+          startTime: routeState.seatMap?.startTime,
+        };
+      }
+      return null;
+    });
 
   const seatsTotalAmount = useMemo(
     () =>
@@ -715,7 +754,7 @@ export default function Checkout() {
         setDisplayDetails({
           movieId: showtime.movieId,
           title: movie?.title || showtime.movieTitle,
-          genre: movie?.genre || undefined,
+          genre: movie?.genres?.join(", ") || movie?.genre || undefined,
           duration: movie?.durationMinutes
             ? `${movie.durationMinutes} phút`
             : undefined,
@@ -1076,7 +1115,7 @@ export default function Checkout() {
 
       const paymentResponse = await paymentService.createPayment({
         bookingId: nextBooking.bookingId,
-        paymentProviderId: PAYMENT_PROVIDER_ID,
+        paymentProviderId: selectedProvider,
       });
 
       if (!paymentResponse.success || !paymentResponse.data?.paymentId) {
@@ -1101,6 +1140,12 @@ export default function Checkout() {
 
       writePaymentSession(nextSession);
       removeSeatLockSession(showtimeId, userKey);
+
+      if (selectedProvider === "PP_VNPAY" && paymentResponse.data.checkoutUrl) {
+        window.location.href = paymentResponse.data.checkoutUrl;
+        return;
+      }
+
       setBooking(nextBooking);
       setPayment(paymentResponse.data);
       setPaymentExpiresAt(expiresAt);
@@ -1181,30 +1226,50 @@ export default function Checkout() {
               </div>
 
               <div className="mt-7 grid gap-6 xl:grid-cols-[310px_minmax(0,1fr)]">
-                <div className="rounded-lg border border-white/10 bg-[#0D1637] p-4">
-                  <div className="flex aspect-square items-center justify-center rounded-md bg-white p-4">
-                    {paymentQrUrl ? (
-                      <img
-                        src={paymentQrUrl}
-                        alt="QR thanh toán SePay"
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <div className="text-center text-sm font-bold text-slate-700">
-                        QR sẽ hiển thị khi BE có cấu hình ngân hàng.
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-4 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-4 py-3">
-                    <div className="flex items-start gap-3">
-                      <FaRegCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
-                      <p className="text-sm font-semibold leading-5 text-emerald-50">
-                        Sau khi thanh toán, vé sẽ được xác nhận tự động. Bạn cũng có
-                        thể bấm kiểm tra nếu ngân hàng đã trừ tiền.
+                {payment?.checkoutUrl ? (
+                  <div className="rounded-lg border border-white/10 bg-[#0D1637] p-6 text-center flex flex-col justify-between items-center gap-6">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
+                      <FaExternalLinkAlt className="h-10 w-10" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-blue-300">Thanh toán với VNPay</h3>
+                      <p className="mt-2 text-xs text-slate-400 leading-5">
+                        Hệ thống đang chờ bạn thực hiện thanh toán trên cổng VNPay. Vui lòng bấm vào nút bên dưới nếu bạn lỡ đóng trang thanh toán.
                       </p>
                     </div>
+                    <a
+                      href={payment.checkoutUrl}
+                      className="w-full rounded-md bg-blue-600 py-3 text-xs font-black uppercase text-white hover:bg-blue-500 transition block text-center"
+                    >
+                      Mở cổng VNPay
+                    </a>
                   </div>
-                </div>
+                ) : (
+                  <div className="rounded-lg border border-white/10 bg-[#0D1637] p-4">
+                    <div className="flex aspect-square items-center justify-center rounded-md bg-white p-4">
+                      {paymentQrUrl ? (
+                        <img
+                          src={paymentQrUrl}
+                          alt="QR thanh toán SePay"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <div className="text-center text-sm font-bold text-slate-700">
+                          QR sẽ hiển thị khi BE có cấu hình ngân hàng.
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-4 py-3">
+                      <div className="flex items-start gap-3">
+                        <FaRegCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+                        <p className="text-sm font-semibold leading-5 text-emerald-50">
+                          Sau khi thanh toán, vé sẽ được xác nhận tự động. Bạn cũng có
+                          thể bấm kiểm tra nếu ngân hàng đã trừ tiền.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1226,71 +1291,95 @@ export default function Checkout() {
                     </div>
                   </div>
 
-                  <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      Ngân hàng nhận
-                    </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs text-slate-400">Ngân hàng</p>
-                        <p className="mt-1 font-bold">
-                          {payment?.bankName || "Đang cấu hình"}
+                  {payment?.checkoutUrl ? (
+                    <>
+                      <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          Cổng thanh toán
+                        </p>
+                        <p className="mt-1 text-base font-black text-blue-400">
+                          Cổng thanh toán trực tuyến VNPay
                         </p>
                       </div>
-                      <div>
-                        <p className="text-xs text-slate-400">Chủ tài khoản</p>
-                        <p className="mt-1 font-bold">
-                          {payment?.accountName || "G2Cinema"}
+
+                      <div className="rounded-md border border-blue-400/30 bg-blue-950/30 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">
+                          Mã giao dịch (TxnRef)
+                        </p>
+                        <p className="mt-1 font-mono text-lg font-black text-blue-50">
+                          {payment?.transactionCode || "—"}
                         </p>
                       </div>
-                    </div>
-                  </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          Ngân hàng nhận
+                        </p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <p className="text-xs text-slate-400">Ngân hàng</p>
+                            <p className="mt-1 font-bold">
+                              {payment?.bankName || "Đang cấu hình"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400">Chủ tài khoản</p>
+                            <p className="mt-1 font-bold">
+                              {payment?.accountName || "G2Cinema"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
 
-                  <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      Số tài khoản
-                    </p>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <p className="break-all font-mono text-lg font-black">
-                        {payment?.bankAccount || "Đang cấu hình"}
-                      </p>
-                      {payment?.bankAccount && (
-                        <button
-                          type="button"
-                          title="Sao chép số tài khoản"
-                          onClick={() =>
-                            void handleCopy(payment.bankAccount, "account")
-                          }
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white transition hover:border-[#FFD166] hover:text-[#FFD166]"
-                        >
-                          {copiedField === "account" ? <FaCheck /> : <FaCopy />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                      <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          Số tài khoản
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <p className="break-all font-mono text-lg font-black">
+                            {payment?.bankAccount || "Đang cấu hình"}
+                          </p>
+                          {payment?.bankAccount && (
+                            <button
+                              type="button"
+                              title="Sao chép số tài khoản"
+                              onClick={() =>
+                                void handleCopy(payment.bankAccount, "account")
+                              }
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white transition hover:border-[#FFD166] hover:text-[#FFD166]"
+                            >
+                              {copiedField === "account" ? <FaCheck /> : <FaCopy />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
 
-                  <div className="rounded-md border border-blue-400/30 bg-blue-950/30 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">
-                      Nội dung chuyển khoản
-                    </p>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <p className="break-all font-mono text-xl font-black text-blue-50">
-                        {payment?.transactionCode || "Đang tạo mã giao dịch..."}
-                      </p>
-                      {payment?.transactionCode && (
-                        <button
-                          type="button"
-                          title="Sao chép nội dung chuyển khoản"
-                          onClick={() =>
-                            void handleCopy(payment.transactionCode, "content")
-                          }
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-blue-300/40 bg-blue-400/10 text-blue-50 transition hover:bg-blue-400/20"
-                        >
-                          {copiedField === "content" ? <FaCheck /> : <FaCopy />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                      <div className="rounded-md border border-blue-400/30 bg-blue-950/30 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">
+                          Nội dung chuyển khoản
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <p className="break-all font-mono text-xl font-black text-blue-50">
+                            {payment?.transactionCode || "Đang tạo mã giao dịch..."}
+                          </p>
+                          {payment?.transactionCode && (
+                            <button
+                              type="button"
+                              title="Sao chép nội dung chuyển khoản"
+                              onClick={() =>
+                                void handleCopy(payment.transactionCode, "content")
+                              }
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-blue-300/40 bg-blue-400/10 text-blue-50 transition hover:bg-blue-400/20"
+                            >
+                              {copiedField === "content" ? <FaCheck /> : <FaCopy />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {paymentStatusMessage && (
                     <p className="rounded-md border border-amber-500/30 bg-amber-950/40 px-4 py-3 text-sm font-bold text-amber-100">
@@ -1305,15 +1394,26 @@ export default function Checkout() {
                 </div>
               </div>
 
-              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => void handleCheckPaymentStatus()}
                   disabled={checkingPayment}
-                  className="flex items-center justify-center gap-2 rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="flex-1 flex items-center justify-center gap-2 rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <FaSyncAlt className={checkingPayment ? "animate-spin" : ""} />
                   {checkingPayment ? "Đang kiểm tra..." : "Tôi đã thanh toán"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    removePaymentSession(showtimeId, userKey);
+                    setPayment(null);
+                    setStep("extras");
+                  }}
+                  className="rounded-md border border-white/10 bg-slate-800 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-white transition hover:bg-slate-700"
+                >
+                  Thay đổi phương thức
                 </button>
                 <Link
                   to="/my-bookings"
@@ -1631,18 +1731,60 @@ export default function Checkout() {
 
             <div className="mt-7">
               <div className="mb-4 flex items-center gap-2 text-base font-black uppercase">
-                <FaQrcode className="h-5 w-5 text-white/90" />
+                <FaCreditCard className="h-5 w-5 text-white/90" />
                 Phương thức thanh toán
               </div>
               <p className="mb-3 text-xs font-bold text-slate-300">
-                Chọn thẻ thanh toán
+                Chọn cổng thanh toán
               </p>
-              <div className="flex w-fit items-center gap-3 rounded-md border border-blue-400 bg-blue-500/10 px-4 py-3">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full border border-blue-300">
-                  <span className="h-2 w-2 rounded-full bg-blue-400" />
-                </span>
-                <FaQrcode className="h-7 w-7 text-white" />
-                <span className="text-sm font-black">Mã QR</span>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/* SePay Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedProvider("PP_SEPAY")}
+                  className={`flex items-center gap-3 rounded-md border p-4 text-left transition select-none ${
+                    selectedProvider === "PP_SEPAY"
+                      ? "border-[#FFD166] bg-[#FFD166]/10 text-white"
+                      : "border-white/10 hover:border-white/30 text-slate-300"
+                  }`}
+                >
+                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                    selectedProvider === "PP_SEPAY" ? "border-[#FFD166]" : "border-slate-500"
+                  }`}>
+                    {selectedProvider === "PP_SEPAY" && (
+                      <span className="h-2 w-2 rounded-full bg-[#FFD166]" />
+                    )}
+                  </span>
+                  <FaQrcode className="h-6 w-6 text-white shrink-0" />
+                  <div>
+                    <p className="text-xs font-black">Chuyển khoản VietQR</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Xác nhận tự động qua QR</p>
+                  </div>
+                </button>
+
+                {/* VNPay Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedProvider("PP_VNPAY")}
+                  className={`flex items-center gap-3 rounded-md border p-4 text-left transition select-none ${
+                    selectedProvider === "PP_VNPAY"
+                      ? "border-[#FFD166] bg-[#FFD166]/10 text-white"
+                      : "border-white/10 hover:border-white/30 text-slate-300"
+                  }`}
+                >
+                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                    selectedProvider === "PP_VNPAY" ? "border-[#FFD166]" : "border-slate-500"
+                  }`}>
+                    {selectedProvider === "PP_VNPAY" && (
+                      <span className="h-2 w-2 rounded-full bg-[#FFD166]" />
+                    )}
+                  </span>
+                  <FaCreditCard className="h-6 w-6 text-white shrink-0" />
+                  <div>
+                    <p className="text-xs font-black">Cổng VNPay</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Thanh toán thẻ ATM/Quốc tế</p>
+                  </div>
+                </button>
               </div>
             </div>
 
