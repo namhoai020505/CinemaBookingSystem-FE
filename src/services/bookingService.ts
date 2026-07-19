@@ -19,6 +19,7 @@ export type BookingSummary = {
   status: string;
   createdAt: string;
   expiredAt?: string | null;
+  compensationDiscountAmount?: number;
 };
 
 export type BookingSeatDetail = {
@@ -66,6 +67,7 @@ export interface CheckoutPayload {
   showtimeId: string | number;
   showtimeSeatIds: (string | number)[];
   voucherCode?: string;
+  compensationTicketCodes?: string[];
   foodItems?: {
     fbItemId: string;
     quantity: number;
@@ -77,6 +79,7 @@ interface CreateBookingRequestPayload {
   showtimeId: string;
   showtimeSeatIds: string[];
   voucherCode?: string;
+  compensationTicketCodes?: string[];
   foodAndBeverages?: {
     fbItemId: string;
     quantity: number;
@@ -115,6 +118,7 @@ export type CheckoutResponse = {
   rewardDiscount: number;
   totalAmount: number;
   expiredAt: string | null;
+  compensationDiscountAmount?: number;
 };
 
 export type CheckoutRecovery = {
@@ -205,6 +209,10 @@ export const bookingService = {
       bePayload.voucherCode = payload.voucherCode.trim();
     }
 
+    if (payload.compensationTicketCodes?.length) {
+      bePayload.compensationTicketCodes = payload.compensationTicketCodes;
+    }
+
     const foodAndBeverages = payload.foodItems
       ?.filter((item) => item.fbItemId && item.quantity > 0)
       .map((item) => ({
@@ -243,6 +251,7 @@ export const bookingService = {
       rewardDiscount: 0,
       totalAmount: booking.totalAmount,
       expiredAt: booking.expiredAt ? String(booking.expiredAt) : null,
+      compensationDiscountAmount: booking.compensationDiscountAmount,
     };
 
     return { ...raw, data: mapped } as ApiResponse<CheckoutResponse>;

@@ -9,6 +9,8 @@ import {
   type RoomResponse,
   type MovieResponse,
 } from "../../services/showtimeService";
+import api from "../../lib/api";
+import { managerService } from "../../services/managerService";
 
 // =================================================================
 // 💡 CẤU HÌNH TIMELINE CHUẨN: 8H ĐẾN 24H (16 TIẾNG)
@@ -164,6 +166,11 @@ export default function ManageShowtime() {
   const [isDirty, setIsDirty] = useState(false);
   const [deletedShowtimeIds, setDeletedShowtimeIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState(false);
+
+  // ---------- State: Cancel showtime with bookings ----------
+  const [cancelConfirmShowtimes, setCancelConfirmShowtimes] = useState<{ id: string; movieName: string; roomName: string; startTimeStr: string }[]>([]);
+  const [cancelReason, setCancelReason] = useState("");
+  const [savePromiseResolve, setSavePromiseResolve] = useState<((value: boolean) => void) | null>(null);
 
   // ---------- Blocker: Chặn chuyển trang SPA khi chưa lưu lịch chiếu ----------
   const blocker = useBlocker(
@@ -552,8 +559,61 @@ export default function ManageShowtime() {
     setActionLoading(true);
 
     try {
-      // 1. Thực hiện xóa các suất chiếu nằm trong deletedShowtimeIds
+      // 1. Kiểm tra các suất chiếu bị xóa có đặt chỗ trước không
+      const showtimesToCancel: { id: string; movieName: string; roomName: string; startTimeStr: string }[] = [];
+      const showtimesToDelete: string[] = [];
+
       for (const id of Array.from(deletedShowtimeIds)) {
+        const original = allShowtimes.find((st) => st.showtimeId === id);
+        try {
+          const res = await api.get(`/api/seats/showtimes/${id}/map`) as any;
+          const hasBookings = res?.success && res?.data && ((res.data.soldSeats?.length > 0) || (res.data.lockedSeats?.length > 0));
+          if (hasBookings) {
+            showtimesToCancel.push({
+              id,
+              movieName: original?.movieTitle || "Không rõ phim",
+              roomName: original?.roomName || "Phòng",
+              startTimeStr: original ? new Date(original.startTime).toLocaleString('vi-VN') : "Không rõ giờ",
+            });
+          } else {
+            showtimesToDelete.push(id);
+          }
+        } catch {
+          showtimesToDelete.push(id);
+        }
+      }
+
+      if (showtimesToCancel.length > 0) {
+        setCancelConfirmShowtimes(showtimesToCancel);
+        setCancelReason("");
+        
+        // Chờ người dùng nhập lý do hủy qua modal
+        const proceed = await new Promise<boolean>((resolve) => {
+          setSavePromiseResolve(() => resolve);
+        });
+
+        if (!proceed) {
+          setActionLoading(false);
+          return;
+        }
+      }
+
+      let totalPaidCompensated = 0;
+      let totalTicketsIssued = 0;
+      let totalCombosIssued = 0;
+
+      // Hủy các suất chiếu có đặt chỗ
+      for (const st of showtimesToCancel) {
+        const result = await managerService.cancelShowtime(st.id, cancelReason.trim() || "Hủy suất chiếu bởi Quản trị viên") as any;
+        if (result) {
+          totalPaidCompensated += result.paidBookingsCompensated || 0;
+          totalTicketsIssued += result.ticketVouchersIssued || 0;
+          totalCombosIssued += result.comboVouchersIssued || 0;
+        }
+      }
+
+      // Xóa các suất chiếu trống
+      for (const id of showtimesToDelete) {
         await showtimeService.deleteShowtime(id);
       }
 
@@ -598,15 +658,20 @@ export default function ManageShowtime() {
         }
       }
 
-      toast.success(
-        `💾 Đã lưu lịch chiếu thành công! (Tạo: ${createdCount}, Cập nhật: ${updatedCount}, Xóa: ${deletedShowtimeIds.size})`
-      );
+      let successMsg = `💾 Đã lưu lịch chiếu thành công! (Tạo: ${createdCount}, Cập nhật: ${updatedCount}`;
+      if (showtimesToDelete.length > 0) {
+        successMsg += `, Xóa sạch: ${showtimesToDelete.length}`;
+      }
+      if (showtimesToCancel.length > 0) {
+        successMsg += `, Hủy bồi hoàn: ${showtimesToCancel.length} suất (Đền bù: ${totalPaidCompensated} bookings, phát ${totalTicketsIssued} vé & ${totalCombosIssued} combo)`;
+      }
+      successMsg += ")";
+      toast.success(successMsg);
 
       setIsDirty(false);
       setDeletedShowtimeIds(new Set());
       await fetchShowtimes(); // Reload database
     } catch (err: unknown) {
-
       // Map BE errorCode → thông báo tiếng Việt rõ ràng
       const ERROR_MESSAGES: Record<string, string> = TEXT.SHOWTIME.BE_ERRORS;
 
@@ -981,6 +1046,85 @@ export default function ManageShowtime() {
                 className="px-5 py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-semibold rounded-xl shadow-lg shadow-red-900/20 transition-all text-xs active:scale-95 cursor-pointer"
               >
                 Xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM CANCEL SHOWTIME MODAL */}
+      {cancelConfirmShowtimes.length > 0 && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-[#111C44] border border-amber-500/20 rounded-2xl w-full max-w-md p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-modal-scale flex flex-col gap-5">
+            {/* Header / Warning Icon */}
+            <div className="flex items-center gap-4 border-b border-gray-800/80 pb-4">
+              <div className="bg-amber-500/10 text-amber-500 p-3 rounded-xl border border-amber-500/20 shadow-inner shrink-0 animate-pulse">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <h3 className="text-lg font-bold text-white tracking-wide">Yêu cầu hủy &amp; bồi hoàn suất chiếu</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Một hoặc nhiều suất chiếu bạn chọn xóa hiện đã có vé bán ra hoặc giữ ghế.</p>
+              </div>
+            </div>
+
+            {/* List of affected showtimes */}
+            <div className="bg-[#0F172A] border border-gray-800/80 rounded-xl p-3 text-left max-h-40 overflow-y-auto flex flex-col gap-2">
+              <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Danh sách suất chiếu bị hủy:</span>
+              {cancelConfirmShowtimes.map((st) => (
+                <div key={st.id} className="border-b border-gray-800/60 pb-2 last:border-0 last:pb-0 text-xs">
+                  <div className="font-bold text-white line-clamp-1">{st.movieName}</div>
+                  <div className="text-gray-400 mt-0.5 flex justify-between">
+                    <span>{st.roomName}</span>
+                    <span className="text-yellow-500 font-semibold">{st.startTimeStr}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Input reason */}
+            <div className="text-left flex flex-col gap-2">
+              <label htmlFor="cancelReasonInput" className="text-xs font-bold text-slate-300">
+                Lý do hủy suất chiếu (Gửi tới email/thông báo khách hàng):
+              </label>
+              <textarea
+                id="cancelReasonInput"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Nhập lý do chi tiết (ví dụ: Sự cố kỹ thuật phòng chiếu, Sự cố mất điện, ...)"
+                className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-3.5 py-2.5 text-xs text-white outline-none focus:ring-1 focus:ring-amber-500 min-h-20 resize-none"
+              />
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-3 justify-end mt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelConfirmShowtimes([]);
+                  if (savePromiseResolve) {
+                    savePromiseResolve(false);
+                    setSavePromiseResolve(null);
+                  }
+                }}
+                className="px-5 py-2.5 bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold rounded-xl border border-gray-700/60 transition-all text-xs active:scale-95 cursor-pointer"
+              >
+                Hủy thay đổi
+              </button>
+              <button
+                type="button"
+                disabled={!cancelReason.trim()}
+                onClick={() => {
+                  setCancelConfirmShowtimes([]);
+                  if (savePromiseResolve) {
+                    savePromiseResolve(true);
+                    setSavePromiseResolve(null);
+                  }
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black rounded-xl shadow-lg shadow-amber-900/20 transition-all text-xs active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Xác nhận hủy &amp; lưu
               </button>
             </div>
           </div>

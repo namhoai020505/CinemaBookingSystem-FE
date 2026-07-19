@@ -84,6 +84,13 @@ export default function Header() {
                 Vé của tôi
               </Link>
               <span className={dividerClass}>|</span>
+              <Link
+                to="/my-vouchers"
+                className={`font-medium transition ${linkHoverClass}`}
+              >
+                Voucher của tôi
+              </Link>
+              <span className={dividerClass}>|</span>
               <button
                 type="button"
                 onClick={handleLogout}

@@ -29,6 +29,7 @@ import Checkout from './pages/user/Checkout';
 import ReviewModeration from './pages/admin/ReviewModeration';
 import BookingSuccess from './pages/user/BookingSuccess';
 import MyBookings from './pages/user/MyBookings';
+import MyVouchers from './pages/user/MyVouchers';
 import ManageVouchers from './pages/admin/ManageVouchers';
 import RefundClaimPage from './pages/user/RefundClaimPage';
 import VnpayReturn from './pages/user/VnpayReturn';
@@ -77,8 +78,10 @@ const router = createBrowserRouter([
               { path: '/vnpay-return', element: <VnpayReturn /> },
               { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
               { path: '/my-bookings', element: <MyBookings /> },
+              { path: '/my-vouchers', element: <MyVouchers /> },
               { path: 'profile', element: <Profile /> },
               { path: '/refund-claim', element: <RefundClaimPage /> },
+              { path: '/refunds/claim', element: <RefundClaimPage /> },
             ],
           },
         ],

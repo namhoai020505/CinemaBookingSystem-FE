@@ -91,4 +91,10 @@ export const voucherService = {
     api.get<unknown, ApiResponse<ValidateVoucherResponse>>(`/api/vouchers/validate`, {
       params: { code, bookingAmount },
     }),
+
+  getMyWallet: async () =>
+    api.get<unknown, ApiResponse<Voucher[]>>('/api/vouchers/my-wallet'),
+
+  claimVoucher: async (voucherId: string) =>
+    api.post<unknown, ApiResponse<unknown>>(`/api/vouchers/${voucherId}/claim`),
 };

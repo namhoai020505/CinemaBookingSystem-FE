@@ -12,12 +12,14 @@ import {
   FaWallet,
   FaUniversity,
 } from "react-icons/fa";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import {
   bookingService,
   shouldHideBookingFromHistory,
   type BookingSummary,
 } from "../../services/bookingService";
+import { compensationService } from "../../services/compensationService";
 
 type BookingFilter = "ALL" | "PENDING_PAYMENT" | "PAID";
 
@@ -195,20 +197,43 @@ const isPaid = (booking: BookingSummary) =>
   booking.status.toUpperCase() === "PAID";
 
 export default function MyBookings() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [activeFilter, setActiveFilter] = useState<BookingFilter>("ALL");
 
   useEffect(() => {
+    const success = searchParams.get("success");
+    const message = searchParams.get("message");
+    if (success && message) {
+      if (success === "true") {
+        toast.success(decodeURIComponent(message));
+      } else {
+        toast.error(decodeURIComponent(message));
+      }
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const [compensations, setCompensations] = useState<any[]>([]);
+
+  useEffect(() => {
     const fetchMyBookings = async () => {
       try {
-        const response = await bookingService.getMyBookings();
+        const [response, compResponse] = await Promise.all([
+          bookingService.getMyBookings(),
+          compensationService.getCustomerCompensations().catch(() => ({ success: false, data: [] }))
+        ]);
+
         if (!response.success) {
           throw new Error(response.message || "Không tải được danh sách vé.");
         }
 
         setBookings(response.data || []);
+        if (compResponse.success) {
+          setCompensations(compResponse.data || []);
+        }
       } catch (error) {
         console.error("Lỗi khi lấy danh sách vé:", error);
         setErrorMessage(
@@ -543,6 +568,23 @@ export default function MyBookings() {
                             </p>
                           </div>
                         </div>
+
+                        {/* Hiển thị bồi hoàn sự cố nếu suất chiếu bị hủy */}
+                        {(() => {
+                          const isCancelled = booking.status.toUpperCase() === "CANCELLED" || booking.status.toUpperCase() === "CANCELED";
+                          if (!isCancelled) return null;
+                          const matchedComp = compensations.find(c => String(c.sourceBookingId) === String(booking.bookingId));
+                          if (!matchedComp) return null;
+
+                          return (
+                            <div className="mt-4 flex gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
+                              <FaExclamationCircle className="mt-0.5 shrink-0 text-amber-400" size={14} />
+                              <div>
+                                Suất chiếu đã bị hủy bởi rạp. Bạn đã nhận {matchedComp.tickets.length} vé xem phim bất kỳ và {matchedComp.combo ? "1" : "0"} combo bắp nước. Xem tại tab <strong>"Quyền lợi sự cố"</strong> trong ví của bạn.
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       <div className="flex flex-col gap-3 lg:min-w-40 lg:justify-end">

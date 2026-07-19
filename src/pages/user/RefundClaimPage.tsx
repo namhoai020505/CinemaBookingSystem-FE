@@ -19,7 +19,7 @@ import { toast } from 'react-toastify';
 
 export default function RefundClaimPage() {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const token = searchParams.get('token') || searchParams.get('t');
   const navigate = useNavigate();
 
   // Loading & Error States for Resolution
