@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { type TouchEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FaStar } from "react-icons/fa";
+import {
+  FiChevronLeft,
+  FiChevronRight,
+  FiFilm,
+  FiMapPin,
+  FiPhone,
+  FiSearch,
+} from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import slide1 from "../../assets/slide1.png";
 import slide2 from "../../assets/slide2.png";
@@ -7,6 +15,7 @@ import slide3 from "../../assets/slide3.png";
 import slide4 from "../../assets/slide4.png";
 import slide5 from "../../assets/slide5.png";
 import slide6 from "../../assets/slide6.png";
+import cinemaThumbnail from "../../assets/thumbnail-1-144816-050424-68.jpeg";
 import ShowtimePickerModal from "../../components/user/ShowtimePickerModal";
 import {
   clearAuthSession,
@@ -17,6 +26,7 @@ import {
   CINEMA_SELECTION_EVENT,
   CINEMA_SELECTION_STORAGE_KEY,
   readSelectedCinemaId,
+  writeSelectedCinemaId,
 } from "../../lib/cinemaSelection";
 import { getMediaUrl } from "../../lib/media";
 import { movieService } from "../../services/movieService";
@@ -24,6 +34,7 @@ import { bannerService } from "../../services/bannerService";
 import type { BannerResponse } from "../../services/bannerService";
 import {
   showtimeService,
+  type CinemaResponse,
   type ShowtimeResponse,
 } from "../../services/showtimeService";
 
@@ -44,11 +55,24 @@ type Movie = {
   posterUrl: string;
   bannerUrl?: string;
   ageRating: string;
+  avgRating: number;
+  viewCount: number;
   highlight?: string;
   movieStatus?: string;
 };
 
 type MovieApiItem = Record<string, unknown>;
+
+type MobileSearchFilter = "title" | "genre" | "director";
+
+const mobileSearchFilterOptions: Array<{
+  value: MobileSearchFilter;
+  label: string;
+}> = [
+  { value: "title", label: "Tên phim" },
+  { value: "genre", label: "Thể loại" },
+  { value: "director", label: "Đạo diễn" },
+];
 
 const AUTO_PLAY_MS = 4500;
 const SLIDE_TRANSITION_MS = 700;
@@ -67,6 +91,14 @@ const mockHeroSlides: HeroSlide[] = [
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const normalizeText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .trim();
 
 const getStringValue = (item: MovieApiItem, keys: string[]) => {
   for (const key of keys) {
@@ -170,6 +202,30 @@ const isBookableShowtime = (showtime: ShowtimeResponse, currentTimeMs: number) =
   return showtime.status?.toUpperCase() === "OPEN" && startTimestamp > currentTimeMs;
 };
 
+const formatCompactCount = (value: number) => {
+  if (value >= 1000) {
+    return `${new Intl.NumberFormat("vi-VN", {
+      maximumFractionDigits: 1,
+    }).format(value / 1000)}K`;
+  }
+
+  return new Intl.NumberFormat("vi-VN").format(value);
+};
+
+const formatRatingText = (movie: Movie) => {
+  if (movie.avgRating > 0) {
+    const rating = new Intl.NumberFormat("vi-VN", {
+      maximumFractionDigits: 1,
+    }).format(movie.avgRating);
+
+    return movie.viewCount > 0
+      ? `${rating}/10 (${formatCompactCount(movie.viewCount)} lượt xem)`
+      : `${rating}/10`;
+  }
+
+  return "Chưa có đánh giá";
+};
+
 const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
   const movieId = getStringValue(movie, ["movieId", "id", "movieID", "MovieId"]);
   const title =
@@ -187,6 +243,8 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     getStringValue(movie, ["imageBanner", "bannerUrl"]),
   );
   const isHot = movie.isHot === true || movie.highlight === true;
+  const avgRating = Number(movie.avgRating ?? movie.rating ?? 0);
+  const viewCount = Number(movie.viewCount ?? 0);
 
   return {
     movieId,
@@ -197,6 +255,8 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
     posterUrl,
     bannerUrl: bannerUrl || undefined,
     ageRating: getStringValue(movie, ["ageRating", "rating", "rated"]) || "P",
+    avgRating: Number.isFinite(avgRating) ? avgRating : 0,
+    viewCount: Number.isFinite(viewCount) ? viewCount : 0,
     highlight: isHot ? "HOT" : undefined,
     movieStatus: getStringValue(movie, ["movieStatus", "status"]) || "NOW_SHOWING",
   };
@@ -210,6 +270,7 @@ export default function Home() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [customBanners, setCustomBanners] = useState<BannerResponse[]>([]);
   const [showtimes, setShowtimes] = useState<ShowtimeResponse[]>([]);
+  const [activeCinemas, setActiveCinemas] = useState<CinemaResponse[]>([]);
   const [loadingMovies, setLoadingMovies] = useState(true);
   const [movieError, setMovieError] = useState("");
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
@@ -218,6 +279,14 @@ export default function Home() {
   );
   const [selectedShowtimeMovie, setSelectedShowtimeMovie] =
     useState<Movie | null>(null);
+  const [mobileFeaturedIndex, setMobileFeaturedIndex] = useState(0);
+  const [mobileFeaturedDragOffset, setMobileFeaturedDragOffset] = useState(0);
+  const [isMobileFeaturedDragging, setIsMobileFeaturedDragging] = useState(false);
+  const [mobileSearchTerm, setMobileSearchTerm] = useState("");
+  const [mobileSearchFilter, setMobileSearchFilter] =
+    useState<MobileSearchFilter>("title");
+  const mobileTouchStartXRef = useRef<number | null>(null);
+  const mobileTouchDeltaXRef = useRef(0);
 
   const [activeTab, setActiveTab] = useState<"NOW_SHOWING" | "COMING_SOON" | "SPECIAL">("NOW_SHOWING");
   const [pageIndex, setPageIndex] = useState(1);
@@ -276,21 +345,28 @@ export default function Home() {
         setLoadingMovies(true);
         setMovieError("");
 
-        const [moviesResponse, showtimesResponse, activeBanners] = await Promise.all([
+        const [moviesResponse, showtimesResponse, activeBanners, cinemaItems] = await Promise.all([
           movieService.getActiveMovies(),
           showtimeService.getShowtimes(),
           bannerService.getActiveBanners().catch(() => []),
+          showtimeService.getCinemas().catch(() => []),
         ]);
 
         const moviesData = extractMovieList(moviesResponse);
         setMovies(moviesData.map(mapApiMovieToCard));
         setShowtimes(showtimesResponse);
         setCustomBanners(activeBanners);
+        setActiveCinemas(
+          cinemaItems.filter(
+            (cinema) => cinema.cinemaStatus?.toUpperCase() === "ACTIVE",
+          ),
+        );
       } catch (error) {
         console.error("Lỗi lấy danh sách phim hoặc banner:", error);
         setMovies([]);
         setShowtimes([]);
         setCustomBanners([]);
+        setActiveCinemas([]);
         setMovieError("Không tải được danh sách phim từ hệ thống.");
       } finally {
         setLoadingMovies(false);
@@ -331,6 +407,41 @@ export default function Home() {
     };
   }, []);
 
+  const selectedCinema = useMemo(
+    () =>
+      activeCinemas.find((cinema) => cinema.cinemaId === selectedCinemaId) ||
+      activeCinemas[0],
+    [activeCinemas, selectedCinemaId],
+  );
+
+  const mobileCinemaItems = useMemo(
+    () =>
+      [...activeCinemas]
+        .sort((left, right) => {
+          if (left.cinemaId === selectedCinema?.cinemaId) {
+            return -1;
+          }
+
+          if (right.cinemaId === selectedCinema?.cinemaId) {
+            return 1;
+          }
+
+          return left.cinemaName.localeCompare(right.cinemaName, "vi");
+        })
+        .slice(0, 3),
+    [activeCinemas, selectedCinema?.cinemaId],
+  );
+
+  const getCinemaAddress = (cinema: CinemaResponse) =>
+    [cinema.address, cinema.city].filter(Boolean).join(" - ") ||
+    "Địa chỉ đang cập nhật";
+
+  const handleSelectHomeCinema = (cinema: CinemaResponse) => {
+    setSelectedCinemaId(cinema.cinemaId);
+    writeSelectedCinemaId(cinema.cinemaId);
+    setPageIndex(1);
+  };
+
   const bookableMovieIds = useMemo(() => {
     const movieIds = new Set<string>();
 
@@ -346,6 +457,126 @@ export default function Home() {
 
     return movieIds;
   }, [currentTimeMs, selectedCinemaId, showtimes]);
+
+  const mobileSearchFilterLabel =
+    mobileSearchFilterOptions.find(
+      (option) => option.value === mobileSearchFilter,
+    )?.label || "Tên phim";
+
+  const mobileNowShowingMovies = useMemo(() => {
+    const normalizedSearchTerm = normalizeText(mobileSearchTerm);
+
+    return movies
+      .filter((movie) => movie.movieStatus === "NOW_SHOWING")
+      .filter((movie) => {
+        if (!normalizedSearchTerm) {
+          return true;
+        }
+
+        const searchableValue =
+          mobileSearchFilter === "director"
+            ? movie.director || ""
+            : mobileSearchFilter === "genre"
+              ? movie.genre
+              : movie.title;
+
+        return normalizeText(searchableValue).includes(normalizedSearchTerm);
+      })
+      .slice(0, 12);
+  }, [mobileSearchFilter, mobileSearchTerm, movies]);
+
+  const mobileFeaturedMovies = useMemo(() => {
+    const highlightedMovies = mobileNowShowingMovies.filter(
+      (movie) => movie.highlight || bookableMovieIds.has(String(movie.movieId)),
+    );
+
+    return (highlightedMovies.length > 0
+      ? highlightedMovies
+      : mobileNowShowingMovies
+    ).slice(0, 8);
+  }, [bookableMovieIds, mobileNowShowingMovies]);
+
+  const normalizedMobileFeaturedIndex =
+    mobileFeaturedMovies.length > 0
+      ? mobileFeaturedIndex % mobileFeaturedMovies.length
+      : 0;
+  const activeMobileFeaturedMovie =
+    mobileFeaturedMovies.length > 0
+      ? mobileFeaturedMovies[normalizedMobileFeaturedIndex]
+      : null;
+
+  const goToMobileFeaturedSlide = useCallback(
+    (direction: -1 | 1) => {
+      if (mobileFeaturedMovies.length <= 1) {
+        return;
+      }
+
+      setMobileFeaturedIndex((currentIndex) => {
+        const nextIndex = currentIndex + direction;
+        return (
+          (nextIndex % mobileFeaturedMovies.length) +
+          mobileFeaturedMovies.length
+        ) % mobileFeaturedMovies.length;
+      });
+    },
+    [mobileFeaturedMovies.length],
+  );
+
+  const handleMobileFeaturedTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    mobileTouchStartXRef.current = event.touches[0]?.clientX ?? null;
+    mobileTouchDeltaXRef.current = 0;
+    setIsMobileFeaturedDragging(true);
+  };
+
+  const handleMobileFeaturedTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    if (mobileTouchStartXRef.current === null) {
+      return;
+    }
+
+    mobileTouchDeltaXRef.current =
+      event.touches[0].clientX - mobileTouchStartXRef.current;
+    setMobileFeaturedDragOffset(
+      Math.max(-0.95, Math.min(0.95, mobileTouchDeltaXRef.current / 230)),
+    );
+  };
+
+  const handleMobileFeaturedTouchEnd = () => {
+    const swipeDistance = mobileTouchDeltaXRef.current;
+    mobileTouchStartXRef.current = null;
+    mobileTouchDeltaXRef.current = 0;
+    setIsMobileFeaturedDragging(false);
+    setMobileFeaturedDragOffset(0);
+
+    if (Math.abs(swipeDistance) < 44) {
+      return;
+    }
+
+    goToMobileFeaturedSlide(swipeDistance > 0 ? -1 : 1);
+  };
+
+  const getMobileFeaturedOffsetForIndex = useCallback(
+    (index: number) => {
+      const totalMovies = mobileFeaturedMovies.length;
+
+      if (totalMovies === 0) {
+        return 0;
+      }
+
+      let offset = index - normalizedMobileFeaturedIndex;
+      const halfLength = totalMovies / 2;
+
+      if (offset > halfLength) {
+        offset -= totalMovies;
+      }
+
+      if (offset < -halfLength) {
+        offset += totalMovies;
+      }
+
+      return offset;
+    },
+    [mobileFeaturedMovies.length, normalizedMobileFeaturedIndex],
+  );
 
   // Save scroll position when user scrolls the Home page
   useEffect(() => {
@@ -523,8 +754,408 @@ export default function Home() {
 
   return (
     <div className="bg-slate-50 dark:bg-[#182437] text-slate-900 dark:text-white transition-colors duration-300">
+      <section className="bg-white px-4 pb-8 pt-4 text-slate-950 dark:bg-[#182437] dark:text-white md:hidden">
+        <div className="mb-6 rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-[0_16px_35px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#0F172A] dark:to-[#1E293B]">
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#E11D48] dark:text-[#FFD166]">
+            G2Cinema
+          </p>
+          <h1 className="mt-1 text-[30px] font-black leading-[1.05] tracking-normal">
+            Mua vé xem phim
+          </h1>
+          <p className="mt-2 text-sm font-semibold leading-5 text-slate-500 dark:text-white/60">
+            Chọn phim, xem lịch chiếu và đặt ghế tại rạp bạn yêu thích.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => navigate("/movies")}
+            className="mt-4 flex min-h-12 w-full cursor-pointer items-center justify-between rounded-2xl border border-[#FFD166]/45 bg-[#FFD166] px-4 text-sm font-black text-slate-950 shadow-lg shadow-[#FFD166]/20 transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166]"
+          >
+            <span className="inline-flex items-center gap-2">
+              <FiFilm size={18} aria-hidden="true" />
+              Xem trang phim
+            </span>
+            <FiChevronRight size={18} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="mb-6 rounded-[24px] border border-slate-200 bg-white p-3 shadow-[0_12px_30px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-[#0F172A]/70">
+          <label htmlFor="mobile-home-search" className="sr-only">
+            Tìm kiếm phim
+          </label>
+          <div className="relative">
+            <FiSearch
+              className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400 dark:text-white/45"
+              aria-hidden="true"
+            />
+            <input
+              id="mobile-home-search"
+              type="search"
+              value={mobileSearchTerm}
+              onChange={(event) => {
+                setMobileSearchTerm(event.target.value);
+                setMobileFeaturedIndex(0);
+              }}
+              placeholder={`Tìm theo ${mobileSearchFilterLabel.toLowerCase()}`}
+              className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-base font-semibold text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-[#FFD166] focus:bg-white focus:ring-2 focus:ring-[#FFD166]/35 dark:border-white/10 dark:bg-white/10 dark:text-white dark:placeholder:text-white/40 dark:focus:bg-white/[0.14]"
+            />
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {mobileSearchFilterOptions.map((option) => {
+              const isSelected = mobileSearchFilter === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setMobileSearchFilter(option.value);
+                    setMobileFeaturedIndex(0);
+                  }}
+                  className={`min-h-11 cursor-pointer rounded-2xl border px-2 text-xs font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] ${
+                    isSelected
+                      ? "border-[#FFD166] bg-[#FFD166] text-slate-950 shadow-sm"
+                      : "border-slate-200 bg-slate-50 text-slate-600 active:bg-slate-100 dark:border-white/10 dark:bg-white/10 dark:text-white/65 dark:active:bg-white/15"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {loadingMovies ? (
+          <div className="space-y-4">
+            <div className="h-8 w-40 animate-pulse rounded bg-slate-200 dark:bg-white/10" />
+            <div className="-mx-4 flex gap-5 overflow-hidden px-[18vw] pb-5">
+              {[0, 1, 2].map((item) => (
+                <div
+                  key={item}
+                  className="h-[330px] w-[64vw] min-w-[220px] max-w-[270px] shrink-0 animate-pulse rounded-3xl bg-slate-200 dark:bg-white/10"
+                />
+              ))}
+            </div>
+          </div>
+        ) : movieError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-8 text-center text-sm font-bold text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-100">
+            {movieError}
+          </div>
+        ) : mobileFeaturedMovies.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-bold text-slate-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/55">
+            Không có phim phù hợp với tìm kiếm hiện tại.
+          </div>
+        ) : (
+          <>
+            <div className="mb-4 flex items-end justify-between">
+              <h2 className="text-[26px] font-black leading-tight">
+                Phim nổi bật
+              </h2>
+              <span className="text-xs font-bold text-slate-400 dark:text-white/45">
+                Vuốt để xem
+              </span>
+            </div>
+
+            <div
+              className="-mx-4 overflow-hidden pb-2"
+              onTouchStart={handleMobileFeaturedTouchStart}
+              onTouchMove={handleMobileFeaturedTouchMove}
+              onTouchEnd={handleMobileFeaturedTouchEnd}
+            >
+              <div className="relative mx-auto h-[365px] max-w-[430px] touch-pan-y select-none">
+                {mobileFeaturedMovies.map((movie, index) => {
+                  const relativeOffset = getMobileFeaturedOffsetForIndex(index);
+                  const visualOffset =
+                    relativeOffset + mobileFeaturedDragOffset;
+                  const distance = Math.abs(visualOffset);
+                  const isActive = index === normalizedMobileFeaturedIndex;
+                  const isVisible = distance <= 1.55;
+                  const scale = Math.max(0.68, 1 - Math.min(distance, 1.35) * 0.18);
+                  const opacity = isVisible
+                    ? Math.max(0.35, 1 - Math.min(distance, 1.6) * 0.27)
+                    : 0;
+                  const translatePercent = visualOffset * 78;
+
+                  return (
+                    <button
+                      key={`coverflow-${movie.movieId}`}
+                      type="button"
+                      onClick={() => {
+                        if (isActive) {
+                          navigate(`/movie/${movie.movieId}/showtimes`);
+                          return;
+                        }
+
+                        setMobileFeaturedIndex(index);
+                      }}
+                      className="absolute left-1/2 top-0 w-[72vw] max-w-[280px] cursor-pointer overflow-hidden rounded-[26px] bg-slate-900 text-left shadow-[0_18px_42px_rgba(15,23,42,0.24)] transition-[transform,opacity,filter] duration-500 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] motion-reduce:transition-none"
+                      style={{
+                        filter: isActive
+                          ? "none"
+                          : "saturate(0.84) brightness(0.9)",
+                        opacity,
+                        pointerEvents: isVisible ? "auto" : "none",
+                        transform: `translateX(calc(-50% + ${translatePercent}%)) scale(${scale})`,
+                        transition: isMobileFeaturedDragging
+                          ? "none"
+                          : undefined,
+                        zIndex: Math.max(1, 30 - Math.round(distance * 10)),
+                      }}
+                      aria-label={
+                        isActive
+                          ? `Xem thông tin ${movie.title}`
+                          : `Chuyển tới ${movie.title}`
+                      }
+                    >
+                      {movie.posterUrl ? (
+                        <img
+                          src={movie.posterUrl}
+                          alt={movie.title}
+                          className="aspect-[3/4] w-full object-cover"
+                          loading="lazy"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="flex aspect-[3/4] w-full items-center justify-center px-5 text-center text-sm font-black uppercase tracking-wide text-white/45">
+                          Chưa có poster
+                        </div>
+                      )}
+
+                      <span className="absolute left-3 top-3 rounded-full bg-[#FFD166] px-3 py-1.5 text-xs font-black text-slate-950 shadow-lg">
+                        {movie.ageRating}
+                      </span>
+                      {movie.highlight ? (
+                        <span className="absolute right-3 top-3 rounded-full bg-[#E11D48] px-3 py-1.5 text-[11px] font-black text-white shadow-lg">
+                          {movie.highlight}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeMobileFeaturedMovie ? (
+                <div className="mx-auto -mt-1 max-w-[320px] text-center">
+                  <p className="flex items-center justify-center gap-1.5 text-sm font-bold text-slate-500 dark:text-white/60">
+                    <FaStar className="text-[#F97316]" size={14} aria-hidden="true" />
+                    {formatRatingText(activeMobileFeaturedMovie)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        `/movie/${activeMobileFeaturedMovie.movieId}/showtimes`,
+                      )
+                    }
+                    className="mt-1 line-clamp-2 min-h-[58px] w-full cursor-pointer text-center text-[24px] font-black leading-tight transition hover:text-[#E11D48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] dark:hover:text-[#FFD166]"
+                  >
+                    {activeMobileFeaturedMovie.title}
+                  </button>
+                  <p className="line-clamp-1 text-base font-semibold text-slate-500 dark:text-white/55">
+                    {activeMobileFeaturedMovie.genre}
+                  </p>
+                </div>
+              ) : null}
+
+              {mobileFeaturedMovies.length > 1 ? (
+                <div className="mt-4 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => goToMobileFeaturedSlide(-1)}
+                    aria-label="Phim nổi bật trước"
+                    className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] dark:border-white/10 dark:bg-white/10 dark:text-white"
+                  >
+                    <FiChevronLeft size={20} aria-hidden="true" />
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    {mobileFeaturedMovies.map((movie, index) => (
+                      <button
+                        key={`featured-dot-${movie.movieId}`}
+                        type="button"
+                        aria-label={`Chọn phim nổi bật ${index + 1}`}
+                        aria-current={normalizedMobileFeaturedIndex === index}
+                        onClick={() => setMobileFeaturedIndex(index)}
+                        className={`h-2 rounded-full transition-all ${
+                          normalizedMobileFeaturedIndex === index
+                            ? "w-6 bg-[#E11D48] dark:bg-[#FFD166]"
+                            : "w-2 bg-slate-300 dark:bg-white/25"
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => goToMobileFeaturedSlide(1)}
+                    aria-label="Phim nổi bật sau"
+                    className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] dark:border-white/10 dark:bg-white/10 dark:text-white"
+                  >
+                    <FiChevronRight size={20} aria-hidden="true" />
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <h2 className="text-[26px] font-black leading-tight">
+                Phim hay đang chiếu
+              </h2>
+              <button
+                type="button"
+                onClick={() => navigate("/movies")}
+                className="flex min-h-11 items-center gap-1 text-base font-black text-slate-700 transition active:scale-95 dark:text-white"
+              >
+                Xem tất cả
+                <FiChevronRight size={20} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {mobileNowShowingMovies.map((movie) => {
+                const canBuyTicket =
+                  movie.movieId && bookableMovieIds.has(String(movie.movieId));
+
+                return (
+                  <article
+                    key={`mobile-now-${movie.movieId}`}
+                    className="w-[42vw] min-w-[148px] max-w-[185px] shrink-0 snap-start"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/movie/${movie.movieId}/showtimes`)}
+                      className="relative block w-full overflow-hidden rounded-2xl bg-slate-900 text-left shadow-md shadow-slate-900/15 transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166]"
+                      aria-label={`Xem thông tin ${movie.title}`}
+                    >
+                      {movie.posterUrl ? (
+                        <img
+                          src={movie.posterUrl}
+                          alt={movie.title}
+                          className="aspect-[2/3] w-full object-cover"
+                          loading="lazy"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="flex aspect-[2/3] w-full items-center justify-center px-4 text-center text-xs font-black uppercase tracking-wide text-white/45">
+                          Chưa có poster
+                        </div>
+                      )}
+
+                      <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-black text-slate-600">
+                        {movie.ageRating}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/movie/${movie.movieId}/showtimes`)}
+                      className="mt-2 line-clamp-2 min-h-[40px] w-full text-left text-sm font-black leading-5 transition hover:text-[#E11D48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] dark:hover:text-[#FFD166]"
+                    >
+                      {movie.title}
+                    </button>
+                    <p className="line-clamp-1 text-xs font-semibold text-slate-500 dark:text-white/55">
+                      {movie.genre}
+                    </p>
+
+                    {canBuyTicket ? (
+                      <button
+                        type="button"
+                        onClick={() => handleBuyTicket(movie)}
+                        className="mt-3 min-h-10 w-full rounded-xl bg-[#FFD166] text-xs font-black uppercase text-slate-950 shadow-sm transition active:scale-95"
+                      >
+                        Mua vé
+                      </button>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <section className="mt-9 rounded-[28px] border border-slate-200 bg-slate-50 p-4 shadow-[0_16px_35px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#0F172A]/70">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#E11D48] dark:text-[#FFD166]">
+                Cụm rạp
+              </p>
+              <h2 className="mt-1 text-2xl font-black leading-tight">
+                Rạp đang hoạt động
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/cinemas")}
+              className="min-h-11 shrink-0 rounded-full border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 shadow-sm transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] dark:border-white/10 dark:bg-white/10 dark:text-white"
+            >
+              Tất cả
+            </button>
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded-3xl bg-slate-900">
+            <img
+              src={cinemaThumbnail}
+              alt="Không gian rạp G2Cinema"
+              className="aspect-[16/9] w-full object-cover"
+              loading="lazy"
+              draggable={false}
+            />
+          </div>
+
+          {mobileCinemaItems.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm font-bold text-slate-500 dark:border-white/15 dark:text-white/55">
+              Chưa có dữ liệu rạp đang hoạt động.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {mobileCinemaItems.map((cinema) => {
+                const isSelected = cinema.cinemaId === selectedCinema?.cinemaId;
+
+                return (
+                  <button
+                    key={cinema.cinemaId}
+                    type="button"
+                    onClick={() => handleSelectHomeCinema(cinema)}
+                    className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] ${
+                      isSelected
+                        ? "border-[#FFD166] bg-[#FFD166]/20 dark:bg-[#FFD166]/12"
+                        : "border-slate-200 bg-white active:bg-slate-100 dark:border-white/10 dark:bg-white/[0.06] dark:active:bg-white/10"
+                    }`}
+                  >
+                    <span className="flex items-start gap-3">
+                      <span
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
+                          isSelected
+                            ? "bg-[#FFD166] text-slate-950"
+                            : "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-white/60"
+                        }`}
+                      >
+                        <FiMapPin size={18} aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-base font-black">
+                          {cinema.cinemaName}
+                        </span>
+                        <span className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-500 dark:text-white/55">
+                          {getCinemaAddress(cinema)}
+                        </span>
+                        <span className="mt-2 flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-white/50">
+                          <FiPhone size={13} aria-hidden="true" />
+                          {cinema.phoneNumber || "1900 1234"}
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </section>
+
       <section
-        className="relative overflow-hidden bg-black"
+        className="relative hidden overflow-hidden bg-black md:block"
         aria-label="Movie banners"
       >
         <div className="relative h-[220px] sm:h-[330px] lg:h-[520px] xl:h-[620px]">
@@ -620,7 +1251,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="movies-section" className="bg-slate-50 dark:bg-[#182437] px-4 pb-12 pt-8 sm:px-6 sm:pb-16 sm:pt-10 transition-colors duration-300">
+      <section id="movies-section" className="hidden bg-slate-50 px-4 pb-12 pt-8 transition-colors duration-300 dark:bg-[#182437] sm:px-6 sm:pb-16 sm:pt-10 md:block">
         <div className="mx-auto max-w-[1360px] w-full">
           <div className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-base font-extrabold uppercase text-slate-800 dark:text-white sm:text-xl">
             <button

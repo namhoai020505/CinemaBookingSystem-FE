@@ -16,7 +16,7 @@ import {
   FaUserCircle,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import fallbackPoster from "../../assets/movie1.jpg";
+import fallbackPoster from "../../assets/thumbnail-1-144816-050424-68.jpeg";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import api from "../../lib/api";
 import { getCurrentUserProfile } from "../../lib/auth";

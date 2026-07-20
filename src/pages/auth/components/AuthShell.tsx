@@ -106,7 +106,7 @@ export const AuthSubmitButton = ({
  */
 export const GoogleLoginButton = ({ onSuccess, isLoading = false }: GoogleLoginButtonProps) => {
   return (
-    <div className={`mt-2 flex justify-center w-full ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
+    <div className={`mt-2 flex w-full justify-center overflow-hidden [&>div]:!w-full [&_iframe]:!w-full ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
       <GoogleLogin
         onSuccess={(credentialResponse) => {
           if (credentialResponse.credential) {
@@ -120,7 +120,7 @@ export const GoogleLoginButton = ({ onSuccess, isLoading = false }: GoogleLoginB
         theme="outline"
         size="large"
         shape="rectangular"
-        width="398"
+        width="100%"
       />
     </div>
   );

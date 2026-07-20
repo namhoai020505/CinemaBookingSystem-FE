@@ -60,6 +60,30 @@ const searchFilterOptions: Array<{ value: SearchFilter; label: string }> = [
   { value: "title", label: "Tên phim" },
 ];
 
+const popularGenreNames = [
+  "Hành động",
+  "Phiêu lưu",
+  "Khoa học viễn tưởng",
+  "Siêu anh hùng",
+  "Kinh dị",
+  "Hài",
+  "Tình cảm",
+  "Lãng mạn",
+  "Tâm lý",
+  "Gia đình",
+  "Hoạt hình",
+  "Anime",
+  "Giả tưởng",
+  "Chính kịch",
+  "Bí ẩn",
+  "Giật gân",
+  "Tội phạm",
+  "Âm nhạc",
+  "Lịch sử",
+  "Chiến tranh",
+  "Võ thuật",
+];
+
 const BUY_TICKET_VISIBILITY_REFRESH_MS = 30_000;
 
 const normalizeText = (value: string) =>
@@ -138,6 +162,9 @@ const getMovieGenreNames = (genreText: string) =>
 
 const buildGenreOptions = (genres: GenreResponse[], movies: MovieCard[]) => {
   const genreNames = new Set<string>();
+  const popularGenreOrder = new Map(
+    popularGenreNames.map((genre, index) => [normalizeText(genre), index]),
+  );
 
   genres.forEach((genre) => {
     if (genre.name?.trim()) {
@@ -149,9 +176,14 @@ const buildGenreOptions = (genres: GenreResponse[], movies: MovieCard[]) => {
     getMovieGenreNames(movie.genre).forEach((genre) => genreNames.add(genre));
   });
 
-  return Array.from(genreNames).sort((left, right) =>
-    left.localeCompare(right, "vi"),
-  );
+  return Array.from(genreNames)
+    .filter((genre) => popularGenreOrder.has(normalizeText(genre)))
+    .sort((left, right) => {
+      const leftOrder = popularGenreOrder.get(normalizeText(left)) ?? 999;
+      const rightOrder = popularGenreOrder.get(normalizeText(right)) ?? 999;
+
+      return leftOrder - rightOrder || left.localeCompare(right, "vi");
+    });
 };
 
 export default function Movies() {
@@ -251,6 +283,11 @@ export default function Movies() {
     [genres, movies],
   );
 
+  const visibleSelectedGenreNames = useMemo(
+    () => selectedGenreNames.filter((genre) => genreOptions.includes(genre)),
+    [genreOptions, selectedGenreNames],
+  );
+
   const bookableMovieIds = useMemo(() => {
     const movieIds = new Set<string>();
 
@@ -269,7 +306,7 @@ export default function Movies() {
 
   const filteredMovies = useMemo(() => {
     const normalizedSearch = normalizeText(searchTerm);
-    const selectedGenreKeys = selectedGenreNames.map(normalizeText);
+    const selectedGenreKeys = visibleSelectedGenreNames.map(normalizeText);
 
     return movies.filter((movie) => {
       if (selectedSearchFilter === "genre") {
@@ -294,7 +331,7 @@ export default function Movies() {
 
       return normalizeText(searchableValue).includes(normalizedSearch);
     });
-  }, [movies, searchTerm, selectedGenreNames, selectedSearchFilter]);
+  }, [movies, searchTerm, selectedSearchFilter, visibleSelectedGenreNames]);
 
   const selectedSearchFilterLabel =
     searchFilterOptions.find((option) => option.value === selectedSearchFilter)
@@ -435,11 +472,11 @@ export default function Movies() {
                     Chọn thể loại
                   </p>
                   <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-white/55">
-                    Tick một hoặc nhiều thể loại để lọc danh sách phim.
+                    Chỉ hiển thị nhóm phổ biến để khung lọc gọn và dễ chọn hơn.
                   </p>
                 </div>
 
-                {selectedGenreNames.length > 0 ? (
+                {visibleSelectedGenreNames.length > 0 ? (
                   <button
                     type="button"
                     onClick={() => setSelectedGenreNames([])}

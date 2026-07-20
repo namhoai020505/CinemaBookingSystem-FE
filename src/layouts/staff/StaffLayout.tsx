@@ -1,12 +1,23 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { FaBarcode, FaBars, FaDoorOpen, FaMoon, FaPowerOff, FaShieldAlt, FaSun } from 'react-icons/fa';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { FaBarcode, FaBars, FaCashRegister, FaDoorOpen, FaMoon, FaPowerOff, FaShieldAlt, FaSun } from 'react-icons/fa';
 import { getCurrentUserProfile } from '../../lib/auth';
 import { logout } from '../../services/authService';
 
 export type StaffThemeMode = 'dark' | 'light';
 
 const THEME_STORAGE_KEY = 'g2c-staff-theme';
+
+const staffRouteMeta: Record<string, { title: string; subtitle: string }> = {
+  '/staff/ticket-scanner': {
+    title: 'Ticket Scanner',
+    subtitle: 'Scan QR tickets or enter ticket codes manually.',
+  },
+  '/staff/fb-counter': {
+    title: 'Counter F&B',
+    subtitle: 'Sell popcorn and drinks directly at the cinema counter.',
+  },
+};
 
 const getInitialTheme = (): StaffThemeMode => {
   if (typeof window === 'undefined') {
@@ -18,10 +29,12 @@ const getInitialTheme = (): StaffThemeMode => {
 
 const StaffLayout = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const profile = getCurrentUserProfile();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [themeMode, setThemeMode] = useState<StaffThemeMode>(getInitialTheme);
   const isLightMode = themeMode === 'light';
+  const currentRouteMeta = staffRouteMeta[location.pathname] ?? staffRouteMeta['/staff/ticket-scanner'];
 
   useEffect(() => {
     document.documentElement.dataset.staffTheme = themeMode;
@@ -91,6 +104,25 @@ const StaffLayout = () => {
             </span>
             {!sidebarCollapsed && <span className="block truncate">Ticket Scanner</span>}
           </NavLink>
+
+          <NavLink
+            to="/staff/fb-counter"
+            title={sidebarCollapsed ? 'Counter F&B' : 'Sell F&B at the counter'}
+            className={({ isActive }) =>
+              [
+                'mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-bold no-underline transition-all duration-150',
+                sidebarCollapsed ? 'justify-center' : 'justify-start',
+                isActive
+                  ? 'bg-gradient-to-r from-emerald-500/25 to-cyan-500/10 text-white shadow-[inset_3px_0_0_#34d399]'
+                  : 'text-slate-400 hover:bg-white/10 hover:text-white',
+              ].join(' ')
+            }
+          >
+            <span className="inline-flex shrink-0 text-base">
+              <FaCashRegister />
+            </span>
+            {!sidebarCollapsed && <span className="block truncate">Bán F&B</span>}
+          </NavLink>
         </nav>
 
         <div className="shrink-0 border-t border-white/10 p-3">
@@ -134,9 +166,9 @@ const StaffLayout = () => {
           </button>
 
           <div className="min-w-0">
-            <strong className="block truncate text-base font-black">Ticket Scanner</strong>
+            <strong className="block truncate text-base font-black">{currentRouteMeta.title}</strong>
             <span className={`mt-0.5 hidden truncate text-xs font-semibold sm:block ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-              Scan QR tickets or enter ticket codes manually.
+              {currentRouteMeta.subtitle}
             </span>
           </div>
 
