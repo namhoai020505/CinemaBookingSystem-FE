@@ -542,7 +542,7 @@ export default function SeatSelection() {
 
     const token = getAccessToken();
     if (!token) {
-      setSeatMapError("Vui long dang nhap lai de tai so do ghe.");
+      setSeatMapError("Vui lòng đăng nhập lại để tải sơ đồ ghế.");
       setSeatMap(null);
       setLoading(false);
       return;
@@ -644,7 +644,7 @@ export default function SeatSelection() {
       });
     } catch (error) {
       if (getHttpStatus(error) === 401) {
-        setSeatMapError("Phien dang nhap khong con hop le. Vui long dang nhap lai roi thu lai.");
+        setSeatMapError("Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại rồi thử lại.");
         setSeatMap(null);
         return;
       }

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { toast } from "react-toastify";
 import { bannerService } from "../../services/bannerService";
 import type { BannerResponse } from "../../services/bannerService";
@@ -18,6 +19,9 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
 };
 
 export default function ManageBanner() {
+  const context = useOutletContext<{ isLightMode?: boolean }>() || {};
+  const isLightMode = context.isLightMode ?? false;
+
   const [banners, setBanners] = useState<BannerResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -164,12 +168,16 @@ export default function ManageBanner() {
   };
 
   return (
-    <div className="p-6 bg-[#0B0F19] min-h-screen text-white">
+    <div className={`p-6 min-h-screen transition-colors duration-300 ${
+      isLightMode ? 'bg-[#F6F8FB] text-slate-950' : 'bg-[#0B0F19] text-white'
+    }`}>
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-wide">Quản Lý Banner Quảng Cáo & Sự Kiện</h1>
-          <p className="text-xs text-slate-400 mt-1">Thêm, sửa, xóa các banner rạp, banner bắp nước, sự kiện hiển thị trên Carousel trang chủ.</p>
+          <h1 className={`text-2xl font-bold tracking-wide ${
+            isLightMode ? 'text-slate-950' : 'text-white'
+          }`}>Quản Lý Banner Quảng Cáo & Sự Kiện</h1>
+          <p className={`text-xs mt-1 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Thêm, sửa, xóa các banner rạp, banner bắp nước, sự kiện hiển thị trên Carousel trang chủ.</p>
         </div>
         <button
           onClick={handleOpenCreateModal}
@@ -185,10 +193,14 @@ export default function ManageBanner() {
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-500"></div>
         </div>
       ) : (
-        <div className="bg-[#111827] border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className={`border rounded-2xl overflow-hidden shadow-xl transition ${
+          isLightMode ? 'bg-white border-slate-200 shadow-slate-200/70' : 'bg-[#111827] border-gray-800 shadow-black/20'
+        }`}>
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-gray-800 bg-[#1F2937]/50 text-xs font-semibold uppercase text-slate-400">
+              <tr className={`border-b text-xs font-semibold uppercase transition ${
+                isLightMode ? 'border-slate-200 bg-slate-50 text-slate-500' : 'border-gray-800 bg-[#1F2937]/50 text-slate-400'
+              }`}>
                 <th className="py-4 px-6">Ảnh Banner</th>
                 <th className="py-4 px-6">Tiêu đề</th>
                 <th className="py-4 px-6">Loại Banner</th>
@@ -197,15 +209,21 @@ export default function ManageBanner() {
                 <th className="py-4 px-6 text-right">Thao tác</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800/65 text-sm text-slate-300">
+            <tbody className={`divide-y text-sm transition ${
+              isLightMode ? 'divide-slate-200 text-slate-700' : 'divide-gray-800/65 text-slate-300'
+            }`}>
               {banners.map((b) => (
-                <tr key={b.bannerId} className="hover:bg-[#1F2937]/25 transition">
+                <tr key={b.bannerId} className={`transition ${
+                  isLightMode ? 'hover:bg-slate-50/85' : 'hover:bg-[#1F2937]/25'
+                }`}>
                   <td className="py-3 px-6">
-                    <div className="w-28 h-16 rounded-xl overflow-hidden border border-gray-800 bg-[#0F172A]">
+                    <div className={`w-28 h-16 rounded-xl overflow-hidden border transition ${
+                      isLightMode ? 'border-slate-200 bg-slate-100' : 'border-gray-800 bg-[#0F172A]'
+                    }`}>
                       <img src={getMediaUrl(b.imageUrl)} alt={b.title} className="w-full h-full object-cover" />
                     </div>
                   </td>
-                  <td className="py-3 px-6 font-semibold text-white">
+                  <td className={`py-3 px-6 font-semibold ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                     <div>{b.title}</div>
                     {b.linkUrl && (
                       <a href={b.linkUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline block mt-1 max-w-xs truncate">
@@ -238,13 +256,21 @@ export default function ManageBanner() {
                     <div className="flex justify-end gap-3">
                       <button
                         onClick={() => handleOpenEditModal(b)}
-                        className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 rounded-lg text-xs font-semibold transition border border-blue-500/15"
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
+                          isLightMode
+                            ? 'bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200'
+                            : 'bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border-blue-500/15'
+                        }`}
                       >
                         Sửa
                       </button>
                       <button
                         onClick={() => handleDeleteBanner(b.bannerId)}
-                        className="px-3 py-1.5 bg-red-600/10 hover:bg-red-600/20 text-red-400 rounded-lg text-xs font-semibold transition border border-red-500/15"
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
+                          isLightMode
+                            ? 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
+                            : 'bg-red-600/10 hover:bg-red-600/20 text-red-400 border-red-500/15'
+                        }`}
                       >
                         Xóa
                       </button>
@@ -267,15 +293,19 @@ export default function ManageBanner() {
       {/* Modal Form */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-[#111827] border border-gray-800 rounded-2xl shadow-2xl p-6 relative">
-            <h2 className="text-xl font-bold text-white mb-4">
+          <div className={`w-full max-w-lg border rounded-2xl shadow-2xl p-6 relative transition ${
+            isLightMode ? 'bg-white border-slate-200' : 'bg-[#111827] border-gray-800'
+          }`}>
+            <h2 className={`text-xl font-bold mb-4 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
               {editingBannerId ? "Chỉnh Sửa Banner" : "Thêm Banner Mới"}
             </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Tiêu đề */}
               <div>
-                <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                <label className={`block text-xs font-semibold uppercase mb-1 ${
+                  isLightMode ? 'text-slate-500' : 'text-gray-400'
+                }`}>
                   Tiêu đề Banner <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -284,7 +314,11 @@ export default function ManageBanner() {
                   value={formData.title}
                   onChange={handleInputChange}
                   placeholder="Ví dụ: Siêu Combo Bắp Nước Ưu Đãi 30%"
-                  className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                    isLightMode
+                      ? 'bg-slate-50 border-slate-200 text-slate-900'
+                      : 'bg-[#0F172A] border-gray-800 text-white'
+                  }`}
                   required
                 />
               </div>
@@ -292,14 +326,20 @@ export default function ManageBanner() {
               {/* Loại Banner & Display Order */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                  <label className={`block text-xs font-semibold uppercase mb-1 ${
+                    isLightMode ? 'text-slate-500' : 'text-gray-400'
+                  }`}>
                     Loại Banner
                   </label>
                   <select
                     name="bannerType"
                     value={formData.bannerType}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                      isLightMode
+                        ? 'bg-slate-50 border-slate-200 text-slate-900'
+                        : 'bg-[#0F172A] border-gray-800 text-white'
+                    }`}
                   >
                     <option value="PROMOTION">🎟️ Khuyến mãi / Sự kiện</option>
                     <option value="FOOD_BEVERAGE">🍿 Quảng cáo Bắp nước</option>
@@ -309,7 +349,9 @@ export default function ManageBanner() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                  <label className={`block text-xs font-semibold uppercase mb-1 ${
+                    isLightMode ? 'text-slate-500' : 'text-gray-400'
+                  }`}>
                     Thứ tự hiển thị
                   </label>
                   <input
@@ -317,14 +359,20 @@ export default function ManageBanner() {
                     name="displayOrder"
                     value={formData.displayOrder}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                      isLightMode
+                        ? 'bg-slate-50 border-slate-200 text-slate-900'
+                        : 'bg-[#0F172A] border-gray-800 text-white'
+                    }`}
                   />
                 </div>
               </div>
 
               {/* Link liên kết */}
               <div>
-                <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                <label className={`block text-xs font-semibold uppercase mb-1 ${
+                  isLightMode ? 'text-slate-500' : 'text-gray-400'
+                }`}>
                   Link chuyển hướng khi click (Tùy chọn)
                 </label>
                 <input
@@ -333,13 +381,19 @@ export default function ManageBanner() {
                   value={formData.linkUrl}
                   onChange={handleInputChange}
                   placeholder="Ví dụ: /food-beverage hoặc link sự kiện..."
-                  className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                    isLightMode
+                      ? 'bg-slate-50 border-slate-200 text-slate-900'
+                      : 'bg-[#0F172A] border-gray-800 text-white'
+                  }`}
                 />
               </div>
 
               {/* URL hình ảnh ngoài */}
               <div>
-                <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                <label className={`block text-xs font-semibold uppercase mb-1 ${
+                  isLightMode ? 'text-slate-500' : 'text-gray-400'
+                }`}>
                   URL ảnh banner ngoài (Tùy chọn)
                 </label>
                 <input
@@ -348,27 +402,39 @@ export default function ManageBanner() {
                   value={formData.imageUrl}
                   onChange={handleInputChange}
                   placeholder="https://example.com/banner.jpg (hoặc tải file ở dưới)"
-                  className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-4 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                    isLightMode
+                      ? 'bg-slate-50 border-slate-200 text-slate-900'
+                      : 'bg-[#0F172A] border-gray-800 text-white'
+                  }`}
                 />
               </div>
 
               {/* Upload file banner */}
               <div>
-                <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                <label className={`block text-xs font-semibold uppercase mb-1 ${
+                  isLightMode ? 'text-slate-500' : 'text-gray-400'
+                }`}>
                   Tải lên File ảnh (Khuyên dùng tỉ lệ ngang rộng 2:1 hoặc 16:9, ví dụ: 1920x620)
                 </label>
                 <div className="flex gap-4 items-center mt-1">
                   {bannerPreview ? (
-                    <div className="relative w-28 h-16 rounded-xl overflow-hidden border border-gray-800 shadow bg-[#0F172A]">
+                    <div className={`relative w-28 h-16 rounded-xl overflow-hidden border shadow transition-colors ${
+                      isLightMode ? 'border-slate-200 bg-slate-50' : 'border-gray-800 bg-[#0F172A]'
+                    }`}>
                       <img src={bannerPreview} alt="Preview" className="w-full h-full object-cover" />
                     </div>
                   ) : (
-                    <div className="w-28 h-16 rounded-xl bg-[#0F172A] border border-dashed border-gray-800 flex items-center justify-center text-gray-500 text-xs">
+                    <div className={`w-28 h-16 rounded-xl border border-dashed flex items-center justify-center text-xs transition-colors ${
+                      isLightMode ? 'bg-slate-50 border-slate-200 text-slate-500' : 'bg-[#0F172A] border-gray-800 text-gray-500'
+                    }`}>
                       <span>Chưa có ảnh</span>
                     </div>
                   )}
 
-                  <div className="flex-1 border border-dashed border-gray-800 hover:border-indigo-500 rounded-xl p-3 text-center transition cursor-pointer relative bg-[#0F172A]">
+                  <div className={`flex-1 border border-dashed hover:border-indigo-500 rounded-xl p-3 text-center transition cursor-pointer relative ${
+                    isLightMode ? 'border-slate-200 bg-slate-50' : 'border-gray-800 bg-[#0F172A]'
+                  }`}>
                     <input
                       type="file"
                       accept="image/*"
@@ -390,17 +456,25 @@ export default function ManageBanner() {
                   onChange={handleCheckboxChange}
                   className="w-4 h-4 rounded text-blue-600 bg-gray-900 border-gray-800 focus:ring-blue-500"
                 />
-                <label htmlFor="isActive" className="text-xs font-semibold uppercase text-gray-300 cursor-pointer">
+                <label htmlFor="isActive" className={`text-xs font-semibold uppercase cursor-pointer ${
+                  isLightMode ? 'text-slate-700' : 'text-gray-300'
+                }`}>
                   Kích hoạt hiển thị ngay lập tức
                 </label>
               </div>
 
               {/* Actions Button */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
+              <div className={`flex justify-end gap-3 pt-4 border-t ${
+                isLightMode ? 'border-slate-200' : 'border-gray-800'
+              }`}>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-slate-300 rounded-xl text-sm font-semibold transition"
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+                    isLightMode
+                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      : 'bg-gray-800 hover:bg-gray-700 text-slate-300'
+                  }`}
                 >
                   Hủy
                 </button>

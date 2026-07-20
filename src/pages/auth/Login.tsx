@@ -23,7 +23,7 @@ export default function Login() {
         <div className="w-full max-w-md">
           <AuthTabs authMode={controller.authMode} onSwitchMode={controller.switchMode} />
 
-          <div className="rounded-b-lg border-x border-b border-gray-700 bg-transparent p-6">
+          <div className="rounded-b-lg border-x border-b border-gray-700 bg-[#0F172A] p-6">
             <form onSubmit={controller.handleSubmit} className="flex flex-col gap-4">
               <AuthFeedback
                 successMessage={controller.successMessage}

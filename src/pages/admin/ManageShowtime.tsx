@@ -564,45 +564,71 @@ export default function ManageShowtime() {
         await showtimeService.deleteShowtime(id);
       }
 
-      // 2. Thực hiện tạo mới và cập nhật
-      let createdCount = 0;
-      let updatedCount = 0;
+      // 2. Thu thập danh sách các slot cần tạo mới và các slot cần cập nhật
+      const newSlotsToCreate: ShowtimeSlot[] = [];
+      const updatedSlots: { slot: ShowtimeSlot; original: ShowtimeResponse }[] = [];
 
-      // Duyệt qua tất cả các slot trong schedule hiện tại
       for (const roomId in schedule) {
         const slots = schedule[roomId] || [];
         for (const slot of slots) {
           if (slot.id.startsWith("temp_")) {
-            // Tạo mới
-            await showtimeService.createShowtime({
-              movieId: slot.movieId,
-              roomId: slot.roomId,
-              startTime: slot.startTime,
-              basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
-              status: slot.status,
-            });
-            createdCount++;
+            newSlotsToCreate.push(slot);
           } else {
-            // Kiểm tra xem có thay đổi so với dữ liệu gốc không
             const original = allShowtimes.find((st) => st.showtimeId === slot.id);
             if (original) {
               const hasRoomChanged = original.roomId !== slot.roomId;
               const hasTimeChanged = original.startTime !== slot.startTime;
-
               if (hasRoomChanged || hasTimeChanged) {
-                // Có thay đổi thực sự -> Cập nhật
-                await showtimeService.updateShowtime(slot.id, {
-                  movieId: slot.movieId,
-                  roomId: slot.roomId,
-                  startTime: slot.startTime,
-                  basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
-                  status: slot.status,
-                });
-                updatedCount++;
+                updatedSlots.push({ slot, original });
               }
             }
           }
         }
+      }
+
+      // Sắp xếp các slot cập nhật theo thứ tự thông minh (Topological Order):
+      // - Nếu tăng giờ (newStartTime > oldStartTime), cần cập nhật các suất MUỘN NHẤT trước (descending order).
+      // - Nếu lùi giờ (newStartTime < oldStartTime), cần cập nhật các suất SỚM NHẤT trước (ascending order).
+      // Việc này tránh xung đột đè giờ với suất liền kề chưa cập nhật trong Database.
+      const forwardMoved = updatedSlots.filter(
+        (item) => new Date(item.slot.startTime).getTime() > new Date(item.original.startTime).getTime()
+      ).sort(
+        (a, b) => new Date(b.slot.startTime).getTime() - new Date(a.slot.startTime).getTime()
+      );
+
+      const backwardMoved = updatedSlots.filter(
+        (item) => new Date(item.slot.startTime).getTime() <= new Date(item.original.startTime).getTime()
+      ).sort(
+        (a, b) => new Date(a.slot.startTime).getTime() - new Date(b.slot.startTime).getTime()
+      );
+
+      const sortedUpdateList = [...forwardMoved, ...backwardMoved];
+
+      let createdCount = 0;
+      let updatedCount = 0;
+
+      // Thực hiện cập nhật các suất chiếu đã có theo thứ tự tối ưu
+      for (const { slot } of sortedUpdateList) {
+        await showtimeService.updateShowtime(slot.id, {
+          movieId: slot.movieId,
+          roomId: slot.roomId,
+          startTime: slot.startTime,
+          basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
+          status: slot.status,
+        });
+        updatedCount++;
+      }
+
+      // Thực hiện tạo mới các suất chiếu temp
+      for (const slot of newSlotsToCreate) {
+        await showtimeService.createShowtime({
+          movieId: slot.movieId,
+          roomId: slot.roomId,
+          startTime: slot.startTime,
+          basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
+          status: slot.status,
+        });
+        createdCount++;
       }
 
       toast.success(

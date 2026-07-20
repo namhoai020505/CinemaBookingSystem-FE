@@ -76,7 +76,7 @@ export const reviewService = {
       )) as unknown as ApiResponse<ReviewItem[]>;
       return response;
     } catch (error) {
-      return toFailedResponse<ReviewItem[]>(error, 'Khong tai duoc danh sach danh gia phim.');
+      return toFailedResponse<ReviewItem[]>(error, 'Không tải được danh sách đánh giá phim.');
     }
   },
 
@@ -88,7 +88,7 @@ export const reviewService = {
       )) as unknown as ApiResponse<ReviewItem>;
       return response;
     } catch (error) {
-      return toFailedResponse<ReviewItem>(error, 'Khong gui duoc danh gia.');
+      return toFailedResponse<ReviewItem>(error, 'Không gửi được đánh giá.');
     }
   },
 
@@ -99,7 +99,7 @@ export const reviewService = {
       )) as unknown as ApiResponse<ReviewQueueItem[]>;
       return response;
     } catch (error) {
-      return toFailedResponse<ReviewQueueItem[]>(error, 'Khong tai duoc hang doi kiem duyet.');
+      return toFailedResponse<ReviewQueueItem[]>(error, 'Không tải được hàng đợi kiểm duyệt.');
     }
   },
 
@@ -110,7 +110,7 @@ export const reviewService = {
       )) as unknown as ApiResponse<boolean>;
       return response;
     } catch (error) {
-      return toFailedResponse<boolean>(error, 'Khong duyet duoc danh gia.');
+      return toFailedResponse<boolean>(error, 'Không duyệt được đánh giá.');
     }
   },
 
@@ -121,7 +121,7 @@ export const reviewService = {
       )) as unknown as ApiResponse<boolean>;
       return response;
     } catch (error) {
-      return toFailedResponse<boolean>(error, 'Khong tu choi duoc danh gia.');
+      return toFailedResponse<boolean>(error, 'Không từ chối được đánh giá.');
     }
   },
 };
