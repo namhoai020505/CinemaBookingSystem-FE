@@ -649,7 +649,7 @@ export default function ManageShowtime() {
         const beMessage = axiosErr.response?.data?.message;
         const beCode = axiosErr.response?.data?.errorCode ?? "";
         const mapped = ERROR_MESSAGES[beCode];
-        errorMsg = mapped ?? beMessage ?? errorMsg;
+        errorMsg = beMessage ?? mapped ?? errorMsg;
       }
       toast.error(errorMsg, { autoClose: 7000 });
 
