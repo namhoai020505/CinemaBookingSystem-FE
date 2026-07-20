@@ -55,6 +55,7 @@ type ShowtimeSlot = {
   endTime: string;       // ISO
   basePrice: number;
   status: string;
+  hasBookings?: boolean;
 };
 
 type DraggingMovie =
@@ -344,6 +345,7 @@ export default function ManageShowtime() {
           endTime: endTimeISO,
           basePrice: st.basePrice,
           status: st.status,
+          hasBookings: st.hasBookings,
         });
       }
 
@@ -941,8 +943,8 @@ export default function ManageShowtime() {
                                   {slot.movieNameVn}
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  {/* Nút Đổi Phòng Chuyên Dụng ChangeRoom */}
-                                  {!isPastDate && !slot.id.startsWith("temp_") && (
+                                  {/* Nút Đổi Phòng Chuyên Dụng ChangeRoom (Chỉ hiện khi suất chiếu ĐÃ CÓ vé đặt) */}
+                                  {!isPastDate && !slot.id.startsWith("temp_") && slot.hasBookings && (
                                     <button
                                       title="Đổi phòng chiếu chuyên dụng (ChangeRoom)"
                                       onClick={(e) => {

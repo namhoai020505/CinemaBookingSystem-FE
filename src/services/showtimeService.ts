@@ -18,6 +18,7 @@ export interface ShowtimeResponse {
   basePrice: number;
   status: string;       // OPEN | CLOSED | CANCELLED | COMPLETED
   showtimeSeatCount: number;
+  hasBookings?: boolean;
 }
 
 /** Khớp CinemaSystem.Contracts.Showtimes.CreateShowtimeRequest */
