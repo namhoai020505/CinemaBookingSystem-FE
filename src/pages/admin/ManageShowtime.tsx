@@ -163,6 +163,17 @@ export default function ManageShowtime() {
     startTimeStr: string;
   } | null>(null);
 
+  // ---------- State: ChangeRoom Modal ----------
+  const [changeRoomModal, setChangeRoomModal] = useState<{
+    showtimeId: string;
+    movieName: string;
+    currentRoomId: string;
+    currentRoomName: string;
+    startTimeStr: string;
+  } | null>(null);
+  const [selectedTargetRoomId, setSelectedTargetRoomId] = useState<string>('');
+  const [changeRoomLoading, setChangeRoomLoading] = useState<boolean>(false);
+
   // ---------- State: UX Edit Tracking & Batch Save ----------
   const [isDirty, setIsDirty] = useState(false);
   const [deletedShowtimeIds, setDeletedShowtimeIds] = useState<Set<string>>(new Set());
@@ -506,6 +517,29 @@ export default function ManageShowtime() {
 
     setIsDirty(true);
     toast.info(TEXT.SHOWTIME.TOAST_TEMP_DELETED);
+  };
+
+  /** Thực thi Đổi phòng chuyên dụng (ChangeRoom) */
+  const handleChangeRoomSubmit = async () => {
+    if (!changeRoomModal || !selectedTargetRoomId) {
+      toast.error("Vui lòng chọn phòng chiếu mới.");
+      return;
+    }
+    try {
+      setChangeRoomLoading(true);
+      await showtimeService.changeRoom(changeRoomModal.showtimeId, {
+        newRoomId: selectedTargetRoomId,
+      });
+      toast.success("✅ Đổi phòng chiếu chuyên dụng thành công! Đã tự động cập nhật sơ đồ ghế và gửi email cho khách.");
+      setChangeRoomModal(null);
+      await fetchShowtimes();
+    } catch (error: unknown) {
+      console.error("ChangeRoom error:", error);
+      const beMsg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(beMsg || "Không thể đổi phòng chiếu. Vui lòng thử lại.");
+    } finally {
+      setChangeRoomLoading(false);
+    }
   };
 
   const handleCancelChanges = () => {
@@ -903,18 +937,40 @@ export default function ManageShowtime() {
                               style={{ left: `${leftPx}px`, width: `${widthPx}px`, backgroundColor: slot.color }}
                             >
                               <div className="flex justify-between items-start gap-1">
-                                <div className="text-xs font-bold truncate text-white max-w-[82%]">
+                                <div className="text-xs font-bold truncate text-white max-w-[70%]">
                                   {slot.movieNameVn}
                                 </div>
-                                {/* Ẩn nút xóa khi xem ngày quá khứ */}
-                                {!isPastDate && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); void handleDeleteShowtime(room.roomId, slot.id); }}
-                                    className="text-white/60 hover:text-white bg-black/40 hover:bg-red-600 w-4 h-4 rounded-full flex items-center justify-center text-[10px] transition-all shrink-0 z-50 shadow-md"
-                                  >
-                                    &times;
-                                  </button>
-                                )}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {/* Nút Đổi Phòng Chuyên Dụng ChangeRoom */}
+                                  {!isPastDate && !slot.id.startsWith("temp_") && (
+                                    <button
+                                      title="Đổi phòng chiếu chuyên dụng (ChangeRoom)"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedTargetRoomId("");
+                                        setChangeRoomModal({
+                                          showtimeId: slot.id,
+                                          movieName: slot.movieNameVn,
+                                          currentRoomId: room.roomId,
+                                          currentRoomName: room.roomName,
+                                          startTimeStr: `${startShort} - ${endShort}`,
+                                        });
+                                      }}
+                                      className="text-white/80 hover:text-white bg-black/40 hover:bg-cyan-600 w-4 h-4 rounded-full flex items-center justify-center text-[9px] transition-all shrink-0 z-50 shadow-md cursor-pointer"
+                                    >
+                                      🔄
+                                    </button>
+                                  )}
+                                  {/* Ẩn nút xóa khi xem ngày quá khứ */}
+                                  {!isPastDate && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); void handleDeleteShowtime(room.roomId, slot.id); }}
+                                      className="text-white/60 hover:text-white bg-black/40 hover:bg-red-600 w-4 h-4 rounded-full flex items-center justify-center text-[10px] transition-all shrink-0 z-50 shadow-md cursor-pointer"
+                                    >
+                                      &times;
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                               <div className="text-[9px] text-white/90 font-medium tracking-wide">
                                 {startShort && endShort ? `🕒 ${startShort} - ${endShort}` : "N/A"}
@@ -1026,6 +1082,88 @@ export default function ManageShowtime() {
                 className="px-5 py-2.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-semibold rounded-xl shadow-lg shadow-red-900/20 transition-all text-xs active:scale-95 cursor-pointer"
               >
                 Xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Đổi Phòng Chuyên Dụng (ChangeRoom) */}
+      {changeRoomModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-[#111C44] border border-cyan-500/30 rounded-2xl w-full max-w-md p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-modal-scale flex flex-col gap-5">
+            {/* Header */}
+            <div className="flex items-center gap-4 border-b border-gray-800/80 pb-4">
+              <div className="bg-cyan-500/10 text-cyan-400 p-3 rounded-xl border border-cyan-500/20 shadow-inner shrink-0">
+                <svg className="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <h3 className="text-lg font-bold text-white tracking-wide">Đổi phòng chiếu (ChangeRoom)</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Dành cho suất chiếu đã phát sinh đơn đặt vé.</p>
+              </div>
+            </div>
+
+            {/* Info details */}
+            <div className="bg-[#0F172A] border border-gray-800/80 rounded-xl p-4 text-left flex flex-col gap-3">
+              <div className="flex flex-col gap-1 border-b border-gray-800 pb-2.5">
+                <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Phim</span>
+                <span className="text-white text-sm font-bold line-clamp-2">{changeRoomModal.movieName}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-2.5">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Phòng hiện tại</span>
+                  <span className="text-red-400 text-xs font-semibold">{changeRoomModal.currentRoomName}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Khung giờ</span>
+                  <span className="text-yellow-400 text-xs font-semibold">🕒 {changeRoomModal.startTimeStr}</span>
+                </div>
+              </div>
+
+              {/* Target Room Selection */}
+              <div className="flex flex-col gap-1.5 pt-1">
+                <label className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">
+                  Chọn phòng chiếu mới *
+                </label>
+                <select
+                  value={selectedTargetRoomId}
+                  onChange={(e) => setSelectedTargetRoomId(e.target.value)}
+                  className="bg-[#1E293B] text-white border border-cyan-500/40 rounded-xl p-2.5 text-xs font-medium focus:outline-none focus:border-cyan-400 transition-all"
+                >
+                  <option value="">-- Chọn phòng chiếu mới --</option>
+                  {filteredRooms
+                    .filter((r) => r.roomId !== changeRoomModal.currentRoomId)
+                    .map((r) => (
+                      <option key={r.roomId} value={r.roomId}>
+                        {r.roomName} ({r.capacity} ghế)
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Notice */}
+              <div className="bg-cyan-950/40 border border-cyan-500/20 rounded-lg p-2.5 text-[11px] text-cyan-200/90 leading-relaxed">
+                💡 Hệ thống sẽ tự động chuyển đổi mã ghế tương đương và gửi email AI thông báo điều chỉnh cho toàn bộ khách hàng đã thanh toán.
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-3 justify-end mt-1">
+              <button
+                disabled={changeRoomLoading}
+                onClick={() => setChangeRoomModal(null)}
+                className="px-4 py-2.5 bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold rounded-xl border border-gray-700/60 transition-all text-xs cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                disabled={changeRoomLoading || !selectedTargetRoomId}
+                onClick={() => void handleChangeRoomSubmit()}
+                className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-cyan-900/30 transition-all text-xs cursor-pointer disabled:opacity-50"
+              >
+                {changeRoomLoading ? "Đang đổi phòng..." : "Xác nhận đổi phòng"}
               </button>
             </div>
           </div>
