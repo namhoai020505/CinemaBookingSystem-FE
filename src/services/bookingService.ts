@@ -131,12 +131,13 @@ const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return '';
   }
-
-  return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+  return value.replace(/(?:z|[+-]\d{2}:\d{2})$/i, "");
 };
 
 const parseBackendTime = (value?: string | null) => {
-  const timestamp = Date.parse(normalizeBackendDate(value));
+  const clean = normalizeBackendDate(value);
+  if (!clean) return 0;
+  const timestamp = Date.parse(clean);
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 

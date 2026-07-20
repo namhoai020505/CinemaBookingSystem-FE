@@ -155,8 +155,7 @@ const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";
   }
-
-  return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+  return value.replace(/(?:z|[+-]\d{2}:\d{2})$/i, "");
 };
 
 const parseBackendTime = (value?: string | null) => {
@@ -182,6 +181,21 @@ const formatTimer = (seconds: number) => {
 };
 
 const formatDateTime = (value?: string | null) => {
+  if (!value) {
+    return "Đang cập nhật";
+  }
+
+  const clean = normalizeBackendDate(value);
+  const [datePart, timePart = ""] = clean.includes("T")
+    ? clean.split("T")
+    : clean.split(" ");
+  const [year, month, date] = datePart ? datePart.split("-") : [];
+  const shortTime = timePart ? timePart.substring(0, 5) : "";
+
+  if (year && month && date && shortTime) {
+    return `${shortTime} ${date}/${month}/${year}`;
+  }
+
   const timestamp = parseBackendTime(value);
   if (!timestamp) {
     return "Đang cập nhật";
