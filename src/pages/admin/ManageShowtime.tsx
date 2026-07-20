@@ -619,12 +619,14 @@ export default function ManageShowtime() {
 
       // Thực hiện cập nhật các suất chiếu đã có theo thứ tự tối ưu
       for (const { slot } of sortedUpdateList) {
+        // Nếu suất chiếu đang bị SUSPENDED mà Admin sắp xếp lại trên timeline, tự động khôi phục về OPEN
+        const targetStatus = slot.status === "SUSPENDED" ? "OPEN" : (slot.status || "OPEN");
         await showtimeService.updateShowtime(slot.id, {
           movieId: slot.movieId,
           roomId: slot.roomId,
           startTime: slot.startTime,
           basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
-          status: slot.status,
+          status: targetStatus,
         });
         updatedCount++;
       }
@@ -636,7 +638,7 @@ export default function ManageShowtime() {
           roomId: slot.roomId,
           startTime: slot.startTime,
           basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
-          status: slot.status,
+          status: slot.status || "OPEN",
         });
         createdCount++;
       }
