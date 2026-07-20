@@ -37,6 +37,9 @@ export interface UpdateShowtimePayload {
   startTime: string;    // ISO 8601
   basePrice: number;
   status?: string;      // default "OPEN"
+  compensationVoucherCode?: string;
+  compensationNote?: string;
+  targetSeatType?: string;
 }
 
 /** Khớp CinemaSystem.Contracts.Cinemas.CinemaResponse */
@@ -94,6 +97,9 @@ interface PagedListEnvelope<T> {
 export interface ChangeRoomPayload {
   newRoomId: string;
   seatMapping?: Record<string, string>;
+  compensationVoucherCode?: string;
+  compensationNote?: string;
+  targetSeatType?: string;
 }
 
 // ============================================================

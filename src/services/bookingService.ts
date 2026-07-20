@@ -127,17 +127,21 @@ export type CheckoutRecovery = {
 
 const HIDDEN_EXPIRED_BOOKINGS_KEY = 'g2c-hidden-expired-bookings';
 
-const normalizeBackendDate = (value?: string | null) => {
+export const parseBackendTime = (value?: string | null): number => {
   if (!value) {
-    return '';
+    return 0;
   }
-  return value.replace(/(?:z|[+-]\d{2}:\d{2})$/i, "");
-};
-
-const parseBackendTime = (value?: string | null) => {
-  const clean = normalizeBackendDate(value);
-  if (!clean) return 0;
-  const timestamp = Date.parse(clean);
+  let str = value.trim();
+  if (!str) {
+    return 0;
+  }
+  if (!str.includes('T') && str.includes(' ')) {
+    str = str.replace(' ', 'T');
+  }
+  if (!str.endsWith('Z') && !str.endsWith('z') && !/[+-]\d{2}:\d{2}$/.test(str)) {
+    str += 'Z';
+  }
+  const timestamp = Date.parse(str);
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
