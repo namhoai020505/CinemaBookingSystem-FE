@@ -113,10 +113,12 @@ const formatDateToYMD = (date: Date): string => {
 
 /** Tạo ISO datetime từ ngày đã chọn + số phút tính từ 08:00 */
 const minutesFrom8AMToISO = (selectedDate: string, minutesFrom8AM: number): string => {
+  const [y, m, d] = selectedDate.split("-").map(Number);
   const totalMinutes = TIMELINE_START_HOUR * 60 + minutesFrom8AM;
   const hours = Math.floor(totalMinutes / 60);
   const mins = Math.floor(totalMinutes % 60);
-  return `${selectedDate}T${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:00Z`;
+  const dateObj = new Date(Date.UTC(y, m - 1, d, hours, mins, 0));
+  return dateObj.toISOString();
 };
 
 /** Map màu sắc cho phim dựa trên movieId → stable color */
@@ -152,6 +154,7 @@ export default function ManageShowtime() {
   const [draggingMovie, setDraggingMovie] = useState<DraggingMovie | null>(null);
   const [loading, setLoading] = useState(true);
   const isToastActive = useRef(false);
+  const dragOffsetXRef = useRef<number>(0);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     roomId: string;
     slotId: string;
@@ -345,11 +348,18 @@ export default function ManageShowtime() {
 
   const handleDragStartFromSidebar = (movie: UnscheduledMovie) => {
     isToastActive.current = false;
+    dragOffsetXRef.current = 0;
     setDraggingMovie({ ...movie, isNew: true });
   };
 
-  const handleDragStartFromTimeline = (roomShowtime: ShowtimeSlot, roomId: string) => {
+  const handleDragStartFromTimeline = (
+    e: React.DragEvent<HTMLDivElement>,
+    roomShowtime: ShowtimeSlot,
+    roomId: string
+  ) => {
     isToastActive.current = false;
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragOffsetXRef.current = e.clientX - rect.left;
     setDraggingMovie({ ...roomShowtime, isNew: false, originalRoomId: roomId });
   };
 
@@ -361,8 +371,8 @@ export default function ManageShowtime() {
     const rowElement = e.currentTarget as HTMLElement;
     const rect = rowElement.getBoundingClientRect();
 
-    // Tính tọa độ vị trí thả chuột chuẩn xác 100%
-    const relativeX = e.clientX - rect.left;
+    // Tính tọa độ vị trí thả chuột trừ đi độ lệch điểm cầm trên thẻ phim (dragOffsetX)
+    const relativeX = (e.clientX - rect.left) - dragOffsetXRef.current;
     const rawStartMinutes = Math.round(relativeX / MINUTE_WIDTH);
 
     const SNAP_INTERVAL = 15;
@@ -883,7 +893,7 @@ export default function ManageShowtime() {
                             <div
                               key={slot.id}
                               draggable={!isPastDate}
-                              onDragStart={() => { if (!isPastDate) handleDragStartFromTimeline(slot, room.roomId); }}
+                              onDragStart={(e) => { if (!isPastDate) handleDragStartFromTimeline(e, slot, room.roomId); }}
                               className={`absolute top-3 bottom-3 rounded-xl shadow-xl border border-white/10 px-3 py-2 flex flex-col justify-between overflow-hidden transition-all pointer-events-auto ${isPastDate
                                 ? 'cursor-default opacity-60'
                                 : 'cursor-grab active:cursor-grabbing hover:brightness-110 hover:scale-[1.01] hover:shadow-2xl hover:z-50'
