@@ -161,7 +161,7 @@ export default function Header() {
   return (
     <header className="fixed left-0 top-0 z-50 w-full shadow-lg">
       <div
-        className={`g2c-topbar py-1.5 transition-colors ${
+        className={`g2c-topbar hidden py-1.5 transition-colors md:block ${
           isLightMode ? 'bg-[#E2E8F0] text-[#1E293B]' : 'bg-[#0F172A] text-gray-300'
         }`}
       >
@@ -206,18 +206,18 @@ export default function Header() {
       </div>
 
       <div
-        className={`border-b py-3 transition-colors ${
+        className={`border-b py-2 transition-colors md:py-3 ${
           isLightMode ? 'border-[#CBD5E1] bg-white' : 'border-[#474747] bg-[#1E293B]'
         }`}
       >
         <div className="container mx-auto flex items-center justify-between px-4">
-          <div className="flex items-center gap-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3 lg:flex-none lg:gap-6">
             <Link to="/" onClick={() => sessionStorage.removeItem('home-scroll-y')} className="flex items-center">
-              <img src={logo} alt="G2C Logo" className="h-10 object-contain" />
+              <img src={logo} alt="G2C Logo" className="h-9 object-contain md:h-10" />
             </Link>
 
             <div
-              className="relative hidden w-[320px] max-w-[34vw] sm:block"
+              className="relative min-w-0 flex-1 sm:w-[320px] sm:max-w-[34vw] lg:flex-none"
               ref={cinemaDropdownRef}
               onKeyDown={handleCinemaDropdownKeyDown}
             >
@@ -226,9 +226,9 @@ export default function Header() {
                 aria-haspopup="listbox"
                 aria-expanded={isCinemaDropdownOpen}
                 onClick={() => setIsCinemaDropdownOpen((current) => !current)}
-                className={`group flex h-12 w-full cursor-pointer items-center justify-between gap-3 border px-4 text-left text-sm font-semibold shadow-sm transition-colors duration-200 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] focus-visible:ring-offset-2 ${
+                className={`group flex h-11 w-full cursor-pointer items-center justify-between gap-2 border px-3 text-left text-sm font-semibold shadow-sm transition-colors duration-200 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] focus-visible:ring-offset-2 md:h-12 md:gap-3 md:px-4 ${
                   isCinemaDropdownOpen
-                    ? 'rounded-t-[24px] rounded-b-none border-b-transparent'
+                    ? 'rounded-t-[22px] rounded-b-none border-b-transparent md:rounded-t-[24px]'
                     : 'rounded-full'
                 } ${
                   isLightMode
@@ -251,7 +251,7 @@ export default function Header() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span
-                    className={`block text-[10px] font-black uppercase leading-3 tracking-[0.16em] ${
+                    className={`hidden text-[10px] font-black uppercase leading-3 tracking-[0.16em] sm:block ${
                       isLightMode ? 'text-slate-500' : 'text-white/45'
                     }`}
                   >
@@ -367,16 +367,16 @@ export default function Header() {
           <nav
             className={`hidden items-center gap-7 text-sm font-bold tracking-wide lg:flex ${menuTextClass}`}
           >
-            <Link to="/" onClick={() => sessionStorage.removeItem('home-scroll-y')} className="transition hover:text-[#FFD166]">
+            <Link to="/ticket-prices" className="transition hover:text-[#FFD166]">
               GIÁ VÉ
             </Link>
             <Link to="/movies" className="transition hover:text-[#FFD166]">
               PHIM
             </Link>
-            <Link to="/" onClick={() => sessionStorage.removeItem('home-scroll-y')} className="transition hover:text-[#FFD166]">
+            <Link to="/cinemas" className="transition hover:text-[#FFD166]">
               RẠP
             </Link>
-            <Link to="/" onClick={() => sessionStorage.removeItem('home-scroll-y')} className="transition hover:text-[#FFD166]">
+            <Link to="/cinema-schedule" className="transition hover:text-[#FFD166]">
               LỊCH CHIẾU THEO RẠP
             </Link>
             <Link to="/profile" className="transition hover:text-[#FFD166]">

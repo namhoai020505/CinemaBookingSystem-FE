@@ -89,7 +89,7 @@ export default function Chatbot() {
   ];
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 select-none">
+    <div className="fixed bottom-24 right-4 z-50 select-none md:bottom-6 md:right-6">
       {/* Floating Chat Button */}
       {!isOpen && (
         <button
@@ -107,7 +107,7 @@ export default function Chatbot() {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="flex h-[550px] w-[380px] flex-col rounded-2xl border border-slate-200 dark:border-indigo-500/20 bg-white dark:bg-gradient-to-br dark:from-slate-900 dark:to-indigo-950 shadow-2xl overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-5 text-slate-800 dark:text-slate-100">
+        <div className="flex h-[min(550px,calc(100vh-128px))] w-[calc(100vw-32px)] max-w-[380px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-5 dark:border-indigo-500/20 dark:bg-gradient-to-br dark:from-slate-900 dark:to-indigo-950 dark:text-slate-100">
           {/* Header */}
           <div className="bg-slate-100 dark:bg-indigo-600/30 backdrop-blur-sm p-4 border-b border-slate-200 dark:border-indigo-500/30 flex justify-between items-center">
             <div className="flex items-center space-x-2">

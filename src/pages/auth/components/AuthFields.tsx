@@ -148,9 +148,9 @@ export const CaptchaField = ({
   onCaptchaInputChange,
   onRefreshCaptcha,
 }: CaptchaFieldProps) => (
-  <div className="my-2 flex items-center gap-3">
+  <div className="my-2 grid grid-cols-[auto_44px_1fr] items-center gap-2 sm:flex sm:gap-3">
     <div
-      className="cursor-not-allowed select-none rounded bg-white px-4 py-1 text-lg font-bold tracking-[0.2em] text-green-700 line-through decoration-gray-400"
+      className="cursor-not-allowed select-none rounded bg-white px-3 py-1 text-center text-base font-bold tracking-[0.18em] text-green-700 line-through decoration-gray-400 sm:px-4 sm:text-lg sm:tracking-[0.2em]"
       title="Mã xác thực"
     >
       {captchaText}
@@ -159,7 +159,7 @@ export const CaptchaField = ({
     <button
       type="button"
       onClick={onRefreshCaptcha}
-      className="text-gray-400 transition hover:text-white"
+      className="flex min-h-11 min-w-11 items-center justify-center text-gray-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166]"
       title="Đổi mã khác"
     >
       <FiRefreshCw size={20} />
@@ -171,7 +171,7 @@ export const CaptchaField = ({
       value={captchaInput}
       onChange={(event) => onCaptchaInputChange(event.target.value)}
       placeholder="Mã xác thực"
-      className="min-w-0 flex-1 rounded-md border border-gray-600 bg-transparent px-3 py-1.5 text-sm text-white focus:border-[#FFD166] focus:outline-none"
+      className="min-h-11 min-w-0 rounded-md border border-gray-600 bg-transparent px-3 py-2 text-sm text-white focus:border-[#FFD166] focus:outline-none sm:flex-1"
     />
   </div>
 );
