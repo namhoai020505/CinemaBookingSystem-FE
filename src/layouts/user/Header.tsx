@@ -2,7 +2,7 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { FiCheck, FiChevronDown, FiMapPin, FiMoon, FiSun } from 'react-icons/fi';
 import { Link, useNavigate } from 'react-router-dom';
 import logo from '../../assets/logo.png';
-import { getAccessToken } from '../../lib/auth';
+import { AUTH_SESSION_EVENT, getAccessToken, getAuthFullName } from '../../lib/auth';
 import {
   readSelectedCinemaId,
   writeSelectedCinemaId,
@@ -33,10 +33,11 @@ export default function Header() {
     readSelectedCinemaId(),
   );
   const [isCinemaDropdownOpen, setIsCinemaDropdownOpen] = useState(false);
+  const [, setAuthVersion] = useState(0);
   const cinemaDropdownRef = useRef<HTMLDivElement>(null);
   const token = getAccessToken();
   const hasValidToken = Boolean(token);
-  const fullName = localStorage.getItem('fullName');
+  const fullName = getAuthFullName();
   const isLightMode = themeMode === 'light';
 
   useEffect(() => {
@@ -46,6 +47,18 @@ export default function Header() {
     document.body.classList.toggle('g2c-light-mode', isLightMode);
     localStorage.setItem(THEME_STORAGE_KEY, themeMode);
   }, [isLightMode, themeMode]);
+
+  useEffect(() => {
+    const handleAuthSessionChange = () => {
+      setAuthVersion((current) => current + 1);
+    };
+
+    window.addEventListener(AUTH_SESSION_EVENT, handleAuthSessionChange);
+
+    return () => {
+      window.removeEventListener(AUTH_SESSION_EVENT, handleAuthSessionChange);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;

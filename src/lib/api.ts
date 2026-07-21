@@ -1,5 +1,10 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
-import { clearAuthSession, getAccessToken, getRefreshToken } from './auth';
+import {
+  clearAuthSession,
+  getAccessToken,
+  getRefreshToken,
+  setAuthSession,
+} from './auth';
 
 type RefreshTokenResponse = {
   success?: boolean;
@@ -53,15 +58,11 @@ const persistAuthTokens = (authData: RefreshTokenResponse['data']) => {
     return null;
   }
 
-  localStorage.setItem('accessToken', nextAccessToken);
-
-  if (authData?.refreshToken) {
-    localStorage.setItem('refreshToken', authData.refreshToken);
-  }
-
-  if (authData?.fullName) {
-    localStorage.setItem('fullName', authData.fullName);
-  }
+  setAuthSession({
+    accessToken: nextAccessToken,
+    refreshToken: authData?.refreshToken || getRefreshToken(),
+    fullName: authData?.fullName || localStorage.getItem('fullName'),
+  });
 
   return nextAccessToken;
 };

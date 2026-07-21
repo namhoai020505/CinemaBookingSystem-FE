@@ -14,7 +14,6 @@ import {
   FiMapPin,
   FiPhone,
   FiShield,
-  FiUser,
 } from 'react-icons/fi';
 import { getCurrentUserProfile } from '../../lib/auth';
 import {
@@ -506,15 +505,6 @@ export default function Profile() {
                   <p className="text-white/50">Số điện thoại</p>
                   <p className="truncate font-semibold">
                     {displayProfile.phoneNumber || 'Chưa cập nhật'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-md bg-white/5 p-3">
-                <FiUser className="mt-0.5 shrink-0 text-[#FFD166]" />
-                <div className="min-w-0">
-                  <p className="text-white/50">Mã tài khoản</p>
-                  <p className="truncate font-semibold">
-                    {displayProfile.userId || 'Không xác định'}
                   </p>
                 </div>
               </div>

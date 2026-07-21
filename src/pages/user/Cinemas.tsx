@@ -68,7 +68,7 @@ export default function Cinemas() {
 
         const [cinemaItems, moviesPage] = await Promise.all([
           showtimeService.getCinemas().catch(() => []),
-          movieService.getMoviesWithPagination(1, 8, "NOW_SHOWING"),
+          movieService.getMoviesWithPagination(1, 4, "NOW_SHOWING"),
         ]);
 
         setCinemas(
@@ -76,7 +76,7 @@ export default function Cinemas() {
             (cinema) => cinema.cinemaStatus?.toUpperCase() === "ACTIVE",
           ),
         );
-        setNowShowingMovies(moviesPage.items.map(mapMovieToCard));
+        setNowShowingMovies(moviesPage.items.slice(0, 4).map(mapMovieToCard));
       } catch (error) {
         console.error("Không tải được dữ liệu trang rạp:", error);
         setCinemas([]);
@@ -128,26 +128,28 @@ export default function Cinemas() {
   return (
     <div className="bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-[#182437] dark:text-white">
       <section className="px-4 pb-14 pt-8 sm:px-6 sm:pb-16">
-        <div className="mx-auto grid w-full max-w-[1120px] gap-10 lg:grid-cols-[1.05fr_0.95fr]">
-          <article>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0EA5E9] dark:text-[#FFD166]">
-              Hệ thống rạp
-            </p>
-            <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
-              {cinemaName}
-            </h1>
+        <div className="mx-auto grid w-full max-w-[1120px] gap-10 lg:grid-cols-[0.95fr_1.05fr]">
+          <article className="min-w-0 lg:sticky lg:top-[118px] lg:self-start">
+            <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-white/10 dark:bg-[#1E293B]">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-[#0EA5E9] dark:text-[#FFD166]">
+                Hệ thống rạp
+              </p>
+              <h1 className="mt-2 truncate text-2xl font-black tracking-tight sm:text-3xl">
+                {cinemaName}
+              </h1>
+            </div>
 
-            <div className="mt-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#1E293B]">
+            <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#1E293B]">
               <img
                 src={cinemaThumbnail}
                 alt={`Không gian ${cinemaName}`}
-                className="aspect-[16/10] w-full object-cover"
+                className="aspect-[16/10] w-full object-cover lg:aspect-[16/7]"
                 loading="lazy"
                 draggable={false}
               />
             </div>
 
-            <div className="mt-7 space-y-5 text-sm font-semibold leading-7 text-slate-600 dark:text-white/65">
+            <div className="mt-5 space-y-4 text-sm font-semibold leading-7 text-slate-600 dark:text-white/65 lg:space-y-3 lg:leading-6">
               <p>
                 {cinemaName} nằm tại khu vực thuận tiện, phù hợp cho khách xem
                 phim cá nhân, gia đình và nhóm bạn. Rạp được bố trí quầy vé,
@@ -167,7 +169,7 @@ export default function Cinemas() {
               </p>
             </div>
 
-            <div className="mt-8 grid gap-3 text-sm font-bold sm:grid-cols-2">
+            <div className="mt-5 grid gap-3 text-sm font-bold sm:grid-cols-2">
               <div className="flex min-h-[64px] items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 dark:border-white/10 dark:bg-[#1E293B]">
                 <FiMapPin className="shrink-0 text-[#FFD166]" size={20} />
                 <span>{cinemaAddress}</span>

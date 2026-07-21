@@ -17,26 +17,58 @@ export type CinemaFbInventoryItem = {
   quantity: number;
 };
 
+export type FbItemOptionRequest = {
+  optionId: string;
+  optionName?: string | null;
+  extraFee: number;
+};
+
 export type CounterFbOrderItem = {
   fbItemId: string;
+  itemId?: string;
   quantity: number;
+  unitPrice?: number;
+  options?: FbItemOptionRequest[];
 };
 
 export type CreateCounterFbOrderPayload = {
   cinemaId: string;
-  showtimeId?: string;
-  customerProfileId?: string;
-  guestName?: string;
-  guestPhone?: string;
-  guestEmail?: string;
+  shiftId?: string | null;
+  bookingId?: string | null;
+  showtimeId?: string | null;
+  customerProfileId?: string | null;
+  customerId?: string | null;
+  memberCardNumber?: string | null;
+  guestName?: string | null;
+  guestPhone?: string | null;
+  guestEmail?: string | null;
   items: CounterFbOrderItem[];
+  voucherCode?: string | null;
+  discountAmount?: number;
+  totalAmount?: number;
+  paymentMethod?: string | null;
+  receivedAmount?: number;
+  changeAmount?: number;
 };
 
 export type FbFulfillmentResponse = {
   bookingId: string;
+  cinemaId?: string | null;
+  shiftId?: string | null;
+  customerProfileId?: string | null;
+  guestName?: string | null;
+  guestPhone?: string | null;
+  grossAmount?: number;
+  discountAmount?: number;
+  voucherCode?: string | null;
+  totalAmount?: number;
+  paymentMethod?: string | null;
+  receivedAmount?: number | null;
+  changeAmount?: number | null;
   fbFulfillmentStatus: string;
   fbFulfilledAt?: string | null;
   staffProfileId?: string | null;
+  items?: CounterFbOrderItem[];
   message: string;
 };
 

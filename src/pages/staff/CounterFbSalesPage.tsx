@@ -60,6 +60,15 @@ const getScopedCinemas = (rooms: RoomResponse[]): ScopedCinema[] => {
   return Array.from(cinemaMap, ([cinemaId, cinemaName]) => ({ cinemaId, cinemaName }));
 };
 
+const PAYMENT_METHODS = [
+  { value: 'Cash', label: 'Tiền mặt' },
+  { value: 'Card', label: 'Thẻ ngân hàng' },
+  { value: 'Transfer', label: 'Chuyển khoản' },
+  { value: 'Momo', label: 'MoMo' },
+  { value: 'ZaloPay', label: 'ZaloPay' },
+  { value: 'VNPay', label: 'VNPay' },
+];
+
 const CounterFbSalesPage = () => {
   const { isLightMode } = useOutletContext<StaffOutletContext>();
   const [rooms, setRooms] = useState<RoomResponse[]>([]);
@@ -67,6 +76,8 @@ const CounterFbSalesPage = () => {
   const [inventory, setInventory] = useState<CinemaFbInventoryItem[]>([]);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [guestInfo, setGuestInfo] = useState<GuestInfo>(emptyGuestInfo);
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [receivedAmount, setReceivedAmount] = useState<number>(0);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [loadingScope, setLoadingScope] = useState(true);
   const [loadingInventory, setLoadingInventory] = useState(false);
@@ -114,9 +125,15 @@ const CounterFbSalesPage = () => {
     [cartItems],
   );
 
+  const changeAmount = useMemo(() => {
+    if (paymentMethod !== 'Cash') return 0;
+    return Math.max(0, receivedAmount - cartTotal);
+  }, [paymentMethod, receivedAmount, cartTotal]);
+
   const clearCart = () => {
     setCart({});
     setOrderError('');
+    setReceivedAmount(0);
   };
 
   const loadInventory = useCallback(async (cinemaId: string) => {
@@ -230,6 +247,11 @@ const CounterFbSalesPage = () => {
       return;
     }
 
+    if (paymentMethod === 'Cash' && receivedAmount < cartTotal) {
+      setOrderError(`Tiền nhận (${formatCurrency(receivedAmount)}) không đủ để thanh toán (${formatCurrency(cartTotal)}).`);
+      return;
+    }
+
     try {
       setSubmitting(true);
       setOrderError('');
@@ -241,13 +263,22 @@ const CounterFbSalesPage = () => {
         guestEmail: guestInfo.guestEmail.trim() || undefined,
         items: cartItems.map((item) => ({
           fbItemId: item.fbItemId,
+          itemId: item.fbItemId,
           quantity: item.selectedQuantity,
+          unitPrice: item.price,
+          options: [],
         })),
+        totalAmount: cartTotal,
+        paymentMethod: paymentMethod,
+        receivedAmount: paymentMethod === 'Cash' ? receivedAmount : cartTotal,
+        changeAmount: paymentMethod === 'Cash' ? changeAmount : 0,
+        discountAmount: 0,
       });
 
       setOrderResult(response.data);
       setGuestInfo(emptyGuestInfo);
       setCart({});
+      setReceivedAmount(0);
       await loadInventory(selectedCinemaId);
     } catch (error) {
       setOrderError(getApiErrorMessage(error, 'Không tạo được đơn F&B tại quầy. Vui lòng kiểm tra tồn kho hoặc quyền rạp.'));
@@ -537,6 +568,36 @@ const CounterFbSalesPage = () => {
             </div>
 
             <div className="grid gap-4 p-5">
+              {/* Payment method */}
+              <label className="grid gap-2">
+                <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Phương thức thanh toán</span>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className={inputClass(isLightMode)}
+                >
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              {/* Received amount — only for cash */}
+              {paymentMethod === 'Cash' && (
+                <label className="grid gap-2">
+                  <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Tiền khách đưa (₫)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={receivedAmount}
+                    onChange={(e) => setReceivedAmount(Number(e.target.value) || 0)}
+                    className={inputClass(isLightMode)}
+                    placeholder="Nhập số tiền khách đưa"
+                  />
+                </label>
+              )}
+
               <div className={`${surfaceClass(true)} p-4`}>
                 <div className="flex items-center justify-between gap-4">
                   <span className={`text-sm font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -544,6 +605,16 @@ const CounterFbSalesPage = () => {
                   </span>
                   <strong className="text-2xl font-black text-amber-300">{formatCurrency(cartTotal)}</strong>
                 </div>
+                {paymentMethod === 'Cash' && receivedAmount > 0 && (
+                  <div className="mt-3 flex items-center justify-between gap-4 border-t pt-3 border-dashed border-current/20">
+                    <span className={`text-sm font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                      Tiền thừa trả khách
+                    </span>
+                    <strong className={`text-xl font-black ${changeAmount >= 0 ? 'text-cyan-300' : 'text-rose-300'}`}>
+                      {formatCurrency(changeAmount)}
+                    </strong>
+                  </div>
+                )}
               </div>
 
               {orderError ? (

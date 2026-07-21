@@ -5,8 +5,9 @@ import {
   FiHome,
   FiUser,
 } from 'react-icons/fi';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { getAccessToken } from '../../lib/auth';
+import { AUTH_SESSION_EVENT, getAccessToken } from '../../lib/auth';
 
 const navItems = [
   {
@@ -46,7 +47,20 @@ const navItems = [
 
 export default function MobileBottomNav() {
   const { pathname } = useLocation();
+  const [, setAuthVersion] = useState(0);
   const isLoggedIn = Boolean(getAccessToken());
+
+  useEffect(() => {
+    const handleAuthSessionChange = () => {
+      setAuthVersion((current) => current + 1);
+    };
+
+    window.addEventListener(AUTH_SESSION_EVENT, handleAuthSessionChange);
+
+    return () => {
+      window.removeEventListener(AUTH_SESSION_EVENT, handleAuthSessionChange);
+    };
+  }, []);
 
   return (
     <nav
