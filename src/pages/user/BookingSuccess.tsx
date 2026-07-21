@@ -14,12 +14,24 @@ const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";
   }
-
-  return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+  return value.replace(/(?:z|[+-]\d{2}:\d{2})$/i, "");
 };
 
-const parseBackendTime = (value?: string | null) => {
-  const timestamp = Date.parse(normalizeBackendDate(value));
+const parseBackendTime = (value?: string | null): number => {
+  if (!value) {
+    return 0;
+  }
+  let str = value.trim();
+  if (!str) {
+    return 0;
+  }
+  if (!str.includes("T") && str.includes(" ")) {
+    str = str.replace(" ", "T");
+  }
+  if (!str.endsWith("Z") && !str.endsWith("z") && !/[+-]\d{2}:\d{2}$/.test(str)) {
+    str += "Z";
+  }
+  const timestamp = Date.parse(str);
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
@@ -27,6 +39,21 @@ const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
 const formatDateTime = (value?: string | null) => {
+  if (!value) {
+    return "Đang cập nhật";
+  }
+
+  const clean = normalizeBackendDate(value);
+  const [datePart, timePart = ""] = clean.includes("T")
+    ? clean.split("T")
+    : clean.split(" ");
+  const [year, month, date] = datePart ? datePart.split("-") : [];
+  const shortTime = timePart ? timePart.substring(0, 5) : "";
+
+  if (year && month && date && shortTime) {
+    return `${shortTime} ${date}/${month}/${year}`;
+  }
+
   const timestamp = parseBackendTime(value);
   if (!timestamp) {
     return "Đang cập nhật";

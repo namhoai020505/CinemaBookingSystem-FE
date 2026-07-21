@@ -34,12 +34,24 @@ const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";
   }
-
-  return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+  return value.replace(/(?:z|[+-]\d{2}:\d{2})$/i, "");
 };
 
-const parseBackendDate = (value?: string | null) => {
-  const timestamp = Date.parse(normalizeBackendDate(value));
+const parseBackendDate = (value?: string | null): number => {
+  if (!value) {
+    return 0;
+  }
+  let str = value.trim();
+  if (!str) {
+    return 0;
+  }
+  if (!str.includes("T") && str.includes(" ")) {
+    str = str.replace(" ", "T");
+  }
+  if (!str.endsWith("Z") && !str.endsWith("z") && !/[+-]\d{2}:\d{2}$/.test(str)) {
+    str += "Z";
+  }
+  const timestamp = Date.parse(str);
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
@@ -47,8 +59,22 @@ const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
 const formatDateTime = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
+  if (!value) {
+    return "Đang cập nhật";
+  }
 
+  const clean = normalizeBackendDate(value);
+  const [datePart, timePart = ""] = clean.includes("T")
+    ? clean.split("T")
+    : clean.split(" ");
+  const [year, month, date] = datePart ? datePart.split("-") : [];
+  const shortTime = timePart ? timePart.substring(0, 5) : "";
+
+  if (year && month && date && shortTime) {
+    return `${shortTime} ${date}/${month}/${year}`;
+  }
+
+  const timestamp = parseBackendDate(value);
   if (timestamp === 0) {
     return "Đang cập nhật";
   }
@@ -60,41 +86,32 @@ const formatDateTime = (value?: string | null) => {
 };
 
 const formatShortDate = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
-
-  if (timestamp === 0) {
-    return "--/--";
-  }
-
-  return new Date(timestamp).toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-  });
+  if (!value) return "--/--";
+  const clean = normalizeBackendDate(value);
+  const [datePart] = clean.split("T");
+  const [, month, date] = datePart ? datePart.split("-") : [];
+  if (date && month) return `${date}/${month}`;
+  return "--/--";
 };
 
 const formatWeekday = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
-
-  if (timestamp === 0) {
-    return "Ngày chiếu";
+  if (!value) return "Ngày chiếu";
+  const clean = normalizeBackendDate(value);
+  const [datePart] = clean.split("T");
+  const [year, month, date] = datePart ? datePart.split("-").map(Number) : [];
+  if (year && month && date) {
+    const d = new Date(year, month - 1, date);
+    return d.toLocaleDateString("vi-VN", { weekday: "short" });
   }
-
-  return new Date(timestamp).toLocaleDateString("vi-VN", {
-    weekday: "short",
-  });
+  return "Ngày chiếu";
 };
 
 const formatShortTime = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
-
-  if (timestamp === 0) {
-    return "--:--";
-  }
-
-  return new Date(timestamp).toLocaleTimeString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  if (!value) return "--:--";
+  const clean = normalizeBackendDate(value);
+  const [, timePart = ""] = clean.split("T");
+  if (timePart) return timePart.substring(0, 5);
+  return "--:--";
 };
 
 const getShortBookingId = (bookingId: string) => {

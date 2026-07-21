@@ -18,6 +18,7 @@ export interface ShowtimeResponse {
   basePrice: number;
   status: string;       // OPEN | CLOSED | CANCELLED | COMPLETED
   showtimeSeatCount: number;
+  hasBookings?: boolean;
 }
 
 /** Khớp CinemaSystem.Contracts.Showtimes.CreateShowtimeRequest */
@@ -36,6 +37,9 @@ export interface UpdateShowtimePayload {
   startTime: string;    // ISO 8601
   basePrice: number;
   status?: string;      // default "OPEN"
+  compensationVoucherCode?: string;
+  compensationNote?: string;
+  targetSeatType?: string;
 }
 
 /** Khớp CinemaSystem.Contracts.Cinemas.CinemaResponse */
@@ -90,6 +94,14 @@ interface PagedListEnvelope<T> {
   totalCount: number;
 }
 
+export interface ChangeRoomPayload {
+  newRoomId: string;
+  seatMapping?: Record<string, string>;
+  compensationVoucherCode?: string;
+  compensationNote?: string;
+  targetSeatType?: string;
+}
+
 // ============================================================
 // Service methods
 // ============================================================
@@ -112,6 +124,12 @@ export const showtimeService = {
   /** PUT /api/showtimes/{id} – cập nhật showtime */
   updateShowtime: async (showtimeId: string, payload: UpdateShowtimePayload): Promise<ShowtimeResponse> => {
     const envelope = await axiosInstance.put(`/api/showtimes/${showtimeId}`, payload) as unknown as ApiEnvelope<ShowtimeResponse>;
+    return envelope.data;
+  },
+
+  /** POST /api/showtimes/{id}/change-room – đổi phòng chiếu chuyên dụng */
+  changeRoom: async (showtimeId: string, payload: ChangeRoomPayload): Promise<ShowtimeResponse> => {
+    const envelope = await axiosInstance.post(`/api/showtimes/${showtimeId}/change-room`, payload) as unknown as ApiEnvelope<ShowtimeResponse>;
     return envelope.data;
   },
 

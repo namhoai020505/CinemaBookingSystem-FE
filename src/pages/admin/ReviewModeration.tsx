@@ -25,7 +25,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 const formatReviewDate = (value: string) => {
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) {
-    return 'Dang cap nhat';
+    return 'Đang cập nhật';
   }
 
   return new Date(timestamp).toLocaleString('vi-VN', {
@@ -98,14 +98,14 @@ export default function ReviewModeration() {
         if (!response.success) {
           const statusSuffix = response.statusCode ? ` (HTTP ${response.statusCode})` : '';
           setReviews([]);
-          setError(`${response.message || 'Khong tai duoc hang doi danh gia.'}${statusSuffix}`);
+          setError(`${response.message || 'Không tải được hàng đợi đánh giá.'}${statusSuffix}`);
           return;
         }
 
         setReviews(Array.isArray(response.data) ? response.data : []);
       } catch (err) {
         if (mounted) {
-          setError(getErrorMessage(err, 'Khong tai duoc hang doi danh gia.'));
+          setError(getErrorMessage(err, 'Không tải được hàng đợi đánh giá.'));
         }
       } finally {
         if (mounted) {
@@ -133,16 +133,16 @@ export default function ReviewModeration() {
 
       if (!response.success) {
         throw new Error(
-          `${response.message || 'Khong cap nhat duoc danh gia.'}${
+          `${response.message || 'Không cập nhật được đánh giá.'}${
             response.statusCode ? ` (HTTP ${response.statusCode})` : ''
           }`,
         );
       }
 
       setReviews((current) => current.filter((review) => review.reviewId !== reviewId));
-      toast.success(action === 'approve' ? 'Da duyet danh gia.' : 'Da tu choi danh gia.');
+      toast.success(action === 'approve' ? 'Đã duyệt đánh giá.' : 'Đã từ chối đánh giá.');
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Khong cap nhat duoc danh gia.'));
+      toast.error(getErrorMessage(err, 'Không cập nhật được đánh giá.'));
     } finally {
       setProcessing((current) => {
         const next = { ...current };
@@ -160,23 +160,23 @@ export default function ReviewModeration() {
             Reviews
           </p>
           <h1 className="mt-2 text-2xl font-black uppercase tracking-wide">
-            Hang doi kiem duyet
+            Hàng đợi kiểm duyệt
           </h1>
           <p className="mt-1 text-sm text-slate-400">
-            Cac danh gia moi nhat dang cho admin xu ly.
+            Các đánh giá mới nhất đang chờ admin xử lý.
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:w-[360px]">
           <div className="rounded-lg border border-slate-800 bg-[#111C44] p-4">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-              Trong hang doi
+              Trong hàng đợi
             </p>
             <p className="mt-1 text-2xl font-black text-white">{reviews.length}</p>
           </div>
           <div className="rounded-lg border border-slate-800 bg-[#111C44] p-4">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-              Can chu y
+              Cần chú ý
             </p>
             <p className="mt-1 text-2xl font-black text-amber-200">{flaggedCount}</p>
           </div>
@@ -185,15 +185,15 @@ export default function ReviewModeration() {
 
       <section className="overflow-hidden rounded-lg border border-slate-800 bg-[#111C44] shadow-2xl">
         <div className="grid grid-cols-[1.1fr_180px_160px_220px] border-b border-slate-800 px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-500">
-          <span>Noi dung</span>
-          <span>So sao</span>
-          <span>Trang thai</span>
-          <span className="text-right">Thao tac</span>
+          <span>Nội dung</span>
+          <span>Số sao</span>
+          <span>Trạng thái</span>
+          <span className="text-right">Thao tác</span>
         </div>
 
         {loading ? (
           <div className="p-8 text-center text-sm font-bold text-slate-400">
-            Dang tai hang doi kiem duyet...
+            Đang tải hàng đợi kiểm duyệt...
           </div>
         ) : error ? (
           <div className="m-5 rounded-lg border border-rose-500/30 bg-rose-500/10 p-5 text-sm font-bold text-rose-200">
@@ -204,8 +204,8 @@ export default function ReviewModeration() {
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-200">
               <FaCheck />
             </div>
-            <p className="text-lg font-black">Khong con review nao can kiem duyet</p>
-            <p className="text-sm text-slate-400">Hang doi hien dang trong.</p>
+            <p className="text-lg font-black">Không còn đánh giá nào cần kiểm duyệt</p>
+            <p className="text-sm text-slate-400">Hàng đợi hiện đang trống.</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-800">
@@ -229,7 +229,7 @@ export default function ReviewModeration() {
                       <span>{formatReviewDate(review.createdAt)}</span>
                     </div>
                     <p className="line-clamp-3 text-sm leading-6 text-slate-100">
-                      {review.comment?.trim() || 'Khong co noi dung binh luan.'}
+                      {review.comment?.trim() || 'Không có nội dung bình luận.'}
                     </p>
                     {review.rejectedReason ? (
                       <p className="mt-2 flex items-center gap-2 text-xs font-bold text-amber-200">
@@ -250,7 +250,7 @@ export default function ReviewModeration() {
                       className="inline-flex items-center gap-2 rounded-md bg-emerald-500 px-4 py-2 text-xs font-black uppercase text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <FaCheck />
-                      {currentAction === 'approve' ? 'Dang duyet' : 'Duyet'}
+                      {currentAction === 'approve' ? 'Đang duyệt' : 'Duyệt'}
                     </button>
                     <button
                       type="button"
@@ -259,7 +259,7 @@ export default function ReviewModeration() {
                       className="inline-flex items-center gap-2 rounded-md bg-rose-500 px-4 py-2 text-xs font-black uppercase text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <FaTimes />
-                      {currentAction === 'reject' ? 'Dang tu choi' : 'Tu choi'}
+                      {currentAction === 'reject' ? 'Đang từ chối' : 'Từ chối'}
                     </button>
                   </div>
                 </article>
