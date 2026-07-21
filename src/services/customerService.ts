@@ -75,10 +75,11 @@ export const customerService = {
     return unwrapApiResponse<RequestEmailChangeResponse>(response);
   },
 
-  verifyEmailChange: async (newEmail: string, otp: string) => {
+  verifyEmailChange: async (newEmail: string, otp: string, oldEmailOtp: string) => {
     const response = await api.post('/api/customer/verify-email-change', {
       newEmail,
       otp,
+      oldEmailOtp,
     });
     return unwrapApiResponse<{ email?: string }>(response);
   },

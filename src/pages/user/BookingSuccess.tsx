@@ -9,18 +9,8 @@ import {
 } from "../../services/bookingService";
 import { removeCheckoutAttempt } from "../../services/checkoutAttempt";
 
-const normalizeBackendDate = (value?: string | null) => {
-  if (!value) {
-    return "";
-  }
 
-  return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
-};
 
-const parseBackendTime = (value?: string | null) => {
-  const timestamp = Date.parse(normalizeBackendDate(value));
-  return Number.isNaN(timestamp) ? 0 : timestamp;
-};
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";

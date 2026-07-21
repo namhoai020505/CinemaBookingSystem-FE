@@ -33,6 +33,7 @@ import MyVouchers from './pages/user/MyVouchers';
 import ManageVouchers from './pages/admin/ManageVouchers';
 import RefundClaimPage from './pages/user/RefundClaimPage';
 import VnpayReturn from './pages/user/VnpayReturn';
+import ConfirmTimeChangePage from './pages/user/ConfirmTimeChangePage';
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
@@ -71,6 +72,7 @@ const router = createBrowserRouter([
           { path: '/', element: <Home /> },
           { path: '/movie/:movieId/showtimes', element: <MovieShowtimes /> },
           { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
+          { path: '/booking/confirm-time-change', element: <ConfirmTimeChangePage /> },
           {
             element: <RequireAuth allowedRoles={customerRoles} />,
             children: [

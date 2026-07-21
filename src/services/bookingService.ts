@@ -277,5 +277,16 @@ export const bookingService = {
   cancelPendingBooking: async (bookingId: string | number) => {
     const response = await axiosInstance.post(`/api/bookings/${bookingId}/cancel`) as unknown as ApiResponse<void>;
     return response;
+  },
+
+  confirmTimeChange: async (
+    bookingId: string,
+    accept: boolean,
+    token: string,
+  ): Promise<ApiResponse<boolean>> => {
+    const response = await axiosInstance.get(`/api/bookings/${bookingId}/confirm-time-change`, {
+      params: { accept, token },
+    }) as unknown as ApiResponse<boolean>;
+    return response;
   }
 };

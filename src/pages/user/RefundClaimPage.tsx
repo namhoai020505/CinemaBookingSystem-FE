@@ -22,8 +22,6 @@ export default function RefundClaimPage() {
   const token = searchParams.get('token') || searchParams.get('t');
   const navigate = useNavigate();
 
-  // Loading & Error States for Resolution
-  const [resolving, setResolving] = useState(false);
   const [claimInfo, setClaimInfo] = useState<RefundClaimResponse | null>(null);
   const [errorText, setErrorText] = useState('');
 
@@ -66,7 +64,6 @@ export default function RefundClaimPage() {
   // ─── Resolve Token ──────────────────────────────────────────────────────────
   const resolveToken = useCallback(async (tokenVal: string) => {
     try {
-      setResolving(true);
       setErrorText('');
       setFlowState('RESOLVING');
       const data = await customerRefundService.resolveClaim(tokenVal);
@@ -86,8 +83,6 @@ export default function RefundClaimPage() {
       const msg = err instanceof Error ? err.message : 'Không xác thực được liên kết hoàn tiền này.';
       setErrorText(msg);
       setFlowState('ERROR');
-    } finally {
-      setResolving(false);
     }
   }, []);
 

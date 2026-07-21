@@ -6,7 +6,6 @@ import {
   FaClipboard,
   FaExclamationTriangle,
   FaHandshake,
-  FaMoneyBillWave,
   FaSearch,
   FaSyncAlt,
   FaUniversity,
@@ -38,23 +37,6 @@ const ALL_STATUSES = [
   { value: 'SUCCESS', label: 'SUCCESS (Thành công)' },
   { value: 'FAILED', label: 'FAILED (Thất bại)' }
 ];
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function ManualBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    OPEN: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    INPROGRESS: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
-    CONFIRMED: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  };
-  const normalized = status.toUpperCase().replace(/[_\s]/g, '');
-  const cls = colorMap[normalized] ?? 'bg-slate-500/10 text-slate-400 border-slate-500/20';
-  return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase ${cls}`}>
-      {status}
-    </span>
-  );
-}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
