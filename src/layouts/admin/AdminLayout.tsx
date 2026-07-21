@@ -1,21 +1,62 @@
+import { useEffect, useState } from 'react';
+import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import { Outlet } from 'react-router-dom';
+
+export type ThemeMode = 'dark' | 'light';
+
+export type AdminOutletContext = {
+  themeMode: ThemeMode;
+  isLightMode: boolean;
+};
+
+const THEME_STORAGE_KEY = 'g2c-theme';
+
+const getInitialTheme = (): ThemeMode => {
+  if (typeof window === 'undefined') {
+    return 'dark';
+  }
+
+  return localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
+};
 
 const AdminLayout = () => {
-  return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      {/* Cột trái: Sidebar */}
-      <Sidebar />
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme);
+  const isLightMode = themeMode === 'light';
 
-      {/* Cột phải: Topbar + Nội dung trang */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <Topbar />
-        
-        {/* Khu vực thay đổi nội dung (Dashboard, Movies, v.v. sẽ render ở đây) */}
-        <div style={{ padding: '20px', background: '#fff', flex: 1 }}>
-          <Outlet /> 
-        </div>
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    document.documentElement.classList.toggle('light', isLightMode);
+    document.documentElement.classList.toggle('dark', !isLightMode);
+    document.body.classList.toggle('g2c-light-mode', isLightMode);
+    localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+  }, [isLightMode, themeMode]);
+
+  const toggleSidebar = () => setSidebarCollapsed((current) => !current);
+  const toggleTheme = () => {
+    setThemeMode((current) => (current === 'light' ? 'dark' : 'light'));
+  };
+
+  return (
+    <div
+      className={`flex h-screen overflow-hidden font-['Urbanist'] transition-colors duration-300 ${
+        isLightMode ? 'bg-slate-100 text-slate-950' : 'bg-[#070B14] text-white'
+      }`}
+    >
+      <Sidebar collapsed={sidebarCollapsed} isLightMode={isLightMode} />
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <Topbar
+          sidebarCollapsed={sidebarCollapsed}
+          isLightMode={isLightMode}
+          onToggle={toggleSidebar}
+          onToggleTheme={toggleTheme}
+        />
+
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+          <Outlet context={{ themeMode, isLightMode } satisfies AdminOutletContext} />
+        </main>
       </div>
     </div>
   );

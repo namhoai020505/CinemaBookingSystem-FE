@@ -1,2 +1,635 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
 @import "tailwindcss";
+@config "../tailwind.config.js";
+
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+:root {
+  --g2c-light-bg: #F8FAFC;
+  --g2c-light-navbar: #F1F5F9;
+  --g2c-light-card: #FFFFFF;
+  --g2c-light-border: #E2E8F0;
+  --g2c-light-text: #0F172A;
+  --g2c-light-muted: #334155;
+  --g2c-light-accent: #FFD166;
+  --g2c-light-accent-bright: #FFE7A3;
+  --g2c-light-text-accent: #B45309;
+}
+
+html.light,
+body.g2c-light-mode {
+  color-scheme: light;
+}
+
+body.g2c-light-mode,
+body.g2c-light-mode #root {
+  background: var(--g2c-light-bg);
+  color: var(--g2c-light-text);
+}
+
+body.g2c-light-mode .bg-\[\#182437\],
+body.g2c-light-mode .bg-\[\#162338\],
+body.g2c-light-mode .bg-\[\#0A0A0C\],
+body.g2c-light-mode .bg-gray-50 {
+  background-color: var(--g2c-light-bg) !important;
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .bg-\[\#0F172A\],
+body.g2c-light-mode .bg-\[\#1E293B\],
+body.g2c-light-mode .bg-\[\#1C2A3D\],
+body.g2c-light-mode .bg-\[\#142039\],
+body.g2c-light-mode .bg-\[\#111827\],
+body.g2c-light-mode .bg-\[\#17264a\],
+body.g2c-light-mode .bg-slate-900,
+body.g2c-light-mode .bg-slate-900\/15 {
+  background-color: var(--g2c-light-navbar) !important;
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .bg-\[\#111C44\],
+body.g2c-light-mode .bg-\[\#111C44\]\/80,
+body.g2c-light-mode .bg-\[\#101c34\],
+body.g2c-light-mode .bg-\[\#0f1b35\],
+body.g2c-light-mode .bg-\[\#0D1637\],
+body.g2c-light-mode .bg-\[\#0D1637\]\/40,
+body.g2c-light-mode .bg-\[\#0D1637\]\/60,
+body.g2c-light-mode .bg-white\/\[0\.03\],
+body.g2c-light-mode .bg-white\/5,
+body.g2c-light-mode .bg-white\/10 {
+  background-color: var(--g2c-light-card) !important;
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .border-white\/5,
+body.g2c-light-mode .border-white\/10,
+body.g2c-light-mode .border-white\/15,
+body.g2c-light-mode .border-white\/20,
+body.g2c-light-mode .border-white\/25,
+body.g2c-light-mode .border-white\/30,
+body.g2c-light-mode .border-white\/40,
+body.g2c-light-mode .border-white\/50,
+body.g2c-light-mode .border-gray-900,
+body.g2c-light-mode .border-gray-800,
+body.g2c-light-mode .border-gray-800\/30,
+body.g2c-light-mode .border-gray-800\/40,
+body.g2c-light-mode .border-gray-800\/50,
+body.g2c-light-mode .border-gray-800\/55,
+body.g2c-light-mode .border-gray-800\/60,
+body.g2c-light-mode .border-gray-800\/65,
+body.g2c-light-mode .border-gray-700,
+body.g2c-light-mode .border-gray-700\/40,
+body.g2c-light-mode .border-gray-600,
+body.g2c-light-mode .border-slate-900,
+body.g2c-light-mode .border-slate-800,
+body.g2c-light-mode .border-slate-700,
+body.g2c-light-mode .border-slate-700\/30,
+body.g2c-light-mode .border-slate-700\/40,
+body.g2c-light-mode .border-slate-600,
+body.g2c-light-mode .border-\[\#474747\],
+body.g2c-light-mode .border-\[\#1e293b\],
+body.g2c-light-mode .border-\[\#1E293B\],
+body.g2c-light-mode .border-\[\#334155\] {
+  border-color: var(--g2c-light-border) !important;
+}
+
+/* Global divider overrides for light mode */
+body.g2c-light-mode [class*="divide-gray"] > :not([hidden]) ~ :not([hidden]),
+body.g2c-light-mode [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]),
+body.g2c-light-mode [class*="divide-white"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--g2c-light-border) !important;
+}
+
+/* Primary text overrides for light mode */
+body.g2c-light-mode .text-white,
+body.g2c-light-mode .text-white\/90,
+body.g2c-light-mode .text-white\/85,
+body.g2c-light-mode .text-white\/80,
+body.g2c-light-mode .text-slate-100,
+body.g2c-light-mode .text-slate-200,
+body.g2c-light-mode .text-gray-100,
+body.g2c-light-mode .text-gray-200,
+body.g2c-light-mode .text-gray-900,
+body.g2c-light-mode .text-slate-900,
+body.g2c-light-mode .text-slate-950 {
+  color: var(--g2c-light-text) !important;
+}
+
+/* Secondary / muted text overrides for light mode */
+body.g2c-light-mode .text-white\/75,
+body.g2c-light-mode .text-white\/70,
+body.g2c-light-mode .text-white\/65,
+body.g2c-light-mode .text-white\/60,
+body.g2c-light-mode .text-white\/55,
+body.g2c-light-mode .text-white\/50,
+body.g2c-light-mode .text-white\/45,
+body.g2c-light-mode .text-white\/35,
+body.g2c-light-mode .text-slate-300,
+body.g2c-light-mode .text-slate-400,
+body.g2c-light-mode .text-slate-500,
+body.g2c-light-mode .text-slate-600,
+body.g2c-light-mode .text-gray-300,
+body.g2c-light-mode .text-gray-400,
+body.g2c-light-mode .text-gray-500,
+body.g2c-light-mode .text-gray-600 {
+  color: var(--g2c-light-muted) !important;
+}
+
+body.g2c-light-mode .hover\:text-white:hover,
+body.g2c-light-mode .hover\:text-white\/90:hover,
+body.g2c-light-mode .hover\:text-white\/80:hover,
+body.g2c-light-mode .hover\:text-white\/70:hover {
+  color: var(--g2c-light-text) !important;
+}
+
+/* Success status text colors */
+body.g2c-light-mode .text-emerald-50,
+body.g2c-light-mode .text-emerald-100,
+body.g2c-light-mode .text-emerald-200,
+body.g2c-light-mode .text-emerald-300,
+body.g2c-light-mode .text-emerald-400,
+body.g2c-light-mode .text-emerald-500,
+body.g2c-light-mode .text-green-50,
+body.g2c-light-mode .text-green-100,
+body.g2c-light-mode .text-green-200,
+body.g2c-light-mode .text-green-300,
+body.g2c-light-mode .text-green-400,
+body.g2c-light-mode .text-green-500 {
+  color: #065F46 !important;
+}
+
+/* Error status text colors */
+body.g2c-light-mode .text-rose-50,
+body.g2c-light-mode .text-rose-100,
+body.g2c-light-mode .text-rose-200,
+body.g2c-light-mode .text-rose-300,
+body.g2c-light-mode .text-rose-400,
+body.g2c-light-mode .text-rose-500,
+body.g2c-light-mode .text-red-50,
+body.g2c-light-mode .text-red-100,
+body.g2c-light-mode .text-red-200,
+body.g2c-light-mode .text-red-300,
+body.g2c-light-mode .text-red-400,
+body.g2c-light-mode .text-red-500 {
+  color: #9F1239 !important;
+}
+
+/* Blue info status text colors */
+body.g2c-light-mode .text-blue-50,
+body.g2c-light-mode .text-blue-100,
+body.g2c-light-mode .text-blue-200,
+body.g2c-light-mode .text-blue-300,
+body.g2c-light-mode .text-blue-400,
+body.g2c-light-mode .text-blue-500 {
+  color: #1E40AF !important;
+}
+
+/* Warning status text colors */
+body.g2c-light-mode .text-amber-50,
+body.g2c-light-mode .text-amber-100,
+body.g2c-light-mode .text-amber-200,
+body.g2c-light-mode .text-amber-300,
+body.g2c-light-mode .text-amber-400,
+body.g2c-light-mode .text-amber-500,
+body.g2c-light-mode .text-yellow-50,
+body.g2c-light-mode .text-yellow-100,
+body.g2c-light-mode .text-yellow-200,
+body.g2c-light-mode .text-yellow-300,
+body.g2c-light-mode .text-yellow-400,
+body.g2c-light-mode .text-yellow-500 {
+  color: #92400E !important;
+}
+
+/* Purple text colors */
+body.g2c-light-mode .text-purple-50,
+body.g2c-light-mode .text-purple-100,
+body.g2c-light-mode .text-purple-200,
+body.g2c-light-mode .text-purple-300,
+body.g2c-light-mode .text-purple-400,
+body.g2c-light-mode .text-purple-500 {
+  color: #6D28D9 !important;
+}
+
+/* Cyan status text colors */
+body.g2c-light-mode .text-cyan-50,
+body.g2c-light-mode .text-cyan-100,
+body.g2c-light-mode .text-cyan-200,
+body.g2c-light-mode .text-cyan-300,
+body.g2c-light-mode .text-cyan-400,
+body.g2c-light-mode .text-cyan-500 {
+  color: #0369A1 !important;
+}
+
+/* Special accent text [#FFD166] override for high contrast */
+body.g2c-light-mode .text-\[\#FFD166\],
+body.g2c-light-mode .hover\:text-\[\#FFD166\]:hover {
+  color: var(--g2c-light-text-accent) !important;
+}
+
+/* Status backgrounds for light mode */
+body.g2c-light-mode .bg-rose-950,
+body.g2c-light-mode .bg-rose-950\/40,
+body.g2c-light-mode .bg-rose-950\/60,
+body.g2c-light-mode .bg-rose-900,
+body.g2c-light-mode .bg-rose-900\/40,
+body.g2c-light-mode .bg-rose-500\/10,
+body.g2c-light-mode .bg-rose-500\/15 {
+  background-color: #FFE4E6 !important;
+  background-image: none !important;
+}
+
+body.g2c-light-mode .bg-emerald-950,
+body.g2c-light-mode .bg-emerald-950\/40,
+body.g2c-light-mode .bg-emerald-950\/60,
+body.g2c-light-mode .bg-emerald-900,
+body.g2c-light-mode .bg-emerald-900\/40,
+body.g2c-light-mode .bg-emerald-500\/10,
+body.g2c-light-mode .bg-emerald-500\/15 {
+  background-color: #D1FAE5 !important;
+  background-image: none !important;
+}
+
+body.g2c-light-mode .bg-amber-950,
+body.g2c-light-mode .bg-amber-950\/40,
+body.g2c-light-mode .bg-amber-950\/60,
+body.g2c-light-mode .bg-amber-900,
+body.g2c-light-mode .bg-amber-900\/40,
+body.g2c-light-mode .bg-amber-500\/10,
+body.g2c-light-mode .bg-amber-500\/15 {
+  background-color: #FEF3C7 !important;
+  background-image: none !important;
+}
+
+body.g2c-light-mode .bg-blue-950,
+body.g2c-light-mode .bg-blue-950\/40,
+body.g2c-light-mode .bg-blue-950\/60,
+body.g2c-light-mode .bg-blue-900,
+body.g2c-light-mode .bg-blue-900\/40,
+body.g2c-light-mode .bg-blue-500\/10,
+body.g2c-light-mode .bg-blue-500\/15 {
+  background-color: #DBEAFE !important;
+  background-image: none !important;
+}
+
+body.g2c-light-mode .bg-purple-950,
+body.g2c-light-mode .bg-purple-950\/40,
+body.g2c-light-mode .bg-purple-900,
+body.g2c-light-mode .bg-purple-900\/40,
+body.g2c-light-mode .bg-purple-500\/10,
+body.g2c-light-mode .bg-purple-500\/15 {
+  background-color: #F3E8FF !important;
+  background-image: none !important;
+}
+
+body.g2c-light-mode .bg-cyan-950,
+body.g2c-light-mode .bg-cyan-950\/40,
+body.g2c-light-mode .bg-cyan-900,
+body.g2c-light-mode .bg-cyan-900\/40,
+body.g2c-light-mode .bg-cyan-500\/10,
+body.g2c-light-mode .bg-cyan-500\/15 {
+  background-color: #E0F2FE !important;
+  background-image: none !important;
+}
+
+/* Border adjustments for light mode colored containers */
+body.g2c-light-mode .border-rose-500\/30,
+body.g2c-light-mode .border-rose-400\/40,
+body.g2c-light-mode .border-rose-400\/30 {
+  border-color: #FECDD3 !important;
+}
+
+body.g2c-light-mode .border-emerald-500\/30,
+body.g2c-light-mode .border-emerald-400\/40,
+body.g2c-light-mode .border-emerald-400\/30 {
+  border-color: #A7F3D0 !important;
+}
+
+body.g2c-light-mode .border-amber-500\/30,
+body.g2c-light-mode .border-amber-400\/40,
+body.g2c-light-mode .border-amber-400\/30 {
+  border-color: #FDE68A !important;
+}
+
+body.g2c-light-mode .border-blue-500\/30,
+body.g2c-light-mode .border-blue-400\/40,
+body.g2c-light-mode .border-blue-400\/30 {
+  border-color: #BFDBFE !important;
+}
+
+body.g2c-light-mode .bg-\[\#FFD166\],
+body.g2c-light-mode .hover\:bg-\[\#FFE7A3\]:hover {
+  background-color: var(--g2c-light-accent) !important;
+  background-image: none !important;
+  color: #000000 !important;
+}
+
+body.g2c-light-mode .bg-gradient-to-r.from-\[\#FFD166\],
+body.g2c-light-mode .bg-gradient-to-br.from-\[\#FFD166\] {
+  background-color: var(--g2c-light-accent) !important;
+  background-image: linear-gradient(90deg, #FFD166 0%, #FFE7A3 100%) !important;
+  color: #000000 !important;
+}
+
+body.g2c-light-mode .border-\[\#FFD166\]\/20,
+body.g2c-light-mode .border-\[\#FFD166\]\/30,
+body.g2c-light-mode .border-\[\#FFD166\]\/40 {
+  border-color: color-mix(in srgb, var(--g2c-light-accent) 45%, white) !important;
+}
+
+body.g2c-light-mode .bg-\[\#FFD166\]\/10 {
+  background-color: color-mix(in srgb, var(--g2c-light-accent-bright) 18%, white) !important;
+}
+
+/* Ensure buttons and gradients keep light text color if they are dark-themed */
+body.g2c-light-mode .bg-gradient-to-r:not(.from-\[\#FFD166\]),
+body.g2c-light-mode .bg-gradient-to-br:not(.from-\[\#FFD166\]),
+body.g2c-light-mode button.bg-blue-600,
+body.g2c-light-mode button.bg-red-600,
+body.g2c-light-mode button.bg-rose-500,
+body.g2c-light-mode button.bg-rose-600,
+body.g2c-light-mode button.bg-emerald-600,
+body.g2c-light-mode button.bg-cyan-600,
+body.g2c-light-mode button.bg-slate-700,
+body.g2c-light-mode a.bg-cyan-600,
+body.g2c-light-mode .bg-blue-600,
+body.g2c-light-mode .bg-blue-700,
+body.g2c-light-mode .bg-red-600,
+body.g2c-light-mode .bg-rose-600,
+body.g2c-light-mode .bg-emerald-600 {
+  color: #FFFFFF !important;
+}
+
+body.g2c-light-mode .bg-gradient-to-r:not(.from-\[\#FFD166\]) *,
+body.g2c-light-mode .bg-gradient-to-br:not(.from-\[\#FFD166\]) *,
+body.g2c-light-mode button.bg-blue-600 *,
+body.g2c-light-mode button.bg-rose-600 *,
+body.g2c-light-mode button.bg-red-600 *,
+body.g2c-light-mode button.bg-emerald-600 * {
+  color: inherit !important;
+}
+
+body.g2c-light-mode .movie-card,
+body.g2c-light-mode article.overflow-hidden,
+body.g2c-light-mode aside.rounded-lg,
+body.g2c-light-mode section.rounded-lg {
+  background-color: var(--g2c-light-card) !important;
+  border-color: var(--g2c-light-border) !important;
+  color: var(--g2c-light-text) !important;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08) !important;
+}
+
+body.g2c-light-mode input,
+body.g2c-light-mode textarea,
+body.g2c-light-mode select {
+  background-color: #FFFFFF !important;
+  border-color: var(--g2c-light-border) !important;
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode ::placeholder,
+body.g2c-light-mode input::placeholder,
+body.g2c-light-mode textarea::placeholder {
+  color: #64748B !important;
+}
+
+body.g2c-light-mode .shadow-black\/20,
+body.g2c-light-mode .shadow-2xl,
+body.g2c-light-mode .shadow-xl {
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08) !important;
+}
+
+body.g2c-light-mode .g2c-topbar {
+  background-color: var(--g2c-light-navbar) !important;
+  color: var(--g2c-light-text) !important;
+}
+
+body.g2c-light-mode .g2c-topbar a,
+body.g2c-light-mode .g2c-topbar button {
+  color: inherit;
+}
+
+body.g2c-light-mode .g2c-topbar button[aria-label] {
+  background-color: #FFD166 !important;
+  border-color: #FFD166 !important;
+  color: #1E293B !important;
+}
+
+/* Light-mode scrollbars */
+body.g2c-light-mode * {
+  scrollbar-color: #CBD5E1 #F1F5F9;
+}
+
+body.g2c-light-mode ::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+body.g2c-light-mode ::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-color: #F1F5F9;
+}
+
+body.g2c-light-mode ::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+body:not(.g2c-light-mode) .text-black:not(.bg-\[\#FFD166\]):not(.bg-gradient-to-r):not(.bg-gradient-to-br):not(.bg-white):not(.bg-amber-500):not(.bg-yellow-300),
+body:not(.g2c-light-mode) .text-\[\#0F172A\]:not(.bg-gradient-to-r):not(.bg-gradient-to-br),
+body:not(.g2c-light-mode) .text-\[\#111827\],
+body:not(.g2c-light-mode) .text-\[\#1E293B\],
+body:not(.g2c-light-mode) .text-slate-950:not(.bg-yellow-300):not(.bg-amber-500),
+body:not(.g2c-light-mode) .text-slate-900,
+body:not(.g2c-light-mode) .text-gray-900 {
+  color: #FFFFFF !important;
+}
+
+/* Global Custom Scrollbar for all elements */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1E293B #0F172A;
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0F172A;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1E293B;
+  border-radius: 4px;
+  border: 2px solid #0F172A;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+/* High contrast and readability overrides in dark mode */
+html.dark,
+body:not(.g2c-light-mode) {
+  /* Increase contrast of muted/secondary texts */
+  .text-slate-400,
+  .text-gray-400,
+  .text-white\/60,
+  .text-white\/70,
+  .text-slate-300,
+  .text-gray-300 {
+    color: #CBD5E1 !important;
+  }
+
+  .text-slate-500,
+  .text-gray-500,
+  .text-white\/50 {
+    color: #94A3B8 !important;
+  }
+
+  .text-slate-600,
+  .text-gray-600,
+  .text-white\/45,
+  .text-white\/40,
+  .text-slate-400\/80 {
+    color: #78889B !important;
+  }
+
+  /* Elevate main backdrop backgrounds to deepest dark */
+  .bg-\[\#182437\],
+  .bg-\[\#162338\],
+  .bg-\[\#080B12\],
+  .bg-\[\#070B14\],
+  .bg-\[\#07111E\],
+  .bg-\[\#1E293B\] {
+    background-color: #070B14 !important;
+  }
+
+  /* Elevate cards/sidebar/sections for modern contrast and depth */
+  .bg-\[\#101826\],
+  .bg-\[\#0F172A\],
+  .bg-\[\#0f1b35\],
+  .bg-\[\#101c34\],
+  .bg-\[\#111C44\] {
+    background-color: #131C2E !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+  }
+
+  /* Elevate inputs, nested panels, and badges */
+  .bg-\[\#0B1220\],
+  .bg-\[\#111827\],
+  .bg-\[\#0D1637\],
+  .bg-white\/\[0\.03\],
+  .bg-white\/5 {
+    background-color: #090E1A !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+}
+
+/* Override existing inline font-['Urbanist'] references to use Plus Jakarta Sans for proper Vietnamese support */
+.font-\[\'Urbanist\'\] {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+
+
+
+
+
+
 
