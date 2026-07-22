@@ -60,15 +60,7 @@ type Props = {
   onClose: () => void;
 };
 
-const weekdays = [
-  "Chủ Nhật",
-  "Thứ Hai",
-  "Thứ Ba",
-  "Thứ Tư",
-  "Thứ Năm",
-  "Thứ Sáu",
-  "Thứ Bảy",
-];
+const weekdayLabels = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
 const SHOWTIME_VISIBILITY_REFRESH_MS = 30_000;
 
@@ -98,24 +90,15 @@ const getDateKey = (value: string) => {
   return normalizedValue.split("T")[0] || "";
 };
 
-const getTodayKey = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const date = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${date}`;
-};
-
 const buildDayTab = (dateValue: string): DayTab => {
   const [, month, date] = dateValue.split("-");
   const dateObject = new Date(`${dateValue}T00:00:00`);
-  const label =
-    dateValue === getTodayKey()
-      ? "Hôm nay"
-      : weekdays[Number.isNaN(dateObject.getTime()) ? 0 : dateObject.getDay()];
+  const weekdayIndex = Number.isNaN(dateObject.getTime())
+    ? 0
+    : dateObject.getDay();
 
   return {
-    label,
+    label: weekdayLabels[weekdayIndex],
     dateDisplay: `${date}/${month}`,
     dateValue,
   };
@@ -458,7 +441,7 @@ export default function ShowtimePickerModal({
                         {day.dateDisplay.split("/")[0]}
                       </span>
                       <span className="ml-0.5 text-sm font-bold">
-                        /{day.dateDisplay.split("/")[1]} - {day.label.slice(0, 2).toUpperCase()}
+                        /{day.dateDisplay.split("/")[1]} - {day.label}
                       </span>
                     </button>
                   );
@@ -483,7 +466,7 @@ export default function ShowtimePickerModal({
                     {cinema.roomGroups.map((room) => (
                       <div key={room.roomId} className="grid gap-4 sm:grid-cols-[130px_1fr]">
                         <div className="pt-2 text-sm font-black text-white">
-                          2D Phụ đề
+                          {room.roomName || `Phòng ${room.roomId}`}
                         </div>
 
                         <div className="flex flex-wrap gap-5">

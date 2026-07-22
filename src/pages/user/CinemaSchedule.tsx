@@ -364,7 +364,9 @@ export default function CinemaSchedule() {
         if (!movieGroup.roomMap.has(roomKey)) {
           const roomGroup = {
             roomId: roomKey,
-            roomName: showtime.roomName || "2D Phụ đề",
+            roomName:
+              showtime.roomName ||
+              (roomKey !== "ROOM_DEFAULT" ? `Phòng ${roomKey}` : "Phòng chiếu"),
             slots: [],
           };
           movieGroup.roomMap.set(roomKey, roomGroup);
@@ -493,7 +495,7 @@ export default function CinemaSchedule() {
             {group.roomGroups.map((room) => (
               <section key={room.roomId}>
                 <h3 className="mb-3 text-base font-black text-white">
-                  {room.roomName || "2D Phụ đề"}
+                  {room.roomName || `Phòng ${room.roomId}`}
                 </h3>
                 <div className="flex flex-wrap gap-3">
                   {room.slots.map(renderSlotButton)}
