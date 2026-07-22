@@ -36,6 +36,7 @@ import Home from './pages/user/Home';
 import MovieShowtimes from './pages/user/MovieShowtimes';
 import Movies from './pages/user/Movies';
 import MyBookings from './pages/user/MyBookings';
+import MyVouchers from './pages/user/MyVouchers';
 import Profile from './pages/user/Profile';
 import SeatSelection from './pages/user/SeatSelection';
 import TicketPrices from './pages/user/TicketPrices';
@@ -72,6 +73,7 @@ const router = createBrowserRouter([
               { path: '/booking/checkout/:showtimeId', element: <Checkout /> },
               { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
               { path: '/my-bookings', element: <MyBookings /> },
+              { path: '/my-vouchers', element: <MyVouchers /> },
               { path: '/profile', element: <Profile /> },
             ],
           },

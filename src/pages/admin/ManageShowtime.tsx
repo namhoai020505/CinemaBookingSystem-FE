@@ -8,7 +8,16 @@ import {
   type CinemaResponse,
   type RoomResponse,
   type MovieResponse,
+  type CreateShowtimePayload,
 } from "../../services/showtimeService";
+import { voucherService, type Voucher } from "../../services/voucherService";
+import {
+  buildRecurringShowtimeDrafts,
+  getRecurringDateKeys,
+  type RecurrenceFrequency,
+  type RecurrenceSourceShowtime,
+  type RecurringShowtimeDraft,
+} from "../../utils/showtimeRecurrence";
 
 // =================================================================
 // 💡 CẤU HÌNH TIMELINE CHUẨN: 8H ĐẾN 24H (16 TIẾNG)
@@ -19,6 +28,17 @@ const TOTAL_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR; // 16 tiếng
 const HOUR_WIDTH = 120; // 1 tiếng cố định đúng 120px
 const MINUTE_WIDTH = HOUR_WIDTH / 60; // ~2px cho mỗi phút
 const DEFAULT_BASE_PRICE = 75000; // Giá vé mặc định 75.000đ
+
+const RECURRENCE_OPTIONS: Array<{
+  value: RecurrenceFrequency;
+  label: string;
+  helper: string;
+}> = [
+  { value: "NONE", label: "Không lặp", helper: "Chỉ tạo suất trong ngày đang chọn." },
+  { value: "DAILY", label: "Hàng ngày", helper: "Tạo thêm mỗi ngày đến ngày kết thúc." },
+  { value: "WEEKLY", label: "Hàng tuần", helper: "Tạo thêm cùng thứ mỗi tuần." },
+  { value: "MONTHLY", label: "Hàng tháng", helper: "Tạo thêm cùng ngày trong tháng." },
+];
 
 // =================================================================
 // 💡 PALETTE MÀU TỰ ĐỘNG CHO CÁC PHIM
@@ -112,6 +132,28 @@ const formatDateToYMD = (date: Date): string => {
   return `${y}-${m}-${d}`;
 };
 
+const formatVoucherDiscount = (voucher: Voucher): string => {
+  if (voucher.discountType === "PERCENT") {
+    return `${voucher.discountValue}%`;
+  }
+
+  return `${new Intl.NumberFormat("vi-VN").format(voucher.discountValue)}đ`;
+};
+
+const getVoucherScopeLabel = (voucher: Voucher): string => {
+  switch ((voucher.applicableScope || "").toUpperCase()) {
+    case "TICKET_ONLY":
+      return "tiền vé";
+    case "FOOD_BEVERAGE_ONLY":
+      return "F&B";
+    default:
+      return "toàn đơn";
+  }
+};
+
+const getCompensationVoucherLabel = (voucher: Voucher): string =>
+  `${voucher.voucherCode} - ${voucher.title || "Voucher đền bù"} (${formatVoucherDiscount(voucher)} · ${getVoucherScopeLabel(voucher)})`;
+
 /** Tạo ISO datetime từ ngày đã chọn + số phút tính từ 08:00 */
 const minutesFrom8AMToISO = (selectedDate: string, minutesFrom8AM: number): string => {
   const [y, m, d] = selectedDate.split("-").map(Number);
@@ -142,10 +184,13 @@ export default function ManageShowtime() {
   const [rooms, setRooms] = useState<RoomResponse[]>([]);
   const [movies, setMovies] = useState<MovieResponse[]>([]);
   const [allShowtimes, setAllShowtimes] = useState<ShowtimeResponse[]>([]);
+  const [compensationVouchers, setCompensationVouchers] = useState<Voucher[]>([]);
 
   // ---------- State: Bộ lọc ----------
   const [selectedCinemaId, setSelectedCinemaId] = useState("");
   const [selectedDate, setSelectedDate] = useState(formatDateToYMD(new Date()));
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>("NONE");
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
 
   // ---------- Computed: ngày quá khứ (để cảnh báo và khóa chỉnh sửa) ----------
   const isPastDate = selectedDate < formatDateToYMD(new Date());
@@ -243,6 +288,24 @@ export default function ManageShowtime() {
     color: getMovieColor(m.id),
   }));
 
+  const newTempShowtimeCount = React.useMemo(
+    () =>
+      Object.values(schedule).reduce(
+        (count, slots) => count + slots.filter((slot) => slot.id.startsWith("temp_")).length,
+        0,
+      ),
+    [schedule],
+  );
+
+  const recurringDateKeys = React.useMemo(
+    () => getRecurringDateKeys(selectedDate, recurrenceEndDate, recurrenceFrequency),
+    [recurrenceEndDate, recurrenceFrequency, selectedDate],
+  );
+
+  const recurringPreviewCount = newTempShowtimeCount * recurringDateKeys.length;
+  const activeRecurrenceOption =
+    RECURRENCE_OPTIONS.find((option) => option.value === recurrenceFrequency) ?? RECURRENCE_OPTIONS[0];
+
   // =================================================================
   // 💡 FETCH DATA TỪ API
   // =================================================================
@@ -287,6 +350,16 @@ export default function ManageShowtime() {
     }
   }, []);
 
+  const fetchCompensationVouchers = useCallback(async () => {
+    try {
+      const data = await voucherService.getCompensationVouchers();
+      setCompensationVouchers(data);
+    } catch {
+      setCompensationVouchers([]);
+      toast.warn("Không tải được danh sách voucher đền bù. Bạn vẫn có thể đổi phòng nhưng không thể chọn voucher.");
+    }
+  }, []);
+
   /** Fetch toàn bộ data ban đầu */
   useEffect(() => {
     const load = async () => {
@@ -296,6 +369,7 @@ export default function ManageShowtime() {
         fetchRooms(),
         fetchMovies(),
         fetchShowtimes(),
+        fetchCompensationVouchers(),
       ]);
       setLoading(false);
     };
@@ -565,6 +639,8 @@ export default function ManageShowtime() {
 
     setIsDirty(false);
     setDeletedShowtimeIds(new Set());
+    setRecurrenceFrequency("NONE");
+    setRecurrenceEndDate("");
 
     // Nạp lại schedule từ database
     if (filteredRooms.length > 0) {
@@ -610,15 +686,132 @@ export default function ManageShowtime() {
     toast.info(TEXT.SHOWTIME.TOAST_RESTORED_ORIGINAL);
   };
 
+  const buildRecurringDraftsForNewSlots = (newSlotsToCreate: ShowtimeSlot[]): RecurringShowtimeDraft[] => {
+    if (recurrenceFrequency === "NONE" || newSlotsToCreate.length === 0) {
+      return [];
+    }
+
+    if (!recurrenceEndDate) {
+      throw new Error("Vui lòng chọn ngày kết thúc lặp lại.");
+    }
+
+    if (recurrenceEndDate < selectedDate) {
+      throw new Error("Ngày kết thúc lặp lại không được nhỏ hơn ngày bắt đầu.");
+    }
+
+    const recurringDateKeys = getRecurringDateKeys(
+      selectedDate,
+      recurrenceEndDate,
+      recurrenceFrequency,
+    );
+
+    if (recurringDateKeys.length === 0) {
+      throw new Error("Khoảng lặp hiện tại chưa tạo thêm suất nào. Hãy chọn ngày kết thúc xa hơn.");
+    }
+
+    const sources: RecurrenceSourceShowtime[] = newSlotsToCreate.map((slot) => ({
+      sourceId: slot.id,
+      movieId: slot.movieId,
+      roomId: slot.roomId,
+      startMinutesFrom8AM: slot.startMinutesFrom8AM,
+      duration: slot.duration,
+      basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
+      status: slot.status || "OPEN",
+    }));
+
+    const drafts = buildRecurringShowtimeDrafts({
+      sources,
+      frequency: recurrenceFrequency,
+      startDate: selectedDate,
+      endDate: recurrenceEndDate,
+      timelineStartHour: TIMELINE_START_HOUR,
+    });
+
+    const sourceMap = new Map(newSlotsToCreate.map((slot) => [slot.id, slot]));
+    const generatedWindows: Array<{
+      roomId: string;
+      dateKey: string;
+      startMinutesFrom8AM: number;
+      duration: number;
+      movieNameVn: string;
+    }> = [];
+
+    const hasOverlap = (
+      start: number,
+      duration: number,
+      otherStart: number,
+      otherDuration: number,
+    ) => {
+      const cleanUpBuffer = 15;
+      const end = start + duration;
+      const otherEnd = otherStart + otherDuration;
+      return start < otherEnd + cleanUpBuffer && end + cleanUpBuffer > otherStart;
+    };
+
+    for (const draft of drafts) {
+      const source = sourceMap.get(draft.sourceId);
+      if (!source) continue;
+
+      const existingConflict = allShowtimes.find((showtime) => {
+        if (showtime.cinemaId !== selectedCinemaId) return false;
+        if (showtime.roomId !== draft.roomId) return false;
+        if (showtime.status === "CANCELLED") return false;
+        if (showtime.startTime.split("T")[0] !== draft.startDate) return false;
+
+        const existingDuration = Math.max(0, diffMinutes(showtime.startTime, showtime.endTime) - 15);
+        return hasOverlap(
+          source.startMinutesFrom8AM,
+          source.duration,
+          isoToMinutesFrom8AM(showtime.startTime),
+          existingDuration,
+        );
+      });
+
+      if (existingConflict) {
+        const roomName =
+          filteredRooms.find((room) => room.roomId === draft.roomId)?.roomName || draft.roomId;
+        throw new Error(
+          `Lịch lặp ngày ${draft.startDate} tại ${roomName} bị trùng với "${existingConflict.movieTitle}".`,
+        );
+      }
+
+      const generatedConflict = generatedWindows.find(
+        (item) =>
+          item.roomId === draft.roomId &&
+          item.dateKey === draft.startDate &&
+          hasOverlap(
+            source.startMinutesFrom8AM,
+            source.duration,
+            item.startMinutesFrom8AM,
+            item.duration,
+          ),
+      );
+
+      if (generatedConflict) {
+        const roomName =
+          filteredRooms.find((room) => room.roomId === draft.roomId)?.roomName || draft.roomId;
+        throw new Error(
+          `Các suất lặp ngày ${draft.startDate} tại ${roomName} đang tự trùng giờ với "${generatedConflict.movieNameVn}".`,
+        );
+      }
+
+      generatedWindows.push({
+        roomId: draft.roomId,
+        dateKey: draft.startDate,
+        startMinutesFrom8AM: source.startMinutesFrom8AM,
+        duration: source.duration,
+        movieNameVn: source.movieNameVn,
+      });
+    }
+
+    return drafts;
+  };
+
   const executeSaveChanges = async (voucherCode?: string, note?: string, seatType?: string) => {
     setActionLoading(true);
 
     try {
       // 1. Thực hiện xóa các suất chiếu nằm trong deletedShowtimeIds
-      for (const id of Array.from(deletedShowtimeIds)) {
-        await showtimeService.deleteShowtime(id);
-      }
-
       // 2. Thu thập danh sách các slot cần tạo mới và các slot cần cập nhật
       const newSlotsToCreate: ShowtimeSlot[] = [];
       const updatedSlots: { slot: ShowtimeSlot; original: ShowtimeResponse }[] = [];
@@ -642,6 +835,12 @@ export default function ManageShowtime() {
       }
 
       // Sắp xếp các slot cập nhật theo thứ tự thông minh (Topological Order)
+      const recurringDrafts = buildRecurringDraftsForNewSlots(newSlotsToCreate);
+
+      for (const id of Array.from(deletedShowtimeIds)) {
+        await showtimeService.deleteShowtime(id);
+      }
+
       const forwardMoved = updatedSlots.filter(
         (item) => new Date(item.slot.startTime).getTime() > new Date(item.original.startTime).getTime()
       ).sort(
@@ -676,14 +875,25 @@ export default function ManageShowtime() {
       }
 
       // Thực hiện tạo mới các suất chiếu temp
-      for (const slot of newSlotsToCreate) {
-        await showtimeService.createShowtime({
+      const createPayloads: CreateShowtimePayload[] = [
+        ...newSlotsToCreate.map((slot) => ({
           movieId: slot.movieId,
           roomId: slot.roomId,
           startTime: slot.startTime,
           basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
           status: slot.status || "OPEN",
-        });
+        })),
+        ...recurringDrafts.map((draft) => ({
+          movieId: draft.movieId,
+          roomId: draft.roomId,
+          startTime: draft.startTime,
+          basePrice: draft.basePrice || DEFAULT_BASE_PRICE,
+          status: draft.status || "OPEN",
+        })),
+      ];
+
+      for (const payload of createPayloads) {
+        await showtimeService.createShowtime(payload);
         createdCount++;
       }
 
@@ -694,24 +904,31 @@ export default function ManageShowtime() {
       setIsDirty(false);
       setDeletedShowtimeIds(new Set());
       setUpdateCompModal(null);
+      setRecurrenceFrequency("NONE");
+      setRecurrenceEndDate("");
       await fetchShowtimes(); // Reload database
     } catch (err: unknown) {
       const ERROR_MESSAGES: Record<string, string> = TEXT.SHOWTIME.BE_ERRORS;
+      const hasApiResponse = Boolean(err && typeof err === "object" && "response" in err);
 
       let errorMsg = TEXT.SHOWTIME.ERR_GENERIC_SAVE;
-      if (err && typeof err === "object" && "response" in err) {
+      if (hasApiResponse) {
         const axiosErr = err as { response?: { data?: { message?: string; errorCode?: string } } };
         const beMessage = axiosErr.response?.data?.message;
         const beCode = axiosErr.response?.data?.errorCode ?? "";
         const mapped = ERROR_MESSAGES[beCode];
         errorMsg = beMessage ?? mapped ?? errorMsg;
+      } else if (err instanceof Error) {
+        errorMsg = err.message;
       }
       toast.error(errorMsg, { autoClose: 7000 });
 
-      setIsDirty(false);
-      setDeletedShowtimeIds(new Set());
-      setUpdateCompModal(null);
-      await fetchShowtimes();
+      if (hasApiResponse) {
+        setIsDirty(false);
+        setDeletedShowtimeIds(new Set());
+        setUpdateCompModal(null);
+        await fetchShowtimes();
+      }
     } finally {
       setActionLoading(false);
     }
@@ -770,6 +987,8 @@ export default function ManageShowtime() {
     setSelectedCinemaId(nextVal);
     setIsDirty(false);
     setDeletedShowtimeIds(new Set());
+    setRecurrenceFrequency("NONE");
+    setRecurrenceEndDate("");
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -779,8 +998,13 @@ export default function ManageShowtime() {
       if (!confirm) return;
     }
     setSelectedDate(nextVal);
+    if (recurrenceEndDate && recurrenceEndDate < nextVal) {
+      setRecurrenceEndDate("");
+    }
     setIsDirty(false);
     setDeletedShowtimeIds(new Set());
+    setRecurrenceFrequency("NONE");
+    setRecurrenceEndDate("");
   };
 
   // =================================================================
@@ -807,7 +1031,148 @@ export default function ManageShowtime() {
       </div>
 
       {/* BỘ LỌC RẠP + NGÀY */}
-      <div className="flex gap-4 mb-6 bg-[#111C44] p-4 rounded-xl border border-gray-800 shadow-xl flex-wrap">
+      <div className="mb-6 rounded-2xl border border-slate-700/80 bg-[#111827] p-4 shadow-xl">
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_190px_minmax(440px,1.7fr)_minmax(220px,.8fr)]">
+          <div className="min-w-0">
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+              Rạp chiếu
+            </label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center text-cyan-300">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21h18M5 21V6a2 2 0 012-2h10a2 2 0 012 2v15M9 8h1m4 0h1M9 12h1m4 0h1M9 16h1m4 0h1" />
+                </svg>
+              </span>
+              <select
+                value={selectedCinemaId}
+                onChange={handleCinemaChange}
+                className="h-12 w-full appearance-none rounded-xl border border-slate-700 bg-[#0F172A] pl-12 pr-10 text-sm font-bold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+              >
+                {cinemas.length === 0 && <option value="" className="bg-[#0F172A] text-white">{TEXT.SHOWTIME.NO_CINEMAS}</option>}
+                {cinemas.map((c) => (
+                  <option key={c.cinemaId} value={c.cinemaId} className="bg-[#0F172A] text-white">
+                    {c.cinemaName}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </span>
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+              Ngày xếp lịch
+            </label>
+            <div className="relative">
+              <span className={`pointer-events-none absolute left-4 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center ${isPastDate ? "text-amber-400" : "text-cyan-300"}`}>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </span>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={handleDateChange}
+                style={{ colorScheme: "dark" }}
+                className={`h-12 w-full rounded-xl border pl-12 pr-4 text-sm font-bold outline-none transition focus:ring-2 ${
+                  isPastDate
+                    ? "border-amber-500/40 bg-amber-950/20 text-amber-300 focus:ring-amber-500/25"
+                    : "border-slate-700 bg-[#0F172A] text-blue-50 focus:border-cyan-400 focus:ring-cyan-500/25"
+                }`}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">
+              Lặp lại lịch chiếu
+            </label>
+            <div className={`grid gap-3 ${recurrenceFrequency !== "NONE" ? "sm:grid-cols-[1fr_180px]" : "sm:grid-cols-[1fr]"}`}>
+              <select
+                value={recurrenceFrequency}
+                onChange={(e) => {
+                  const nextFrequency = e.target.value as RecurrenceFrequency;
+                  setRecurrenceFrequency(nextFrequency);
+                  if (nextFrequency === "NONE") {
+                    setRecurrenceEndDate("");
+                  } else if (!recurrenceEndDate) {
+                    setRecurrenceEndDate(selectedDate);
+                  }
+                }}
+                disabled={isPastDate}
+                className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {RECURRENCE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value} className="bg-[#0F172A] text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              {recurrenceFrequency !== "NONE" && (
+                <input
+                  type="date"
+                  value={recurrenceEndDate}
+                  min={selectedDate}
+                  onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                  disabled={isPastDate}
+                  style={{ colorScheme: "dark" }}
+                  className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              )}
+            </div>
+            <div className="mt-3 rounded-lg border border-white/10 bg-[#0B1220] px-3 py-2 text-[11px] font-semibold leading-5 text-cyan-100">
+              {activeRecurrenceOption.helper}
+              {recurrenceFrequency !== "NONE" && (
+                <span className="ml-2 text-amber-200">
+                  Dự kiến tạo thêm {recurringPreviewCount} suất từ {newTempShowtimeCount} suất mới.
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex min-h-full flex-col justify-between gap-3 rounded-xl border border-slate-700 bg-[#0F172A] p-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+              <span className="inline-block h-3 w-3 rounded bg-blue-500/40 ring-1 ring-blue-500/30"></span>
+              {TEXT.SHOWTIME.DEFAULT_TICKET_PRICE} {DEFAULT_BASE_PRICE.toLocaleString("vi-VN")}đ
+            </div>
+            {isPastDate && (
+              <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300">
+                {TEXT.SHOWTIME.PAST_DATE_WARNING}
+              </div>
+            )}
+            {isDirty && !isPastDate && (
+              <div className="space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2">
+                <div className="text-xs font-bold text-amber-300">{TEXT.SHOWTIME.UNSAVED_CHANGES_WARNING}</div>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    onClick={handleSaveChanges}
+                    disabled={actionLoading}
+                    className="h-9 w-full rounded-lg bg-emerald-600 px-3 text-[11px] font-black leading-none text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    <span className="block truncate">
+                      {actionLoading ? TEXT.SHOWTIME.BTN_SAVING : TEXT.SHOWTIME.BTN_SAVE_SCHEDULE}
+                    </span>
+                  </button>
+                  <button
+                    onClick={handleCancelChanges}
+                    disabled={actionLoading}
+                    className="h-9 w-full rounded-lg bg-red-600 px-3 text-[11px] font-black leading-none text-white transition hover:bg-red-500 disabled:opacity-50"
+                  >
+                    <span className="block truncate">{TEXT.SHOWTIME.BTN_CANCEL}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden">
         <div className="relative group">
           <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-blue-400 group-hover:text-blue-300 transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -852,6 +1217,60 @@ export default function ManageShowtime() {
         </div>
 
         {/* Cảnh báo ngày quá khứ */}
+        <div className="flex min-w-[360px] flex-1 flex-wrap items-end gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+          <div className="min-w-[150px] flex-1">
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-cyan-300">
+              Lặp lại lịch chiếu
+            </label>
+            <select
+              value={recurrenceFrequency}
+              onChange={(e) => {
+                const nextFrequency = e.target.value as RecurrenceFrequency;
+                setRecurrenceFrequency(nextFrequency);
+                if (nextFrequency === "NONE") {
+                  setRecurrenceEndDate("");
+                } else if (!recurrenceEndDate) {
+                  setRecurrenceEndDate(selectedDate);
+                }
+              }}
+              disabled={isPastDate}
+              className="w-full rounded-xl border border-gray-700 bg-[#0F172A] px-3 py-2.5 text-sm font-semibold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {RECURRENCE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value} className="bg-[#0F172A] text-white">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {recurrenceFrequency !== "NONE" && (
+            <div className="min-w-[160px] flex-1">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-cyan-300">
+                Ngày kết thúc lặp
+              </label>
+              <input
+                type="date"
+                value={recurrenceEndDate}
+                min={selectedDate}
+                onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                disabled={isPastDate}
+                style={{ colorScheme: "dark" }}
+                className="w-full rounded-xl border border-gray-700 bg-[#0F172A] px-3 py-2.5 text-sm font-semibold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </div>
+          )}
+
+          <div className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-[#0B1220] px-3 py-2 text-[11px] font-semibold text-gray-300">
+            <div className="text-cyan-200">{activeRecurrenceOption.helper}</div>
+            {recurrenceFrequency !== "NONE" && (
+              <div className="mt-1 text-amber-200">
+                Dự kiến tạo thêm {recurringPreviewCount} suất từ {newTempShowtimeCount} suất mới.
+              </div>
+            )}
+          </div>
+        </div>
+
         {isPastDate && (
           <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 px-3 py-1.5 rounded-lg text-amber-400 text-xs font-semibold">
             <span>{TEXT.SHOWTIME.PAST_DATE_WARNING}</span>
@@ -1203,15 +1622,25 @@ export default function ManageShowtime() {
 
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-semibold text-gray-400">
-                    Mã Voucher đền bù (Voucher Code):
+                    Chọn voucher đền bù:
                   </label>
-                  <input
-                    type="text"
-                    placeholder="VD: COMP-POPCORN-FREE, DISCOUNT20..."
+                  <select
                     value={compensationVoucherCode}
                     onChange={(e) => setCompensationVoucherCode(e.target.value)}
-                    className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2 text-xs font-mono focus:outline-none focus:border-amber-400 transition-all placeholder:text-gray-600 uppercase"
-                  />
+                    className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
+                  >
+                    <option value="">-- Không áp dụng voucher đền bù --</option>
+                    {compensationVouchers.map((voucher) => (
+                      <option key={voucher.voucherId} value={voucher.voucherCode}>
+                        {getCompensationVoucherLabel(voucher)}
+                      </option>
+                    ))}
+                  </select>
+                  {compensationVouchers.length === 0 && (
+                    <span className="text-[10px] font-semibold text-amber-300/80">
+                      Chưa có voucher nhóm COMPENSATION đang ACTIVE.
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1">
@@ -1304,15 +1733,25 @@ export default function ManageShowtime() {
 
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-semibold text-gray-400">
-                  Mã Voucher đền bù (Voucher Code):
+                  Chọn voucher đền bù:
                 </label>
-                <input
-                  type="text"
-                  placeholder="VD: COMP-SHOWTIME-2026, POPCORN-FREE..."
+                <select
                   value={updateVoucherCode}
                   onChange={(e) => setUpdateVoucherCode(e.target.value)}
-                  className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2.5 text-xs font-mono focus:outline-none focus:border-amber-400 transition-all placeholder:text-gray-600 uppercase"
-                />
+                  className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
+                >
+                  <option value="">-- Không áp dụng voucher đền bù --</option>
+                  {compensationVouchers.map((voucher) => (
+                    <option key={voucher.voucherId} value={voucher.voucherCode}>
+                      {getCompensationVoucherLabel(voucher)}
+                    </option>
+                  ))}
+                </select>
+                {compensationVouchers.length === 0 && (
+                  <span className="text-[10px] font-semibold text-amber-300/80">
+                    Chưa có voucher nhóm COMPENSATION đang ACTIVE.
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-col gap-1">

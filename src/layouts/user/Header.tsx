@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { FiCheck, FiChevronDown, FiMapPin, FiMoon, FiSun } from 'react-icons/fi';
 import { Link, useNavigate } from 'react-router-dom';
+import NotificationCenter from '../../components/NotificationCenter';
 import logo from '../../assets/logo.png';
 import { AUTH_SESSION_EVENT, getAccessToken, getAuthFullName } from '../../lib/auth';
 import {
@@ -192,6 +193,13 @@ export default function Header() {
                 Vé của tôi
               </Link>
               <span className={dividerClass}>|</span>
+              <Link
+                to="/my-vouchers"
+                className={`font-medium transition ${linkHoverClass}`}
+              >
+                Ưu đãi của tôi
+              </Link>
+              <span className={dividerClass}>|</span>
               <button
                 type="button"
                 onClick={handleLogout}
@@ -200,6 +208,14 @@ export default function Header() {
                 Đăng xuất
               </button>
               <span className={dividerClass}>|</span>
+              <NotificationCenter
+                isLightMode={isLightMode}
+                buttonClassName={`grid h-8 w-8 place-items-center rounded-full border text-[12px] transition ${
+                  isLightMode
+                    ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#B45309]'
+                    : 'border-white/15 bg-white/10 text-white hover:bg-white/15'
+                }`}
+              />
               {themeToggle}
             </div>
           ) : (

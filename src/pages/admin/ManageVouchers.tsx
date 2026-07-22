@@ -1,11 +1,27 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'react-toastify';
-import { FaTicketAlt, FaPlus, FaEdit, FaTrashAlt, FaTimes, FaSearch, FaPercent, FaMoneyBillWave } from 'react-icons/fa';
+import {
+  FaExclamationTriangle,
+  FaLayerGroup,
+  FaLock,
+  FaMoneyBillWave,
+  FaPercent,
+  FaPlus,
+  FaSearch,
+  FaTicketAlt,
+  FaEdit,
+  FaTrashAlt,
+  FaTimes,
+  FaUsers,
+} from 'react-icons/fa';
 import { voucherService } from '../../services/voucherService';
 import type {
   Voucher,
   CreateVoucherPayload,
   DiscountType,
+  VoucherApplicableScope,
+  VoucherCategory,
+  VoucherTargetType,
   UpdateVoucherPayload,
   VoucherStatus,
 } from '../../services/voucherService';
@@ -13,6 +29,13 @@ import type {
 type VoucherFilterType = 'ALL' | DiscountType;
 type VoucherFilterStatus = 'ALL' | Extract<VoucherStatus, 'ACTIVE' | 'INACTIVE'>;
 type EditableVoucherStatus = Extract<VoucherStatus, 'ACTIVE' | 'INACTIVE'>;
+type ConfirmDialogState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  variant: 'danger' | 'warning';
+  onConfirm: () => void | Promise<void>;
+} | null;
 
 type ApiErrorLike = {
   response?: {
@@ -35,6 +58,47 @@ const isVoucherFilterType = (value: string): value is VoucherFilterType =>
 
 const isVoucherFilterStatus = (value: string): value is VoucherFilterStatus =>
   value === 'ALL' || value === 'ACTIVE' || value === 'INACTIVE';
+
+const voucherCategoryOptions: Array<{ value: VoucherCategory; label: string; hint: string }> = [
+  { value: 'EVENT', label: 'Sự kiện / Marketing', hint: 'Voucher khuyến mãi thông thường.' },
+  { value: 'FOOD_BEVERAGE', label: 'F&B', hint: 'Áp dụng cho bắp nước hoặc combo.' },
+  { value: 'COMPENSATION', label: 'Voucher đền bù', hint: 'Chỉ dùng cho đổi phòng/suất chiếu hoặc sự cố.' },
+];
+
+const applicableScopeOptions: Array<{ value: VoucherApplicableScope; label: string }> = [
+  { value: 'TOTAL_ORDER', label: 'Toàn bộ đơn hàng' },
+  { value: 'TICKET_ONLY', label: 'Chỉ tiền vé' },
+  { value: 'FOOD_BEVERAGE_ONLY', label: 'Chỉ F&B' },
+];
+
+const targetTypeOptions: Array<{ value: VoucherTargetType; label: string }> = [
+  { value: 'ALL_CUSTOMERS', label: 'Tất cả khách hàng' },
+  { value: 'SPECIFIC_CUSTOMERS', label: 'Khách hàng chỉ định' },
+];
+
+const delimitedIdsPattern = /^[A-Za-z0-9_,\-\s]+$/;
+
+const normalizeDelimitedIds = (value: string) =>
+  value
+    .split(/[,\n\r\t]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(',');
+
+const getOptionLabel = <T extends string>(
+  options: Array<{ value: T; label: string }>,
+  value: string | null | undefined,
+  fallback: string,
+) => options.find((option) => option.value === value)?.label || fallback;
+
+const getCategoryLabel = (value: string | null | undefined) =>
+  getOptionLabel(voucherCategoryOptions, value || '', 'Khác');
+
+const getScopeLabel = (value: string | null | undefined) =>
+  getOptionLabel(applicableScopeOptions, value || '', 'Toàn bộ đơn hàng');
+
+const getTargetTypeLabel = (value: string | null | undefined) =>
+  getOptionLabel(targetTypeOptions, value || '', 'Tất cả khách hàng');
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
@@ -85,7 +149,29 @@ export default function ManageVouchers() {
   const [usageLimit, setUsageLimit] = useState<number>(100);
   const [perCustomerLimit, setPerCustomerLimit] = useState<number>(1);
   const [voucherStatus, setVoucherStatus] = useState<EditableVoucherStatus>('ACTIVE');
+  const [category, setCategory] = useState<VoucherCategory>('EVENT');
+  const [applicableScope, setApplicableScope] = useState<VoucherApplicableScope>('TOTAL_ORDER');
+  const [targetType, setTargetType] = useState<VoucherTargetType>('ALL_CUSTOMERS');
+  const [targetCustomerIds, setTargetCustomerIds] = useState('');
+  const [specificFbItemIds, setSpecificFbItemIds] = useState('');
+  const [isPrivateVoucher, setIsPrivateVoucher] = useState(false);
+  const [requiredTicketCount, setRequiredTicketCount] = useState<number>(0);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const [submitting, setSubmitting] = useState(false);
+  const voucherNeedsCustomerIds =
+    isPrivateVoucher || targetType === 'SPECIFIC_CUSTOMERS';
+
+  const handlePrivateVoucherChange = (checked: boolean) => {
+    setIsPrivateVoucher(checked);
+
+    if (checked) {
+      setTargetType('SPECIFIC_CUSTOMERS');
+      return;
+    }
+
+    setTargetType('ALL_CUSTOMERS');
+    setTargetCustomerIds('');
+  };
 
   // Load vouchers
   const fetchVouchers = useCallback(async () => {
@@ -147,6 +233,13 @@ export default function ManageVouchers() {
     setUsageLimit(100);
     setPerCustomerLimit(1);
     setVoucherStatus('ACTIVE');
+    setCategory('EVENT');
+    setApplicableScope('TOTAL_ORDER');
+    setTargetType('ALL_CUSTOMERS');
+    setTargetCustomerIds('');
+    setSpecificFbItemIds('');
+    setIsPrivateVoucher(false);
+    setRequiredTicketCount(0);
     setIsModalOpen(true);
   };
 
@@ -165,6 +258,13 @@ export default function ManageVouchers() {
     setUsageLimit(voucher.usageLimit);
     setPerCustomerLimit(voucher.perCustomerLimit || 1);
     setVoucherStatus(voucher.voucherStatus === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE');
+    setCategory(voucher.category || 'EVENT');
+    setApplicableScope(voucher.applicableScope || 'TOTAL_ORDER');
+    setTargetType(voucher.targetType || 'ALL_CUSTOMERS');
+    setTargetCustomerIds(voucher.targetCustomerIds || '');
+    setSpecificFbItemIds(voucher.specificFbItemIds || '');
+    setIsPrivateVoucher(Boolean(voucher.isPrivate));
+    setRequiredTicketCount(voucher.requiredTicketCount || 0);
     setIsModalOpen(true);
   };
 
@@ -174,6 +274,11 @@ export default function ManageVouchers() {
 
     if (!voucherCode.trim()) {
       toast.error('Mã voucher không được để trống');
+      return;
+    }
+
+    if (!/^[A-Za-z0-9_-]{3,100}$/.test(voucherCode.trim())) {
+      toast.warn('Mã voucher chỉ nên gồm chữ, số, dấu gạch dưới hoặc gạch ngang, dài từ 3-100 ký tự.');
       return;
     }
 
@@ -197,12 +302,59 @@ export default function ManageVouchers() {
       return;
     }
 
+    if (usageLimit < 1 || perCustomerLimit < 1) {
+      toast.warn('Giới hạn dùng và giới hạn mỗi khách phải lớn hơn 0.');
+      return;
+    }
+
+    const cleanTargetCustomerIds = normalizeDelimitedIds(targetCustomerIds);
+    const cleanSpecificFbItemIds = normalizeDelimitedIds(specificFbItemIds);
+    const finalTargetType: VoucherTargetType = voucherNeedsCustomerIds
+      ? 'SPECIFIC_CUSTOMERS'
+      : 'ALL_CUSTOMERS';
+    const finalTargetCustomerIds = voucherNeedsCustomerIds
+      ? cleanTargetCustomerIds
+      : '';
+
+    if (targetCustomerIds.trim() && !delimitedIdsPattern.test(targetCustomerIds)) {
+      toast.warn('Danh sách Customer ID chỉ được chứa chữ, số, dấu gạch dưới, gạch ngang và dấu phẩy.');
+      return;
+    }
+
+    if (specificFbItemIds.trim() && !delimitedIdsPattern.test(specificFbItemIds)) {
+      toast.warn('Danh sách F&B Item ID chỉ được chứa chữ, số, dấu gạch dưới, gạch ngang và dấu phẩy.');
+      return;
+    }
+
+    if (isPrivateVoucher && targetType !== 'SPECIFIC_CUSTOMERS') {
+      toast.warn('Voucher private bắt buộc phải chọn nhóm "Khách hàng chỉ định".');
+      return;
+    }
+
+    if (voucherNeedsCustomerIds && !cleanTargetCustomerIds) {
+      toast.warn('Vui lòng nhập Customer Profile ID khi tạo voucher private hoặc voucher chỉ định khách hàng.');
+      return;
+    }
+
+    if (applicableScope === 'FOOD_BEVERAGE_ONLY' && !cleanSpecificFbItemIds) {
+      toast.warn('Voucher chỉ áp dụng F&B cần có danh sách F&B Item ID cụ thể.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       const cleanCode = voucherCode.trim().toUpperCase();
       const titleVal = title.trim() || `Giảm giá ${cleanCode}`;
       const descVal = description.trim() || `Mã giảm giá áp dụng cho đơn hàng từ G2Cinema`;
+      const finalMaxDiscountAmount =
+        discountType === 'AMOUNT'
+          ? discountValue
+          : maxDiscountAmount > 0
+            ? maxDiscountAmount
+            : undefined;
+      const finalRequiredTicketCount =
+        requiredTicketCount > 0 ? requiredTicketCount : undefined;
 
       if (editingVoucher) {
         const payload: UpdateVoucherPayload = {
@@ -210,11 +362,18 @@ export default function ManageVouchers() {
           description: descVal,
           voucherStatus,
           minOrderAmount,
-          maxDiscountAmount: discountType === 'AMOUNT' ? discountValue : maxDiscountAmount,
+          maxDiscountAmount: finalMaxDiscountAmount,
           startDate: new Date(startDate).toISOString(),
           endDate: new Date(endDate).toISOString(),
           usageLimit,
           perCustomerLimit,
+          category,
+          applicableScope,
+          targetType: finalTargetType,
+          targetCustomerIds: finalTargetCustomerIds || null,
+          specificFbItemIds: cleanSpecificFbItemIds || null,
+          isPrivate: isPrivateVoucher,
+          requiredTicketCount: finalRequiredTicketCount,
         };
         const response = await voucherService.updateVoucher(editingVoucher.voucherId, payload);
         if (response.success) {
@@ -233,11 +392,18 @@ export default function ManageVouchers() {
           discountType,
           discountValue,
           minOrderAmount,
-          maxDiscountAmount: discountType === 'AMOUNT' ? discountValue : maxDiscountAmount,
+          maxDiscountAmount: finalMaxDiscountAmount,
           startDate: new Date(startDate).toISOString(),
           endDate: new Date(endDate).toISOString(),
           usageLimit,
           perCustomerLimit,
+          category,
+          applicableScope,
+          targetType: finalTargetType,
+          targetCustomerIds: finalTargetCustomerIds || null,
+          specificFbItemIds: cleanSpecificFbItemIds || null,
+          isPrivate: isPrivateVoucher,
+          requiredTicketCount: finalRequiredTicketCount,
         };
         const response = await voucherService.createVoucher(payload);
         if (response.success) {
@@ -256,11 +422,7 @@ export default function ManageVouchers() {
   };
 
   // Delete voucher
-  const handleDelete = async (voucher: Voucher) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa voucher ${voucher.voucherCode}?`)) {
-      return;
-    }
-
+  const deleteVoucher = async (voucher: Voucher) => {
     try {
       const response = await voucherService.deleteVoucher(voucher.voucherId);
       if (response.success) {
@@ -274,11 +436,29 @@ export default function ManageVouchers() {
     }
   };
 
+  const handleDelete = (voucher: Voucher) => {
+    const isActiveVoucher = voucher.voucherStatus === 'ACTIVE' && new Date(voucher.endDate) >= new Date();
+    const hasUsage = voucher.usedCount > 0;
+
+    setConfirmDialog({
+      title: isActiveVoucher ? 'Xóa voucher đang hoạt động?' : 'Xác nhận xóa voucher',
+      message: [
+        `Bạn sắp xóa voucher ${voucher.voucherCode}.`,
+        isActiveVoucher ? 'Voucher này đang hoạt động, khách hàng có thể vẫn đang thấy hoặc chuẩn bị dùng mã này.' : '',
+        hasUsage ? `Voucher đã có ${voucher.usedCount} lượt dùng, xóa cứng có thể làm mất dấu vết vận hành.` : '',
+        'Hãy chỉ tiếp tục nếu bạn chắc chắn muốn xóa khỏi hệ thống.',
+      ]
+        .filter(Boolean)
+        .join(' '),
+      confirmLabel: 'Xóa voucher',
+      variant: 'danger',
+      onConfirm: () => deleteVoucher(voucher),
+    });
+  };
+
   // Toggle quick status
-  const handleToggleStatus = async (voucher: Voucher) => {
+  const toggleVoucherStatus = async (voucher: Voucher, newStatus: EditableVoucherStatus) => {
     try {
-      const newStatus: EditableVoucherStatus =
-        voucher.voucherStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
       const payload: UpdateVoucherPayload = {
         title: voucher.title,
         description: voucher.description,
@@ -289,6 +469,13 @@ export default function ManageVouchers() {
         endDate: voucher.endDate,
         usageLimit: voucher.usageLimit,
         perCustomerLimit: voucher.perCustomerLimit,
+        category: voucher.category,
+        applicableScope: voucher.applicableScope,
+        targetType: voucher.targetType,
+        targetCustomerIds: voucher.targetCustomerIds || null,
+        specificFbItemIds: voucher.specificFbItemIds || null,
+        isPrivate: Boolean(voucher.isPrivate),
+        requiredTicketCount: voucher.requiredTicketCount,
       };
       const response = await voucherService.updateVoucher(voucher.voucherId, payload);
       if (response.success) {
@@ -300,6 +487,22 @@ export default function ManageVouchers() {
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Lỗi khi thay đổi trạng thái voucher'));
     }
+  };
+
+  const handleToggleStatus = (voucher: Voucher) => {
+    const newStatus: EditableVoucherStatus =
+      voucher.voucherStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+
+    setConfirmDialog({
+      title: newStatus === 'ACTIVE' ? 'Kích hoạt voucher?' : 'Vô hiệu hóa voucher?',
+      message:
+        newStatus === 'ACTIVE'
+          ? `Voucher ${voucher.voucherCode} sẽ xuất hiện lại cho nhóm khách hàng đúng điều kiện.`
+          : `Voucher ${voucher.voucherCode} sẽ ngừng áp dụng ngay sau khi lưu trạng thái mới.`,
+      confirmLabel: newStatus === 'ACTIVE' ? 'Kích hoạt' : 'Vô hiệu hóa',
+      variant: newStatus === 'ACTIVE' ? 'warning' : 'danger',
+      onConfirm: () => toggleVoucherStatus(voucher, newStatus),
+    });
   };
 
   // Client-side type filter
@@ -404,7 +607,7 @@ export default function ManageVouchers() {
                   <th className="p-4 text-center">Giảm Tối Đa</th>
                   <th className="p-4 text-center">Đã Dùng / Giới Hạn</th>
                   <th className="p-4">Thời Gian Khả Dụng</th>
-                  <th className="p-4 text-center">Trạng Trạng</th>
+                  <th className="p-4 text-center">Trạng thái</th>
                   <th className="p-4 text-center">Hành Động</th>
                 </tr>
               </thead>
@@ -430,6 +633,28 @@ export default function ManageVouchers() {
                           </span>
                         </div>
                         <div className="text-[10px] text-gray-400 mt-1 font-semibold max-w-[320px] truncate">{voucher.description}</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black uppercase tracking-wide">
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${
+                            voucher.isPrivate
+                              ? 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+                              : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                          }`}>
+                            <FaLock className="text-[9px]" />
+                            {voucher.isPrivate ? 'Private' : 'Public'}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2 py-0.5 text-cyan-300">
+                            <FaLayerGroup className="text-[9px]" />
+                            {getCategoryLabel(voucher.category)}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full border border-violet-400/25 bg-violet-400/10 px-2 py-0.5 text-violet-300">
+                            <FaUsers className="text-[9px]" />
+                            {getTargetTypeLabel(voucher.targetType)}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[10px] font-semibold text-gray-500">
+                          Phạm vi: {getScopeLabel(voucher.applicableScope)}
+                          {voucher.specificFbItemIds ? ` · F&B: ${voucher.specificFbItemIds}` : ''}
+                        </div>
                       </td>
 
                       {/* Type & Value */}
@@ -535,11 +760,11 @@ export default function ManageVouchers() {
       {/* ────────────────────────────────────── */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex justify-center items-center z-50 p-4 font-['Urbanist']">
-          <div className="bg-[#111C44] border border-gray-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] text-white">
+          <div className="bg-[#111C44] border border-slate-700/80 w-full max-w-4xl rounded-2xl shadow-2xl shadow-black/40 overflow-hidden flex flex-col max-h-[95vh] text-white">
             {/* Header */}
-            <div className="p-5 border-b border-gray-800 flex justify-between items-center bg-blue-950/20 shrink-0">
-              <h2 className="text-lg font-bold text-white uppercase tracking-wide flex items-center gap-2">
-                <FaTicketAlt className="text-blue-500" />
+            <div className="p-5 border-b border-slate-700/80 flex justify-between items-start gap-4 bg-[#0F172A] shrink-0">
+              <h2 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2">
+                <FaTicketAlt className="text-cyan-400" />
                 {editingVoucher ? 'Cập Nhật Voucher' : 'Tạo Voucher Mới'}
               </h2>
               <button
@@ -547,7 +772,8 @@ export default function ManageVouchers() {
                   setIsModalOpen(false);
                   setEditingVoucher(null);
                 }}
-                className="text-gray-400 hover:text-white text-xl transition bg-transparent border-0 cursor-pointer"
+                className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white text-lg transition cursor-pointer"
+                aria-label="Đóng form voucher"
               >
                 <FaTimes />
               </button>
@@ -741,6 +967,347 @@ export default function ManageVouchers() {
                 </div>
               </div>
 
+              {/* Scope & Target */}
+              <div className="rounded-2xl border border-slate-700/80 bg-[#0B1220] p-5 shadow-inner shadow-black/20">
+                <div className="mb-5 flex flex-col gap-2 border-b border-slate-800 pb-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
+                      <FaLayerGroup />
+                      Điều kiện áp dụng voucher
+                    </h3>
+                    <p className="mt-1 text-[11px] font-semibold text-slate-400">
+                      Chọn nhóm voucher, phạm vi giảm giá và nhóm khách được nhận mã.
+                    </p>
+                  </div>
+                  <span className={`w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
+                    voucherNeedsCustomerIds
+                      ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                      : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                  }`}>
+                    {voucherNeedsCustomerIds ? "Chỉ định khách hàng" : "Công khai"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="rounded-xl border border-slate-700 bg-[#111C44]/70 p-4">
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Nhóm voucher
+                    </label>
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value as VoucherCategory)}
+                      className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+                    >
+                      {voucherCategoryOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-2 min-h-5 text-[11px] font-semibold text-slate-500">
+                      {voucherCategoryOptions.find((option) => option.value === category)?.hint}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-700 bg-[#111C44]/70 p-4">
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Phạm vi giảm giá
+                    </label>
+                    <select
+                      value={applicableScope}
+                      onChange={(e) => {
+                        const nextScope = e.target.value as VoucherApplicableScope;
+                        setApplicableScope(nextScope);
+                        if (nextScope !== 'FOOD_BEVERAGE_ONLY') {
+                          setSpecificFbItemIds('');
+                        }
+                      }}
+                      className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+                    >
+                      {applicableScopeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-2 min-h-5 text-[11px] font-semibold text-slate-500">
+                      Voucher sẽ chỉ tính giảm trên phạm vi đã chọn.
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-700 bg-[#111C44]/70 p-4">
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Nhóm khách hàng
+                    </label>
+                    <select
+                      value={targetType}
+                      onChange={(e) => {
+                        const nextTargetType = e.target.value as VoucherTargetType;
+                        setTargetType(nextTargetType);
+                        if (nextTargetType === 'ALL_CUSTOMERS') {
+                          setIsPrivateVoucher(false);
+                          setTargetCustomerIds('');
+                        }
+                      }}
+                      className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+                    >
+                      {targetTypeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-bold ${
+                      voucherNeedsCustomerIds
+                        ? 'bg-amber-400/10 text-amber-200'
+                        : 'bg-emerald-400/10 text-emerald-200'
+                    }`}>
+                      {voucherNeedsCustomerIds
+                        ? 'Cần nhập Customer Profile ID cho nhóm khách được nhận voucher.'
+                        : 'Voucher đang công khai cho tất cả khách hàng đủ điều kiện.'}
+                    </p>
+                  </div>
+
+                  <div className={`rounded-xl border p-4 transition ${
+                    voucherNeedsCustomerIds
+                      ? 'border-amber-400/40 bg-amber-400/10'
+                      : 'border-slate-700 bg-[#111C44]/70'
+                  }`}>
+                    <label className="flex h-full min-h-[108px] cursor-pointer select-none items-center gap-4">
+                      <input
+                        type="checkbox"
+                        checked={isPrivateVoucher}
+                        onChange={(e) => handlePrivateVoucherChange(e.target.checked)}
+                        className="h-5 w-5 rounded border-slate-600 bg-slate-950 text-amber-400 focus:ring-amber-400"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-black uppercase text-white">
+                          Voucher private
+                        </span>
+                        <span className="mt-1 block text-[12px] font-semibold leading-5 text-slate-400">
+                          Chỉ khách được chỉ định mới dùng được. Khi bỏ tick, hệ thống tự chuyển về voucher công khai.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+
+                  {voucherNeedsCustomerIds && (
+                    <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 xl:col-span-2">
+                      <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-amber-300">
+                        Customer Profile ID được nhận voucher *
+                      </label>
+                      <textarea
+                        value={targetCustomerIds}
+                        onChange={(e) => setTargetCustomerIds(e.target.value)}
+                        rows={3}
+                        placeholder="VD: CUS_001, CUS_002 hoặc mỗi dòng một ID"
+                        className="w-full rounded-xl border border-amber-500/30 bg-[#0F172A] px-4 py-3 text-sm text-white outline-none transition resize-none focus:border-amber-300 focus:ring-2 focus:ring-amber-500/25"
+                      />
+                      <p className="mt-2 text-[11px] font-semibold text-amber-100/70">
+                        FE sẽ chuẩn hóa thành chuỗi phân tách bằng dấu phẩy trước khi gửi BE.
+                      </p>
+                    </div>
+                  )}
+
+                  {applicableScope === 'FOOD_BEVERAGE_ONLY' && (
+                    <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 xl:col-span-2">
+                      <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-amber-300">
+                        F&B Item ID được áp dụng *
+                      </label>
+                      <textarea
+                        value={specificFbItemIds}
+                        onChange={(e) => setSpecificFbItemIds(e.target.value)}
+                        rows={2}
+                        placeholder="VD: FB_POPCORN_M, FB_PEPSI_L"
+                        className="w-full rounded-xl border border-amber-500/30 bg-[#0F172A] px-4 py-3 text-sm text-white outline-none transition resize-none focus:border-amber-300 focus:ring-2 focus:ring-amber-500/25"
+                      />
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-slate-700 bg-[#111C44]/70 p-4 xl:col-span-2">
+                    <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Điều kiện mốc vé tích lũy
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={requiredTicketCount || ''}
+                      onChange={(e) => setRequiredTicketCount(Number(e.target.value))}
+                      placeholder="0 = không yêu cầu"
+                      className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+                    />
+                    <p className="mt-2 text-[11px] font-semibold text-slate-500">
+                      Dùng cho voucher thưởng khi khách đạt số lượng vé đã đặt.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden">
+                <div>
+                  <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
+                    <FaLayerGroup />
+                    Điều kiện áp dụng voucher
+                  </h3>
+                  <p className="mt-1 text-[11px] font-semibold text-gray-400">
+                    Các thông tin này quyết định voucher xuất hiện cho ai và áp dụng vào nhóm tiền nào.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4">
+                    <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                      Nhóm voucher
+                    </label>
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value as VoucherCategory)}
+                      className="min-h-12 w-full px-4 py-3 rounded-xl bg-[#0F172A] border border-slate-700 text-white text-sm outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 transition cursor-pointer"
+                    >
+                      {voucherCategoryOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[10px] font-semibold text-gray-500">
+                      {voucherCategoryOptions.find((option) => option.value === category)?.hint}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                      Phạm vi giảm giá
+                    </label>
+                    <select
+                      value={applicableScope}
+                      onChange={(e) => {
+                        const nextScope = e.target.value as VoucherApplicableScope;
+                        setApplicableScope(nextScope);
+                        if (nextScope !== 'FOOD_BEVERAGE_ONLY') {
+                          setSpecificFbItemIds('');
+                        }
+                      }}
+                      className="min-h-12 w-full px-4 py-3 rounded-xl bg-[#0F172A] border border-slate-700 text-white text-sm outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 transition cursor-pointer"
+                    >
+                      {applicableScopeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr]">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                      Nhóm khách hàng
+                    </label>
+                    <select
+                      value={targetType}
+                      onChange={(e) => {
+                        const nextTargetType = e.target.value as VoucherTargetType;
+                        setTargetType(nextTargetType);
+                        if (nextTargetType === 'ALL_CUSTOMERS') {
+                          setIsPrivateVoucher(false);
+                          setTargetCustomerIds('');
+                        }
+                      }}
+                      className="min-h-12 w-full px-4 py-3 rounded-xl bg-[#0F172A] border border-slate-700 text-white text-sm outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 transition cursor-pointer"
+                    >
+                      {targetTypeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-bold ${
+                      voucherNeedsCustomerIds
+                        ? 'bg-amber-400/10 text-amber-200'
+                        : 'bg-emerald-400/10 text-emerald-200'
+                    }`}>
+                      {voucherNeedsCustomerIds
+                        ? 'Cần nhập Customer Profile ID cho nhóm khách được nhận voucher.'
+                        : 'Voucher đang công khai cho tất cả khách hàng đủ điều kiện.'}
+                    </p>
+                  </div>
+
+                  <div className={`rounded-xl border px-4 py-3 transition ${
+                    voucherNeedsCustomerIds
+                      ? 'border-amber-400/40 bg-amber-400/10'
+                      : 'border-slate-700 bg-[#0F172A]'
+                  }`}>
+                    <label className="flex min-h-12 cursor-pointer select-none items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isPrivateVoucher}
+                        onChange={(e) => handlePrivateVoucherChange(e.target.checked)}
+                        className="h-5 w-5 rounded border-slate-600 bg-slate-950 text-amber-400 focus:ring-amber-400"
+                      />
+                      <span>
+                        <span className="block text-xs font-black uppercase text-white">
+                          Voucher private
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-400">
+                          Chỉ khách được chỉ định mới dùng được.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {voucherNeedsCustomerIds && (
+                  <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4">
+                    <label className="block text-xs font-semibold uppercase text-amber-300 mb-1">
+                      Customer Profile ID được nhận voucher *
+                    </label>
+                    <textarea
+                      value={targetCustomerIds}
+                      onChange={(e) => setTargetCustomerIds(e.target.value)}
+                      rows={3}
+                      placeholder="VD: CUS_001, CUS_002 hoặc mỗi dòng một ID"
+                      className="w-full px-4 py-3 rounded-xl bg-[#0F172A] border border-amber-500/30 text-white text-sm outline-none focus:border-amber-300 focus:ring-2 focus:ring-amber-500/25 transition resize-none"
+                    />
+                    <p className="mt-1 text-[10px] font-semibold text-gray-500">
+                      FE sẽ chuẩn hóa thành chuỗi phân tách bằng dấu phẩy trước khi gửi BE.
+                    </p>
+                  </div>
+                )}
+
+                {applicableScope === 'FOOD_BEVERAGE_ONLY' && (
+                  <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4">
+                    <label className="block text-xs font-semibold uppercase text-amber-300 mb-1">
+                      F&B Item ID được áp dụng *
+                    </label>
+                    <textarea
+                      value={specificFbItemIds}
+                      onChange={(e) => setSpecificFbItemIds(e.target.value)}
+                      rows={2}
+                      placeholder="VD: FB_POPCORN_M, FB_PEPSI_L"
+                      className="w-full px-4 py-3 rounded-xl bg-[#0F172A] border border-amber-500/30 text-white text-sm outline-none focus:border-amber-300 focus:ring-2 focus:ring-amber-500/25 transition resize-none"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                    Điều kiện mốc vé tích lũy
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={requiredTicketCount || ''}
+                    onChange={(e) => setRequiredTicketCount(Number(e.target.value))}
+                    placeholder="0 = không yêu cầu"
+                    className="w-full px-4 py-3 rounded-xl bg-[#0F172A] border border-slate-700 text-white text-sm outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 transition"
+                  />
+                  <p className="mt-1 text-[10px] font-semibold text-gray-500">
+                    Dùng cho voucher thưởng khi khách đạt số lượng vé đã đặt.
+                  </p>
+                </div>
+              </div>
+
               {/* Status active */}
               {editingVoucher && (
                 <div className="flex items-center pt-2">
@@ -752,7 +1319,9 @@ export default function ManageVouchers() {
                       className="sr-only peer"
                     />
                     <div className="relative w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    <span className="ms-3 text-xs font-semibold uppercase text-gray-400">Trạng thái: Hoạt động</span>
+                    <span className="ms-3 text-xs font-semibold uppercase text-gray-400">
+                      Trạng thái: {voucherStatus === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
+                    </span>
                   </label>
                 </div>
               )}
@@ -779,6 +1348,55 @@ export default function ManageVouchers() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#111C44] text-white shadow-2xl">
+            <div className={`flex items-start gap-3 border-b border-gray-800 p-5 ${
+              confirmDialog.variant === 'danger' ? 'bg-red-500/10' : 'bg-amber-500/10'
+            }`}>
+              <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border ${
+                confirmDialog.variant === 'danger'
+                  ? 'border-red-400/30 bg-red-400/10 text-red-300'
+                  : 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+              }`}>
+                <FaExclamationTriangle />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-black">{confirmDialog.title}</h3>
+                <p className="mt-2 text-sm font-semibold leading-6 text-gray-300">
+                  {confirmDialog.message}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 p-5">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-2.5 text-sm font-bold text-gray-200 transition hover:bg-gray-700"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const action = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  void action();
+                }}
+                className={`rounded-xl px-4 py-2.5 text-sm font-black text-white transition hover:brightness-110 ${
+                  confirmDialog.variant === 'danger'
+                    ? 'bg-red-600'
+                    : 'bg-amber-600'
+                }`}
+              >
+                {confirmDialog.confirmLabel}
+              </button>
+            </div>
           </div>
         </div>
       )}

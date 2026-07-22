@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { FaBarcode, FaBars, FaCashRegister, FaDoorOpen, FaMoon, FaPowerOff, FaShieldAlt, FaSun } from 'react-icons/fa';
+import NotificationCenter from '../../components/NotificationCenter';
 import { getCurrentUserProfile } from '../../lib/auth';
 import { logout } from '../../services/authService';
 
@@ -197,6 +198,16 @@ const StaffLayout = () => {
           </div>
 
           <div className="ml-auto flex min-w-0 items-center gap-3">
+            <NotificationCenter
+              isLightMode={isLightMode}
+              buttonClassName={[
+                'grid h-10 w-10 shrink-0 place-items-center rounded-lg border transition',
+                isLightMode
+                  ? 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700'
+                  : 'border-white/10 bg-white/5 text-slate-300 hover:border-emerald-400/40 hover:bg-emerald-500/10 hover:text-white',
+              ].join(' ')}
+            />
+
             <button
               type="button"
               onClick={() => setThemeMode((current) => (current === 'light' ? 'dark' : 'light'))}
