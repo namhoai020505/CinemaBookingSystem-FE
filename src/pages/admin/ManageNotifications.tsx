@@ -58,7 +58,7 @@ export default function ManageNotifications() {
   const pageSize = 12;
 
   // Send Notification Form State
-  const [targetType, setTargetType] = useState<'GROUP' | 'SINGLE' | 'MULTIPLE'>('GROUP');
+  const [targetType, setTargetType] = useState<'GROUP' | 'SINGLE'>('GROUP');
   const [formData, setFormData] = useState<SendNotificationRequest>({
     targetGroup: isManager ? 'STAFF' : 'ALL',
     userId: '',
@@ -74,7 +74,6 @@ export default function ManageNotifications() {
     channel: 'App',
     type: 'Promotional',
   });
-  const [multipleUserIdsInput, setMultipleUserIdsInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Internal Operational Feed State
@@ -174,23 +173,25 @@ export default function ManageNotifications() {
     };
 
     if (targetType === 'GROUP') {
-      payload.targetGroup = formData.targetGroup || 'ALL';
+      payload.targetGroup = formData.targetGroup || (isManager ? 'STAFF' : 'ALL');
     } else if (targetType === 'SINGLE') {
-      if (!formData.userId?.trim()) {
-        toast.error('Vui lòng nhập User ID người nhận.');
+      const rawUserId = formData.userId?.trim() || '';
+      if (
+        !rawUserId &&
+        !formData.isFlagged &&
+        !formData.hasBooked &&
+        !formData.roomId &&
+        !formData.showtimeId &&
+        !formData.movieId
+      ) {
+        toast.error('Vui lòng nhập User ID người nhận hoặc sử dụng bộ lọc điều kiện.');
         return;
       }
-      payload.userId = formData.userId.trim();
-    } else if (targetType === 'MULTIPLE') {
-      const ids = multipleUserIdsInput
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (ids.length === 0) {
-        toast.error('Vui lòng nhập ít nhất 1 User ID người nhận (phân cách dấu phẩy).');
-        return;
+      if (rawUserId.includes(',')) {
+        payload.userIds = rawUserId.split(',').map((s) => s.trim()).filter(Boolean);
+      } else if (rawUserId) {
+        payload.userId = rawUserId;
       }
-      payload.userIds = ids;
     }
 
     try {
@@ -205,7 +206,6 @@ export default function ManageNotifications() {
           message: '',
           bookingId: '',
         }));
-        setMultipleUserIdsInput('');
         fetchNotifications();
         setActiveTab('list');
       } else {
@@ -448,7 +448,7 @@ export default function ManageNotifications() {
                 <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">
                   1. Chọn Đối tượng Nhận (Target Audience)
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setTargetType('GROUP')}
@@ -476,22 +476,7 @@ export default function ManageNotifications() {
                     }`}
                   >
                     <FaUserCheck />
-                    <span>User ID đơn lẻ</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setTargetType('MULTIPLE')}
-                    className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-xs font-bold transition-all ${
-                      targetType === 'MULTIPLE'
-                        ? 'border-blue-500 bg-blue-500/10 text-blue-500 shadow-sm'
-                        : isLightMode
-                          ? 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                          : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
-                    }`}
-                  >
-                    <FaUsers />
-                    <span>Nhiều User ID</span>
+                    <span>User riêng lẻ</span>
                   </button>
                 </div>
               </div>
@@ -1230,9 +1215,9 @@ export default function ManageNotifications() {
                         toast.success(`Đã tự động điền User ID: ${singleId}`);
                       } else {
                         const ids = users.map((u) => u.userId).filter(Boolean).join(', ');
-                        setMultipleUserIdsInput(ids);
-                        setTargetType('MULTIPLE');
-                        toast.success(`Đã tự động điền ${users.length} User ID vào danh sách người nhận!`);
+                        setFormData((prev) => ({ ...prev, userId: ids }));
+                        setTargetType('SINGLE');
+                        toast.success(`Đã tự động điền ${users.length} User ID vào ô người nhận!`);
                       }
 
                       setIsFilterModalOpen(false);
