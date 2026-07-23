@@ -42,7 +42,7 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
 // Preset message templates for quick selection
 const PRESET_TEMPLATES = [
   {
-    label: '📢 Bảo trì hệ thống',
+    label: 'Bảo trì hệ thống',
     targetGroup: 'ALL',
     channel: 'App',
     type: 'Internal',
@@ -51,7 +51,7 @@ const PRESET_TEMPLATES = [
       'Hệ thống Cinema System sẽ tiến hành bảo trì hạ tầng vào lúc 02:00 - 04:00 ngày mai. Rất mong Quý khách và nhân viên thông cảm cho sự bất tiện này.',
   },
   {
-    label: '🎁 Tặng Voucher Ưu đãi đặc biệt',
+    label: 'Tặng Voucher Ưu đãi đặc biệt',
     targetGroup: 'CUSTOMERS',
     channel: 'Email',
     type: 'Promotional',
@@ -60,7 +60,7 @@ const PRESET_TEMPLATES = [
       'Chúc mừng bạn đã nhận được Voucher giảm giá đặc biệt. Hãy kiểm tra mục Ví Voucher của bạn trong ứng dụng để sử dụng ngay hôm nay!',
   },
   {
-    label: '🎬 Cập nhật Suất chiếu khẩn cấp',
+    label: 'Cập nhật Suất chiếu khẩn cấp',
     targetGroup: 'CUSTOMERS',
     channel: 'App',
     type: 'Transactional',
@@ -69,7 +69,7 @@ const PRESET_TEMPLATES = [
       'Suất chiếu phim bạn đã đặt vừa có điều chỉnh lịch chiếu. Vui lòng kiểm tra email hoặc vé xem phim của bạn để xem chi tiết hỗ trợ đền bù.',
   },
   {
-    label: '⚠️ Cảnh báo vận hành phòng chiếu',
+    label: 'Cảnh báo vận hành phòng chiếu',
     targetGroup: 'STAFF',
     channel: 'Internal',
     type: 'Internal',
@@ -673,11 +673,11 @@ export default function ManageNotifications() {
                         : 'border-white/10 bg-slate-900 text-white focus:border-blue-500'
                     }`}
                   >
-                    <option value="App">📱 App Notification</option>
-                    <option value="Email">📧 Email Service</option>
-                    <option value="SMS">💬 SMS Message</option>
-                    <option value="Signage">📺 Digital Signage Screen</option>
-                    <option value="Internal">📢 Internal Staff Feed</option>
+                    <option value="App">App Notification</option>
+                    <option value="Email">Email Service</option>
+                    <option value="SMS">SMS Message</option>
+                    <option value="Signage">Digital Signage Screen</option>
+                    <option value="Internal">Internal Staff Feed</option>
                   </select>
                 </div>
 
@@ -787,7 +787,7 @@ export default function ManageNotifications() {
               }`}
             >
               <h3 className="mb-3 text-sm font-black uppercase tracking-wider text-cyan-500">
-                ⚡ Quick Templates (Mẫu nhanh)
+                Quick Templates (Mẫu nhanh)
               </h3>
               <p className="mb-4 text-xs text-slate-400">
                 Nhấp vào các mẫu thông báo sẵn có dưới đây để điền nhanh nội dung:
@@ -822,7 +822,7 @@ export default function ManageNotifications() {
                   : 'border-white/10 bg-[#0B1528]'
               }`}
             >
-              <h3 className="mb-2 text-sm font-black text-slate-300">💡 Hướng dẫn gửi tin</h3>
+              <h3 className="mb-2 text-sm font-black text-slate-300">Hướng dẫn gửi tin</h3>
               <ul className="space-y-2 text-xs text-slate-400">
                 <li className="flex items-start gap-2">
                   <FaMobileAlt className="mt-0.5 shrink-0 text-cyan-400" />
