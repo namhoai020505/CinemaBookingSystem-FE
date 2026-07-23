@@ -1,6 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FaBars, FaMoon, FaPowerOff, FaSun } from 'react-icons/fa';
-import NotificationCenter from '../../components/NotificationCenter';
 import { logout } from '../../services/authService';
 
 interface TopbarProps {
@@ -104,8 +103,6 @@ const Topbar = ({
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <NotificationCenter isLightMode={isLightMode} buttonClassName={iconButtonClass} />
-
         <button
           type="button"
           onClick={onToggleTheme}

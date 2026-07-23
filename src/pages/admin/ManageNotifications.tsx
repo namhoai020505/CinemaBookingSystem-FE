@@ -11,7 +11,6 @@ import {
   FaInfoCircle,
   FaMobileAlt,
   FaPaperPlane,
-  FaPlusCircle,
   FaSearch,
   FaSyncAlt,
   FaUserCheck,
@@ -310,31 +309,6 @@ export default function ManageNotifications() {
               </p>
             </div>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              fetchNotifications();
-              fetchFeeds();
-            }}
-            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-bold transition-all ${
-              isLightMode
-                ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 shadow-sm'
-                : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
-            }`}
-          >
-            <FaSyncAlt className={loading ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('send')}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-500 px-5 py-2.5 text-xs font-black text-white shadow-lg shadow-blue-600/30 transition-all hover:brightness-110 active:scale-95"
-          >
-            <FaPlusCircle />
-            <span>Gửi Thông Báo Mới</span>
-          </button>
         </div>
       </div>
 
