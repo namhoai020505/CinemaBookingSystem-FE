@@ -301,7 +301,7 @@ export default function ManageNotifications() {
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
-                Quản lý Thông báo (Notification Center)
+                Quản lý Thông báo
               </h1>
               <p
                 className={`text-xs font-semibold sm:text-sm ${
@@ -359,7 +359,7 @@ export default function ManageNotifications() {
                 isLightMode ? 'text-slate-500' : 'text-slate-400'
               }`}
             >
-              Chưa đọc (Unread)
+              Chưa đọc
             </span>
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-500/10 text-amber-500">
               <FaInfoCircle />
@@ -371,7 +371,7 @@ export default function ManageNotifications() {
               isLightMode ? 'text-slate-500' : 'text-slate-400'
             }`}
           >
-            Thông báo chưa xác nhận
+            Thông báo chưa đọc
           </div>
         </div>
 
@@ -402,7 +402,7 @@ export default function ManageNotifications() {
               isLightMode ? 'text-slate-500' : 'text-slate-400'
             }`}
           >
-            Internal Operational Feed
+            Tin tức vận hành nội bộ
           </div>
         </div>
       </div>
@@ -476,7 +476,7 @@ export default function ManageNotifications() {
               {/* Target Type Selector */}
               <div>
                 <label className="mb-2 block text-xs font-black uppercase tracking-wider text-slate-400">
-                  1. Chọn Đối tượng Nhận (Target Audience)
+                  1. Chọn Đối tượng Nhận
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -515,7 +515,7 @@ export default function ManageNotifications() {
               {targetType === 'GROUP' && (
                 <div>
                   <label className="mb-1.5 block text-xs font-bold">
-                    Chọn Nhóm Người Dùng (Target Group)
+                    Chọn Nhóm Người Dùng
                   </label>
                   <select
                     name="targetGroup"
@@ -527,10 +527,10 @@ export default function ManageNotifications() {
                         : 'border-white/10 bg-slate-900 text-white focus:border-blue-500'
                     }`}
                   >
-                    {!isManager && <option value="ALL">Tất cả người dùng (ALL)</option>}
-                    <option value="STAFF">Nhân viên rạp (STAFF)</option>
-                    <option value="CUSTOMERS">Khách hàng (CUSTOMERS)</option>
-                    {!isManager && <option value="MANAGERS">Quản lý rạp (MANAGERS)</option>}
+                    {!isManager && <option value="ALL">Tất cả người dùng</option>}
+                    <option value="STAFF">Nhân viên rạp</option>
+                    <option value="CUSTOMERS">Khách hàng</option>
+                    {!isManager && <option value="MANAGERS">Quản lý rạp</option>}
                   </select>
                 </div>
               )}
@@ -672,7 +672,7 @@ export default function ManageNotifications() {
               {/* Channel & Type Selection */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1.5 block text-xs font-bold">Kênh Thông Báo (Channel)</label>
+                  <label className="mb-1.5 block text-xs font-bold">Kênh Thông Báo</label>
                   <select
                     name="channel"
                     value={formData.channel}
@@ -683,15 +683,15 @@ export default function ManageNotifications() {
                         : 'border-white/10 bg-slate-900 text-white focus:border-blue-500'
                     }`}
                   >
-                    <option value="App">App Notification</option>
-                    <option value="Email">Email Service</option>
-                    <option value="SMS">SMS Message</option>
-                    <option value="Internal">Internal Staff Feed</option>
+                    <option value="App">Thông báo Ứng dụng (App)</option>
+                    <option value="Email">Thư điện tử (Email)</option>
+                    <option value="SMS">Tin nhắn SMS</option>
+                    <option value="Internal">Tin tức nội bộ (Internal)</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-xs font-bold">Loại Thông Báo (Type)</label>
+                  <label className="mb-1.5 block text-xs font-bold">Loại Thông Báo</label>
                   <select
                     name="type"
                     value={formData.type}
@@ -702,10 +702,10 @@ export default function ManageNotifications() {
                         : 'border-white/10 bg-slate-900 text-white focus:border-blue-500'
                     }`}
                   >
-                    <option value="Transactional">Giao dịch (Transactional)</option>
-                    <option value="Promotional">Khuyến mãi (Promotional)</option>
-                    <option value="Loyalty">Điểm thưởng / Thành viên (Loyalty)</option>
-                    <option value="Internal">Vận hành / Nội bộ (Internal)</option>
+                    <option value="Transactional">Giao dịch & Vé</option>
+                    <option value="Promotional">Khuyến mãi & Ưu đãi</option>
+                    <option value="Loyalty">Điểm thưởng & Thành viên</option>
+                    <option value="Internal">Vận hành & Nội bộ</option>
                   </select>
                 </div>
               </div>
@@ -713,7 +713,7 @@ export default function ManageNotifications() {
               {/* Booking ID Optional */}
               <div>
                 <label className="mb-1.5 block text-xs font-bold">
-                  Mã Đặt Vé Liên Quan (Booking ID - Không bắt buộc)
+                  Mã Đặt Vé Liên Quan (Không bắt buộc)
                 </label>
                 <input
                   type="text"
@@ -832,11 +832,10 @@ export default function ManageNotifications() {
                   }`}
                 >
                   <option value="ALL">Tất cả kênh</option>
-                  <option value="App">App</option>
+                  <option value="App">Ứng dụng (App)</option>
                   <option value="Email">Email</option>
                   <option value="SMS">SMS</option>
-                  <option value="Signage">Signage</option>
-                  <option value="Internal">Internal</option>
+                  <option value="Internal">Tin nội bộ</option>
                 </select>
               </div>
 
@@ -851,10 +850,10 @@ export default function ManageNotifications() {
                 }`}
               >
                 <option value="ALL">Tất cả loại tin</option>
-                <option value="Transactional">Transactional</option>
-                <option value="Promotional">Promotional</option>
-                <option value="Loyalty">Loyalty</option>
-                <option value="Internal">Internal</option>
+                <option value="Transactional">Giao dịch</option>
+                <option value="Promotional">Khuyến mãi</option>
+                <option value="Loyalty">Điểm thưởng</option>
+                <option value="Internal">Nội bộ</option>
               </select>
 
               {/* Read Filter */}
@@ -868,8 +867,8 @@ export default function ManageNotifications() {
                 }`}
               >
                 <option value="ALL">Tất cả trạng thái</option>
-                <option value="UNREAD">Chưa đọc (Unread)</option>
-                <option value="READ">Đã đọc (Read)</option>
+                <option value="UNREAD">Chưa đọc</option>
+                <option value="READ">Đã đọc</option>
               </select>
 
               <button
@@ -949,7 +948,7 @@ export default function ManageNotifications() {
                       {/* User ID / Booking */}
                       <td className="py-3.5 px-4">
                         <div className="font-mono text-[11px] text-cyan-400">
-                          {item.userId ? item.userId : 'All Users'}
+                          {item.userId ? item.userId : 'Tất cả người dùng'}
                         </div>
                         {item.bookingId && (
                           <div className="text-[10px] text-slate-400 font-mono">
@@ -1019,10 +1018,10 @@ export default function ManageNotifications() {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FaBroadcastTower className="text-emerald-400 text-lg" />
-                <h3 className="text-base font-black">Nguồn Tin Vận Hành Nội Bộ (Internal Operational Feed)</h3>
+                <h3 className="text-base font-black">Nguồn Tin Vận Hành Nội Bộ</h3>
               </div>
               <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] font-bold text-emerald-400 border border-emerald-500/20">
-                Staff & Manager Feed
+                Dành cho Nhân viên & Quản lý
               </span>
             </div>
 
@@ -1040,7 +1039,7 @@ export default function ManageNotifications() {
                     className="rounded-xl border border-white/10 bg-white/5 p-4 text-xs font-medium"
                   >
                     <div className="font-bold text-sm text-emerald-300">
-                      {item.title || item.type || 'Operational Notice'}
+                      {item.title || item.type || 'Thông báo vận hành'}
                     </div>
                     <div className="mt-1 text-slate-300 opacity-90">
                       {item.message || item.content}
@@ -1093,7 +1092,7 @@ export default function ManageNotifications() {
                     }
                     className="rounded border-slate-300"
                   />
-                  <span>User bị Flag / Vi phạm Spam (IsBlocked hoặc SpamCount &gt; 0)</span>
+                  <span>Tài khoản bị cờ báo / vi phạm Spam</span>
                 </label>
 
                 <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
@@ -1112,7 +1111,7 @@ export default function ManageNotifications() {
               <div className="space-y-3 pt-2">
                 <div>
                   <label className="mb-1 block text-xs font-bold">
-                    Lọc theo Mã Phòng chiếu (Room ID)
+                    Lọc theo Mã Phòng chiếu
                   </label>
                   <input
                     type="text"
@@ -1131,7 +1130,7 @@ export default function ManageNotifications() {
 
                 <div>
                   <label className="mb-1 block text-xs font-bold">
-                    Lọc theo Mã Suất chiếu (Showtime ID)
+                    Lọc theo Mã Suất chiếu
                   </label>
                   <input
                     type="text"
@@ -1150,7 +1149,7 @@ export default function ManageNotifications() {
 
                 <div>
                   <label className="mb-1 block text-xs font-bold">
-                    Lọc theo Mã Phim (Movie ID)
+                    Lọc theo Mã Phim
                   </label>
                   <input
                     type="text"
