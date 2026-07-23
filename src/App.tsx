@@ -18,6 +18,7 @@ import ManageSeatLayout from './pages/admin/ManageSeatLayout';
 import ManageShowtime from './pages/admin/ManageShowtime';
 import ManageStaff from './pages/admin/ManageStaff';
 import ManageVouchers from './pages/admin/ManageVouchers';
+import ManageNotifications from './pages/admin/ManageNotifications';
 import ReviewModeration from './pages/admin/ReviewModeration';
 import Login from './pages/auth/Login';
 import StaffSetPassword from './pages/auth/StaffSetPassword';
@@ -96,6 +97,7 @@ const router = createBrowserRouter([
               { path: 'review', element: <ReviewModeration /> },
               { path: 'vouchers', element: <ManageVouchers /> },
               { path: 'banners', element: <ManageBanner /> },
+              { path: 'notifications', element: <ManageNotifications /> },
             ],
           },
         ],
@@ -114,6 +116,7 @@ const router = createBrowserRouter([
               { path: 'ticket-scanner', element: <TicketScannerPage /> },
               { path: 'vouchers', element: <ManageVouchers /> },
               { path: 'banners', element: <ManageBanner /> },
+              { path: 'notifications', element: <ManageNotifications /> },
               { path: 'my-cinema', element: <MyCinemaPage /> },
             ],
           },

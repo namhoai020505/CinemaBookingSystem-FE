@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   FaBarcode,
+  FaBell,
   FaBuilding,
   FaCalendarAlt,
   FaChartLine,
@@ -51,6 +52,12 @@ const navItems = [
     label: 'Banners',
     description: 'Quản lý banner Carousel của rạp',
     icon: <FaDoorOpen />,
+  },
+  {
+    to: '/manager/notifications',
+    label: 'Thông báo',
+    description: 'Gửi & quản lý thông báo rạp',
+    icon: <FaBell />,
   },
   {
     to: '/manager/my-cinema',

@@ -13,6 +13,36 @@ export type NotificationItem = {
   status: string;
 };
 
+export type SendNotificationRequest = {
+  userId?: string | null;
+  userIds?: string[] | null;
+  targetGroup?: string | null; // ALL, CUSTOMERS, STAFF, MANAGERS, ADMINS
+  bookingId?: string | null;
+  title: string;
+  message: string;
+  channel?: string; // App, Email, SMS, Signage, Internal
+  type?: string; // Transactional, Loyalty, Promotional, Internal
+};
+
+export type TriggerSystemNotificationRequest = {
+  eventType: string;
+  referenceId?: string | null;
+  payloadJson?: string | null;
+  targetUserId?: string | null;
+};
+
+export type FeedItem = {
+  id?: string;
+  notificationId?: string;
+  title?: string;
+  message?: string;
+  content?: string;
+  type?: string;
+  channel?: string;
+  createdAt?: string;
+  timestamp?: string;
+};
+
 export type PagedList<T> = {
   items: T[];
   pageIndex: number;
@@ -43,7 +73,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
 const isNotificationItem = (value: unknown): value is NotificationItem =>
-  isRecord(value) && typeof value.notificationId === 'string';
+  isRecord(value) && (typeof value.notificationId === 'string' || typeof value.userId === 'string');
 
 const readNotificationArray = (source: unknown, keys: string[]) => {
   if (!isRecord(source)) {
@@ -109,4 +139,16 @@ export const notificationService = {
 
   markAllAsRead: async () =>
     api.put<unknown, ApiResponse<boolean>>('/api/notifications/read-all'),
+
+  sendNotification: async (request: SendNotificationRequest) =>
+    api.post<unknown, ApiResponse<boolean>>('/api/notifications/send', request),
+
+  triggerSystemNotification: async (request: TriggerSystemNotificationRequest) =>
+    api.post<unknown, ApiResponse<boolean>>('/api/notifications/trigger-system', request),
+
+  getInternalFeed: async () =>
+    api.get<unknown, ApiResponse<FeedItem[]>>('/api/notifications/internal-feed'),
+
+  getSignageFeed: async () =>
+    api.get<unknown, ApiResponse<FeedItem[]>>('/api/notifications/signage'),
 };

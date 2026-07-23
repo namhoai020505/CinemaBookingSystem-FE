@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
+  FaBell,
   FaChair,
   FaChartLine,
   FaComments,
@@ -57,6 +58,12 @@ const navItems = [
     label: 'Banners',
     description: 'Quản lý ảnh banner Carousel',
     icon: <FaFilm />,
+  },
+  {
+    to: '/admin/notifications',
+    label: 'Thông báo',
+    description: 'Gửi & quản lý thông báo',
+    icon: <FaBell />,
   },
   {
     to: '/admin/staff',
