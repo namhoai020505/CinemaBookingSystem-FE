@@ -12,6 +12,7 @@ import {
   FaMobileAlt,
   FaPaperPlane,
   FaSearch,
+  FaSlidersH,
   FaSyncAlt,
   FaUserCheck,
   FaUsers,
@@ -119,6 +120,16 @@ export default function ManageNotifications() {
   // Internal Operational Feed State
   const [internalFeed, setInternalFeed] = useState<FeedItem[]>([]);
   const [loadingFeeds, setLoadingFeeds] = useState(false);
+
+  // Filter Modal State
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [tempFilters, setTempFilters] = useState({
+    isFlagged: false,
+    hasBooked: false,
+    roomId: '',
+    showtimeId: '',
+    movieId: '',
+  });
 
   // Load Data
   useEffect(() => {
@@ -559,127 +570,107 @@ export default function ManageNotifications() {
                 </div>
               )}
 
-              {/* Single User ID Input */}
+              {/* Single User ID Input with 3-bars Filter Button */}
               {targetType === 'SINGLE' && (
                 <div>
                   <label className="mb-1.5 block text-xs font-bold">
-                    Nhập User ID Người Nhận (Không bắt buộc nếu sử dụng Bộ lọc Điều kiện phía dưới)
+                    Nhập User ID Người Nhận
                   </label>
-                  <input
-                    type="text"
-                    name="userId"
-                    placeholder="VD: usr-c8d9e2a1-..."
-                    value={formData.userId || ''}
-                    onChange={handleInputChange}
-                    className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all ${
-                      isLightMode
-                        ? 'border-slate-300 bg-white text-slate-900 focus:border-blue-500'
-                        : 'border-white/10 bg-slate-900 text-white focus:border-blue-500'
-                    }`}
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      name="userId"
+                      placeholder="Nhập User ID (VD: usr-c8d9e2a1-...) hoặc nhấn nút bộ lọc bên cạnh"
+                      value={formData.userId || ''}
+                      onChange={handleInputChange}
+                      className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all ${
+                        isLightMode
+                          ? 'border-slate-300 bg-white text-slate-900 focus:border-blue-500'
+                          : 'border-white/10 bg-slate-900 text-white focus:border-blue-500'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTempFilters({
+                          isFlagged: !!formData.isFlagged,
+                          hasBooked: !!formData.hasBooked,
+                          roomId: formData.roomId || '',
+                          showtimeId: formData.showtimeId || '',
+                          movieId: formData.movieId || '',
+                        });
+                        setIsFilterModalOpen(true);
+                      }}
+                      title="Mở bộ lọc điều kiện người dùng"
+                      className={`flex h-10 w-11 shrink-0 items-center justify-center rounded-xl border transition-all ${
+                        formData.isFlagged ||
+                        formData.hasBooked ||
+                        formData.roomId ||
+                        formData.showtimeId ||
+                        formData.movieId
+                          ? 'border-cyan-500 bg-cyan-500/20 text-cyan-400 font-bold'
+                          : isLightMode
+                          ? 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                      }`}
+                    >
+                      <FaSlidersH className="text-base" />
+                    </button>
+                  </div>
+
+                  {/* Active Filter Badges */}
+                  {(formData.isFlagged ||
+                    formData.hasBooked ||
+                    formData.roomId ||
+                    formData.showtimeId ||
+                    formData.movieId) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+                      <span className="text-slate-400">Bộ lọc đang áp dụng:</span>
+                      {formData.isFlagged && (
+                        <span className="rounded-md bg-red-500/10 px-2 py-0.5 text-red-400 border border-red-500/20">
+                          User bị Flag
+                        </span>
+                      )}
+                      {formData.hasBooked && (
+                        <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-blue-400 border border-blue-500/20">
+                          Đã từng đặt vé
+                        </span>
+                      )}
+                      {formData.roomId && (
+                        <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-amber-400 border border-amber-500/20">
+                          Phòng: {formData.roomId}
+                        </span>
+                      )}
+                      {formData.showtimeId && (
+                        <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-emerald-400 border border-emerald-500/20">
+                          Suất chiếu: {formData.showtimeId}
+                        </span>
+                      )}
+                      {formData.movieId && (
+                        <span className="rounded-md bg-purple-500/10 px-2 py-0.5 text-purple-400 border border-purple-500/20">
+                          Phim: {formData.movieId}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            isFlagged: false,
+                            hasBooked: false,
+                            roomId: '',
+                            showtimeId: '',
+                            movieId: '',
+                          }));
+                        }}
+                        className="ml-1 text-slate-400 hover:text-red-400 underline"
+                      >
+                        Xóa lọc
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-
-              {/* Multiple User IDs Input */}
-              {targetType === 'MULTIPLE' && (
-                <div>
-                  <label className="mb-1.5 block text-xs font-bold">
-                    Nhập Danh Sách User ID (phân cách bằng dấu phẩy)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="usr-001, usr-002, usr-003..."
-                    value={multipleUserIdsInput}
-                    onChange={(e) => setMultipleUserIdsInput(e.target.value)}
-                    className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-all ${
-                      isLightMode
-                        ? 'border-slate-300 bg-white text-slate-900 focus:border-blue-500'
-                        : 'border-white/10 bg-slate-900 text-white focus:border-blue-500'
-                    }`}
-                  />
-                </div>
-              )}
-
-              {/* User Filter Conditions Section */}
-              <div className={`rounded-xl border p-4 ${
-                isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'
-              }`}>
-                <label className="mb-2 block text-xs font-black uppercase tracking-wider text-cyan-400">
-                  🎯 Điều kiện lọc người nhận (User Conditions)
-                </label>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!formData.isFlagged}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, isFlagged: e.target.checked }))}
-                      className="rounded border-slate-300"
-                    />
-                    <span>🚩 User bị Flag / Vi phạm Spam</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!formData.hasBooked}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, hasBooked: e.target.checked }))}
-                      className="rounded border-slate-300"
-                    />
-                    <span>🎟️ User đã từng đặt vé</span>
-                  </label>
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold text-slate-400">
-                      Lọc theo Room ID (Phòng)
-                    </label>
-                    <input
-                      type="text"
-                      name="roomId"
-                      placeholder="VD: room-01"
-                      value={formData.roomId || ''}
-                      onChange={handleInputChange}
-                      className={`w-full rounded-lg border px-3 py-1.5 text-xs outline-none ${
-                        isLightMode ? 'border-slate-300 bg-white text-slate-900' : 'border-white/10 bg-slate-900 text-white'
-                      }`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold text-slate-400">
-                      Lọc theo Showtime ID (Suất chiếu)
-                    </label>
-                    <input
-                      type="text"
-                      name="showtimeId"
-                      placeholder="VD: st-1002"
-                      value={formData.showtimeId || ''}
-                      onChange={handleInputChange}
-                      className={`w-full rounded-lg border px-3 py-1.5 text-xs outline-none ${
-                        isLightMode ? 'border-slate-300 bg-white text-slate-900' : 'border-white/10 bg-slate-900 text-white'
-                      }`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-[11px] font-bold text-slate-400">
-                      Lọc theo Movie ID (Phim)
-                    </label>
-                    <input
-                      type="text"
-                      name="movieId"
-                      placeholder="VD: mov-501"
-                      value={formData.movieId || ''}
-                      onChange={handleInputChange}
-                      className={`w-full rounded-lg border px-3 py-1.5 text-xs outline-none ${
-                        isLightMode ? 'border-slate-300 bg-white text-slate-900' : 'border-white/10 bg-slate-900 text-white'
-                      }`}
-                    />
-                  </div>
-                </div>
-              </div>
 
               {/* Channel & Type Selection */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1135,6 +1126,153 @@ export default function ManageNotifications() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* User Condition Filter Modal */}
+      {isFilterModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div
+            className={`w-full max-w-lg rounded-2xl border p-6 shadow-2xl transition-all ${
+              isLightMode
+                ? 'border-slate-200 bg-white text-slate-900'
+                : 'border-white/15 bg-slate-900 text-white'
+            }`}
+          >
+            <div className="mb-4 flex items-center justify-between border-b pb-3 border-slate-200 dark:border-white/10">
+              <div className="flex items-center gap-2 font-bold text-base">
+                <FaSlidersH className="text-cyan-500" />
+                <span>Bộ lọc điều kiện tìm người nhận</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(false)}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={tempFilters.isFlagged}
+                    onChange={(e) =>
+                      setTempFilters((prev) => ({ ...prev, isFlagged: e.target.checked }))
+                    }
+                    className="rounded border-slate-300"
+                  />
+                  <span>User bị Flag / Vi phạm Spam (IsBlocked hoặc SpamCount &gt; 0)</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={tempFilters.hasBooked}
+                    onChange={(e) =>
+                      setTempFilters((prev) => ({ ...prev, hasBooked: e.target.checked }))
+                    }
+                    className="rounded border-slate-300"
+                  />
+                  <span>User đã từng đặt vé trong hệ thống</span>
+                </label>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div>
+                  <label className="mb-1 block text-xs font-bold">
+                    Lọc theo Mã Phòng chiếu (Room ID)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: room-01"
+                    value={tempFilters.roomId}
+                    onChange={(e) =>
+                      setTempFilters((prev) => ({ ...prev, roomId: e.target.value }))
+                    }
+                    className={`w-full rounded-xl border px-3.5 py-2 text-xs outline-none ${
+                      isLightMode
+                        ? 'border-slate-300 bg-white text-slate-900'
+                        : 'border-white/10 bg-slate-950 text-white'
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold">
+                    Lọc theo Mã Suất chiếu (Showtime ID)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: st-1002"
+                    value={tempFilters.showtimeId}
+                    onChange={(e) =>
+                      setTempFilters((prev) => ({ ...prev, showtimeId: e.target.value }))
+                    }
+                    className={`w-full rounded-xl border px-3.5 py-2 text-xs outline-none ${
+                      isLightMode
+                        ? 'border-slate-300 bg-white text-slate-900'
+                        : 'border-white/10 bg-slate-950 text-white'
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold">
+                    Lọc theo Mã Phim (Movie ID)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: mov-501"
+                    value={tempFilters.movieId}
+                    onChange={(e) =>
+                      setTempFilters((prev) => ({ ...prev, movieId: e.target.value }))
+                    }
+                    className={`w-full rounded-xl border px-3.5 py-2 text-xs outline-none ${
+                      isLightMode
+                        ? 'border-slate-300 bg-white text-slate-900'
+                        : 'border-white/10 bg-slate-950 text-white'
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3 border-t pt-4 border-slate-200 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(false)}
+                className={`rounded-xl border px-4 py-2 text-xs font-bold transition-all ${
+                  isLightMode
+                    ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                    : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                }`}
+              >
+                Hủy
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    isFlagged: tempFilters.isFlagged,
+                    hasBooked: tempFilters.hasBooked,
+                    roomId: tempFilters.roomId,
+                    showtimeId: tempFilters.showtimeId,
+                    movieId: tempFilters.movieId,
+                  }));
+                  setIsFilterModalOpen(false);
+                  toast.info('Đã áp dụng bộ lọc điều kiện cho người nhận.');
+                }}
+                className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-5 py-2 text-xs font-black text-white shadow-md hover:brightness-110"
+              >
+                Áp dụng bộ lọc
+              </button>
+            </div>
           </div>
         </div>
       )}
