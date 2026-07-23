@@ -91,9 +91,11 @@ export const setAuthSession = ({
   notifyAuthSessionChanged();
 };
 
-export const getAccessToken = () => localStorage.getItem('accessToken');
+export const getAccessToken = () =>
+  authSession.accessToken || localStorage.getItem('accessToken');
 
-export const getRefreshToken = () => localStorage.getItem('refreshToken');
+export const getRefreshToken = () =>
+  authSession.refreshToken || localStorage.getItem('refreshToken');
 
 export const getAuthFullName = () =>
   authSession.fullName || localStorage.getItem('fullName') || 'Thành viên';

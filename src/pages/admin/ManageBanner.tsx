@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { toast } from "react-toastify";
 import { bannerService } from "../../services/bannerService";
@@ -40,11 +40,7 @@ export default function ManageBanner() {
   const [bannerPreview, setBannerPreview] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    fetchBanners();
-  }, []);
-
-  const fetchBanners = async () => {
+  const fetchBanners = useCallback(async () => {
     try {
       setLoading(true);
       const data = await bannerService.getAllBanners();
@@ -54,7 +50,15 @@ export default function ManageBanner() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void fetchBanners();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchBanners]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -119,7 +123,7 @@ export default function ManageBanner() {
       setLoading(true);
       await bannerService.deleteBanner(bannerId);
       toast.success("Xóa banner thành công!");
-      fetchBanners();
+      void fetchBanners();
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Không thể xóa banner."));
     } finally {
@@ -159,7 +163,7 @@ export default function ManageBanner() {
       }
 
       setIsModalOpen(false);
-      fetchBanners();
+      void fetchBanners();
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Lỗi khi lưu banner."));
     } finally {

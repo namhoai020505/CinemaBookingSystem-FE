@@ -921,7 +921,7 @@ export default function ManageShowtime() {
       } else if (err instanceof Error) {
         errorMsg = err.message;
       }
-      toast.error(errorMsg, { autoClose: 7000 });
+      toast.error(errorMsg, { autoClose: 300 });
 
       if (hasApiResponse) {
         setIsDirty(false);

@@ -4,6 +4,17 @@ export type NotificationItem = {
   notificationId: string;
   userId: string;
   bookingId?: string | null;
+  voucherId?: string | null;
+  voucherCode?: string | null;
+  code?: string | null;
+  referenceId?: string | null;
+  referenceType?: string | null;
+  entityId?: string | null;
+  entityType?: string | null;
+  targetId?: string | null;
+  actionUrl?: string | null;
+  metadata?: Record<string, unknown> | string | null;
+  payload?: Record<string, unknown> | string | null;
   title: string;
   message: string;
   isRead: boolean;

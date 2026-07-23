@@ -746,25 +746,41 @@ body.g2c-light-mode .g2c-footer .hover\:text-white:hover {
 }
 
 .g2c-toast {
-  min-height: 64px !important;
-  border-radius: 18px !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 38px !important;
+  min-width: 0 !important;
+  border-radius: 999px !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   background: #0f172a !important;
   color: #ffffff !important;
-  box-shadow: 0 22px 60px rgba(2, 6, 23, 0.36) !important;
+  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.28) !important;
   overflow: hidden !important;
-  padding: 4px !important;
+  padding: 0 !important;
 }
 
 .g2c-toast .Toastify__toast-body {
-  align-items: flex-start !important;
-  gap: 10px !important;
+  align-items: center !important;
+  gap: 0 !important;
   margin: 0 !important;
-  padding: 8px 10px !important;
+  padding: 7px 12px !important;
+  min-width: 0 !important;
   font-family: 'Plus Jakarta Sans', sans-serif !important;
-  font-size: 0.9rem !important;
+  font-size: 0.78rem !important;
   font-weight: 700 !important;
-  line-height: 1.45 !important;
+  line-height: 1.25 !important;
+}
+
+.g2c-toast .Toastify__toast-icon {
+  flex: 0 0 auto !important;
+  margin-inline-end: 8px !important;
+}
+
+.g2c-toast .Toastify__toast-body > div:last-child {
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
 }
 
 .g2c-toast-progress {
@@ -789,32 +805,25 @@ body.g2c-light-mode .g2c-footer .hover\:text-white:hover {
   border-color: rgba(34, 211, 238, 0.32) !important;
 }
 
-.g2c-voucher-toast {
-  border-color: rgba(255, 209, 102, 0.5) !important;
-  background:
-    radial-gradient(circle at 15% 10%, rgba(255, 209, 102, 0.18), transparent 32%),
-    #0f172a !important;
-}
-
-.g2c-voucher-toast-progress {
-  background: linear-gradient(90deg, #ffd166, #10b981) !important;
-}
-
 .Toastify__close-button {
   color: #cbd5e1 !important;
   opacity: 0.85 !important;
 }
 
 @media (max-width: 640px) {
-  .Toastify__toast-container {
-    left: 12px !important;
-    right: 12px !important;
-    top: 12px !important;
-    width: auto !important;
+  .Toastify__toast-container--top-center {
+    left: 50% !important;
+    right: auto !important;
+    top: max(12px, env(safe-area-inset-top)) !important;
+    width: calc(100vw - 24px) !important;
+    max-width: 420px !important;
+    transform: translateX(-50%) !important;
   }
 
   .g2c-toast {
-    margin-bottom: 10px !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    margin-bottom: 8px !important;
   }
 }
 

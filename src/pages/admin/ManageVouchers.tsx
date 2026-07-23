@@ -76,11 +76,11 @@ const targetTypeOptions: Array<{ value: VoucherTargetType; label: string }> = [
   { value: 'SPECIFIC_CUSTOMERS', label: 'Khách hàng chỉ định' },
 ];
 
-const delimitedIdsPattern = /^[A-Za-z0-9_,\-\s]+$/;
+const delimitedIdsPattern = /^[A-Za-z0-9_,;@.+\-\s]+$/;
 
 const normalizeDelimitedIds = (value: string) =>
   value
-    .split(/[,\n\r\t]+/)
+    .split(/[,\n\r\t;]+/)
     .map((item) => item.trim())
     .filter(Boolean)
     .join(',');
@@ -317,7 +317,7 @@ export default function ManageVouchers() {
       : '';
 
     if (targetCustomerIds.trim() && !delimitedIdsPattern.test(targetCustomerIds)) {
-      toast.warn('Danh sách Customer ID chỉ được chứa chữ, số, dấu gạch dưới, gạch ngang và dấu phẩy.');
+      toast.warn('Danh sách khách hàng chỉ được chứa ID, email, dấu phẩy hoặc dấu chấm phẩy.');
       return;
     }
 
@@ -332,7 +332,7 @@ export default function ManageVouchers() {
     }
 
     if (voucherNeedsCustomerIds && !cleanTargetCustomerIds) {
-      toast.warn('Vui lòng nhập Customer Profile ID khi tạo voucher private hoặc voucher chỉ định khách hàng.');
+      toast.warn('Vui lòng nhập Customer Profile ID, User ID hoặc email khi tạo voucher private.');
       return;
     }
 
@@ -1063,7 +1063,7 @@ export default function ManageVouchers() {
                         : 'bg-emerald-400/10 text-emerald-200'
                     }`}>
                       {voucherNeedsCustomerIds
-                        ? 'Cần nhập Customer Profile ID cho nhóm khách được nhận voucher.'
+                        ? 'Cần nhập Customer Profile ID, User ID hoặc email cho nhóm khách được nhận voucher.'
                         : 'Voucher đang công khai cho tất cả khách hàng đủ điều kiện.'}
                     </p>
                   </div>
@@ -1094,17 +1094,17 @@ export default function ManageVouchers() {
                   {voucherNeedsCustomerIds && (
                     <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 xl:col-span-2">
                       <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-amber-300">
-                        Customer Profile ID được nhận voucher *
+                        Khách hàng được nhận voucher *
                       </label>
                       <textarea
                         value={targetCustomerIds}
                         onChange={(e) => setTargetCustomerIds(e.target.value)}
                         rows={3}
-                        placeholder="VD: CUS_001, CUS_002 hoặc mỗi dòng một ID"
+                        placeholder="VD: CUS_001, USR_001, email@example.com hoặc mỗi dòng một khách"
                         className="w-full rounded-xl border border-amber-500/30 bg-[#0F172A] px-4 py-3 text-sm text-white outline-none transition resize-none focus:border-amber-300 focus:ring-2 focus:ring-amber-500/25"
                       />
                       <p className="mt-2 text-[11px] font-semibold text-amber-100/70">
-                        FE sẽ chuẩn hóa thành chuỗi phân tách bằng dấu phẩy trước khi gửi BE.
+                        Có thể dùng Customer Profile ID, User ID hoặc email. Hệ thống sẽ gửi thông báo đến đúng tài khoản.
                       </p>
                     </div>
                   )}
@@ -1228,7 +1228,7 @@ export default function ManageVouchers() {
                         : 'bg-emerald-400/10 text-emerald-200'
                     }`}>
                       {voucherNeedsCustomerIds
-                        ? 'Cần nhập Customer Profile ID cho nhóm khách được nhận voucher.'
+                        ? 'Cần nhập Customer Profile ID, User ID hoặc email cho nhóm khách được nhận voucher.'
                         : 'Voucher đang công khai cho tất cả khách hàng đủ điều kiện.'}
                     </p>
                   </div>
@@ -1260,17 +1260,17 @@ export default function ManageVouchers() {
                 {voucherNeedsCustomerIds && (
                   <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4">
                     <label className="block text-xs font-semibold uppercase text-amber-300 mb-1">
-                      Customer Profile ID được nhận voucher *
+                      Khách hàng được nhận voucher *
                     </label>
                     <textarea
                       value={targetCustomerIds}
                       onChange={(e) => setTargetCustomerIds(e.target.value)}
                       rows={3}
-                      placeholder="VD: CUS_001, CUS_002 hoặc mỗi dòng một ID"
+                      placeholder="VD: CUS_001, USR_001, email@example.com hoặc mỗi dòng một khách"
                       className="w-full px-4 py-3 rounded-xl bg-[#0F172A] border border-amber-500/30 text-white text-sm outline-none focus:border-amber-300 focus:ring-2 focus:ring-amber-500/25 transition resize-none"
                     />
                     <p className="mt-1 text-[10px] font-semibold text-gray-500">
-                      FE sẽ chuẩn hóa thành chuỗi phân tách bằng dấu phẩy trước khi gửi BE.
+                      Có thể dùng Customer Profile ID, User ID hoặc email. Hệ thống sẽ gửi thông báo đến đúng tài khoản.
                     </p>
                   </div>
                 )}

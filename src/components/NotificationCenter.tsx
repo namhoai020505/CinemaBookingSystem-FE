@@ -17,6 +17,11 @@ import {
   type ApiResponse,
   type NotificationItem,
 } from '../services/notificationService';
+import {
+  VOUCHER_WALLET_UPDATED_EVENT,
+  voucherService,
+  type Voucher,
+} from '../services/voucherService';
 
 type NotificationCenterProps = {
   isLightMode?: boolean;
@@ -25,35 +30,229 @@ type NotificationCenterProps = {
 
 type NotificationTone = 'voucher' | 'success' | 'warning' | 'error' | 'info';
 
-const NOTIFIED_VOUCHER_STORAGE_KEY = 'g2c-notified-voucher-notifications';
 const POLL_INTERVAL_MS = 45_000;
 
-const readNotifiedVoucherIds = () => {
-  if (typeof window === 'undefined') {
-    return new Set<string>();
+const normalizeSearchText = (value: string) => value.toLowerCase();
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const getStringField = (source: unknown, keys: string[]) => {
+  if (!isRecord(source)) {
+    return '';
+  }
+
+  for (const key of keys) {
+    const value = source[key];
+
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return '';
+};
+
+const getBooleanField = (source: unknown, keys: string[]) => {
+  if (!isRecord(source)) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = source[key];
+
+    if (typeof value === 'boolean') {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
+const parseRecordPayload = (value: unknown) => {
+  if (isRecord(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string' || !value.trim()) {
+    return null;
   }
 
   try {
-    const rawValue = sessionStorage.getItem(NOTIFIED_VOUCHER_STORAGE_KEY);
-    const ids = rawValue ? (JSON.parse(rawValue) as string[]) : [];
-    return new Set(ids.filter(Boolean));
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : null;
   } catch {
-    return new Set<string>();
+    return null;
   }
 };
 
-const writeNotifiedVoucherIds = (ids: Set<string>) => {
-  if (typeof window === 'undefined') {
-    return;
+const getNotificationPayloads = (notification: NotificationItem) =>
+  [
+    parseRecordPayload(notification.metadata),
+    parseRecordPayload(notification.payload),
+  ].filter((payload): payload is Record<string, unknown> => Boolean(payload));
+
+const normalizeVoucherCode = (value: string) =>
+  value.trim().replace(/^['"]|['"]$/g, '').toUpperCase();
+
+const getNotificationVoucherId = (notification: NotificationItem) => {
+  const directVoucherId = getStringField(notification, [
+    'voucherId',
+    'voucherID',
+    'VoucherId',
+  ]);
+
+  if (directVoucherId) {
+    return directVoucherId;
   }
 
-  sessionStorage.setItem(
-    NOTIFIED_VOUCHER_STORAGE_KEY,
-    JSON.stringify(Array.from(ids).slice(-80)),
+  const directReferenceType = getStringField(notification, [
+    'referenceType',
+    'entityType',
+    'targetType',
+  ]).toLowerCase();
+  const directReferenceId = getStringField(notification, [
+    'referenceId',
+    'entityId',
+    'targetId',
+  ]);
+
+  if (directReferenceId && directReferenceType.includes('voucher')) {
+    return directReferenceId;
+  }
+
+  if (/^VOU_/i.test(directReferenceId)) {
+    return directReferenceId;
+  }
+
+  for (const payload of getNotificationPayloads(notification)) {
+    const payloadVoucherId = getStringField(payload, [
+      'voucherId',
+      'voucherID',
+      'VoucherId',
+    ]);
+
+    if (payloadVoucherId) {
+      return payloadVoucherId;
+    }
+
+    const payloadReferenceType = getStringField(payload, [
+      'referenceType',
+      'entityType',
+      'targetType',
+    ]).toLowerCase();
+    const payloadReferenceId = getStringField(payload, [
+      'referenceId',
+      'entityId',
+      'targetId',
+    ]);
+
+    if (payloadReferenceId && payloadReferenceType.includes('voucher')) {
+      return payloadReferenceId;
+    }
+
+    if (/^VOU_/i.test(payloadReferenceId)) {
+      return payloadReferenceId;
+    }
+  }
+
+  const actionUrl = getStringField(notification, ['actionUrl', 'url', 'linkUrl']);
+  const urlMatch = actionUrl.match(/(?:voucherId=|vouchers?\/)([A-Za-z0-9_-]+)/i);
+
+  if (urlMatch?.[1]) {
+    return urlMatch[1];
+  }
+
+  const textMatch = [notification.message, notification.title]
+    .join(' ')
+    .match(/\b(VOU_[A-Za-z0-9_-]+)\b/i);
+
+  return textMatch?.[1] || '';
+};
+
+const getNotificationVoucherCode = (notification: NotificationItem) => {
+  const directCode = getStringField(notification, [
+    'voucherCode',
+    'VoucherCode',
+    'code',
+    'Code',
+  ]);
+
+  if (directCode) {
+    return normalizeVoucherCode(directCode);
+  }
+
+  for (const payload of getNotificationPayloads(notification)) {
+    const payloadCode = getStringField(payload, [
+      'voucherCode',
+      'VoucherCode',
+      'code',
+      'Code',
+    ]);
+
+    if (payloadCode) {
+      return normalizeVoucherCode(payloadCode);
+    }
+  }
+
+  const actionUrl = getStringField(notification, ['actionUrl', 'url', 'linkUrl']);
+  const actionCodeMatch = actionUrl.match(/[?&](?:voucherCode|code)=([^&#]+)/i);
+
+  if (actionCodeMatch?.[1]) {
+    return normalizeVoucherCode(decodeURIComponent(actionCodeMatch[1]));
+  }
+
+  const messageCodeMatch = notification.message?.match(
+    /\[\s*([A-Za-z0-9_-]{3,100})\s*\]|(?:mã|ma|code)\s*[:#-]?\s*([A-Za-z0-9_-]{3,100})/i,
+  );
+  const code = messageCodeMatch?.[1] || messageCodeMatch?.[2] || '';
+
+  return code ? normalizeVoucherCode(code) : '';
+};
+
+const getNotificationClaimKey = (notification: NotificationItem) =>
+  getNotificationVoucherId(notification) ||
+  getNotificationVoucherCode(notification) ||
+  notification.notificationId;
+
+const findVoucherByNotification = (
+  vouchers: Voucher[],
+  voucherId: string,
+  voucherCode: string,
+) =>
+  vouchers.find(
+    (voucher) =>
+      (voucherId && voucher.voucherId === voucherId) ||
+      (voucherCode && normalizeVoucherCode(voucher.voucherCode) === voucherCode),
+  );
+
+const getApiErrorCode = (error: unknown) => {
+  if (typeof error === 'object' && error && 'response' in error) {
+    return (error as { response?: { data?: { errorCode?: string } } }).response?.data
+      ?.errorCode;
+  }
+
+  return undefined;
+};
+
+const isAlreadyClaimedError = (error: unknown) => {
+  const code = (getApiErrorCode(error) || '').toUpperCase();
+  const message =
+    error instanceof Error
+      ? error.message
+      : (error as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message || '';
+  const normalizedMessage = normalizeSearchText(message);
+
+  return (
+    code.includes('LIMIT') ||
+    code.includes('ALREADY') ||
+    normalizedMessage.includes('already') ||
+    normalizedMessage.includes('limit') ||
+    normalizedMessage.includes('đã') ||
+    normalizedMessage.includes('da ')
   );
 };
-
-const normalizeSearchText = (value: string) => value.toLowerCase();
 
 const isVoucherNotification = (notification: NotificationItem) => {
   const value = normalizeSearchText(
@@ -73,6 +272,48 @@ const isVoucherNotification = (notification: NotificationItem) => {
     value.includes('den bu') ||
     value.includes('đền bù') ||
     value.includes('compensation')
+  );
+};
+
+const isClaimableVoucherNotification = (notification: NotificationItem) => {
+  if (!isVoucherNotification(notification)) {
+    return false;
+  }
+
+  const voucherIdentifier =
+    getNotificationVoucherId(notification) || getNotificationVoucherCode(notification);
+
+  if (!voucherIdentifier) {
+    return false;
+  }
+
+  const explicitClaimable =
+    getBooleanField(notification, ['claimable', 'isClaimable', 'isPrivate']) ??
+    getNotificationPayloads(notification)
+      .map((payload) =>
+        getBooleanField(payload, ['claimable', 'isClaimable', 'isPrivate']),
+      )
+      .find((value) => value !== undefined);
+
+  if (explicitClaimable !== undefined) {
+    return explicitClaimable;
+  }
+
+  const value = normalizeSearchText(
+    [notification.title, notification.message, notification.type].join(' '),
+  );
+
+  return (
+    value.includes('private') ||
+    value.includes('riêng') ||
+    value.includes('riÃªng') ||
+    value.includes('tặng') ||
+    value.includes('táº·ng') ||
+    value.includes('được tặng') ||
+    value.includes('Ä‘Æ°á»£c táº·ng') ||
+    value.includes('claim') ||
+    value.includes('nhận') ||
+    value.includes('nháº­n')
   );
 };
 
@@ -106,6 +347,15 @@ const formatRelativeTime = (value: string) => {
     minute: '2-digit',
   }).format(new Date(value));
 };
+
+const cleanNotificationText = (value: string) =>
+  value
+    .replace(/\uD83C\uDF81|\uFE0F/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+const getNotificationDisplayText = (value: string | undefined, fallback: string) =>
+  cleanNotificationText(value || fallback) || fallback;
 
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   const apiError = error as { response?: { data?: { message?: string } } };
@@ -226,22 +476,6 @@ const renderToneIcon = (tone: NotificationTone) => {
   }
 };
 
-const renderVoucherToast = (notification: NotificationItem) => (
-  <div className="flex gap-3">
-    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-amber-300 text-slate-950 shadow-lg shadow-amber-500/20">
-      <FaGift />
-    </span>
-    <span className="min-w-0">
-      <span className="block text-sm font-black text-white">
-        {notification.title || 'Bạn có voucher mới'}
-      </span>
-      <span className="mt-1 block line-clamp-2 text-xs font-semibold leading-5 text-slate-200">
-        {notification.message || 'Mở ví ưu đãi để xem chi tiết voucher vừa nhận.'}
-      </span>
-    </span>
-  </div>
-);
-
 export default function NotificationCenter({
   isLightMode = false,
   buttonClassName,
@@ -250,12 +484,136 @@ export default function NotificationCenter({
   const [authVersion, setAuthVersion] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [claimingVoucherId, setClaimingVoucherId] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const hasToken = Boolean(getAccessToken());
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.isRead).length,
     [notifications],
+  );
+
+  const markNotificationAsRead = useCallback(
+    async (notification: NotificationItem, showErrors = true) => {
+      if (notification.isRead) {
+        return;
+      }
+
+      try {
+        const response = await notificationService.markAsRead([
+          notification.notificationId,
+        ]);
+
+        assertResponseSuccess(response, 'Không thể đánh dấu đã đọc.');
+
+        setNotifications((current) =>
+          current.map((item) =>
+            item.notificationId === notification.notificationId
+              ? { ...item, isRead: true }
+              : item,
+          ),
+        );
+      } catch (error) {
+        if (showErrors) {
+          toast.error(getApiErrorMessage(error, 'Không thể đánh dấu thông báo là đã đọc.'));
+        }
+      }
+    },
+    [],
+  );
+
+  const handleClaimVoucherNotification = useCallback(
+    async (notification: NotificationItem) => {
+      const voucherId = getNotificationVoucherId(notification);
+      const voucherCode = getNotificationVoucherCode(notification);
+      const claimKey = getNotificationClaimKey(notification);
+
+      if (!voucherId && !voucherCode) {
+        toast.info('Không tìm thấy mã voucher trong thông báo này. Vui lòng mở ví voucher để kiểm tra.');
+        return;
+      }
+
+      try {
+        setClaimingVoucherId(claimKey);
+
+        const walletResponse = await voucherService.getMyVouchers();
+        const walletVouchers = walletResponse.data || [];
+        const walletVoucher = findVoucherByNotification(
+          walletVouchers,
+          voucherId,
+          voucherCode,
+        );
+
+        if (walletVoucher) {
+          toast.success('Voucher đã nằm trong ví ưu đãi của bạn.');
+          window.dispatchEvent(new Event(VOUCHER_WALLET_UPDATED_EVENT));
+          await markNotificationAsRead(notification, false);
+          return;
+        }
+
+        let claimVoucherId = voucherId;
+
+        if (!claimVoucherId) {
+          const [claimableResult, activeResult] = await Promise.allSettled([
+            voucherService.getClaimableVouchers(),
+            voucherService.getActiveVouchers(),
+          ]);
+          const claimableVouchers =
+            claimableResult.status === 'fulfilled'
+              ? claimableResult.value.data || []
+              : [];
+          const activeVouchers =
+            activeResult.status === 'fulfilled' ? activeResult.value.data || [] : [];
+          const matchedVoucher = findVoucherByNotification(
+            [...claimableVouchers, ...activeVouchers],
+            '',
+            voucherCode,
+          );
+
+          claimVoucherId = matchedVoucher?.voucherId || '';
+        }
+
+        if (!claimVoucherId) {
+          toast.info('Không tìm thấy voucher để nhận. Vui lòng mở ví voucher để kiểm tra lại.');
+          return;
+        }
+
+        const response = await voucherService.claimVoucher(claimVoucherId);
+
+        if (!response.success) {
+          throw new Error(response.message || 'Không thể nhận voucher này.');
+        }
+
+        toast.success(response.message || 'Đã thêm voucher vào ví ưu đãi.');
+        window.dispatchEvent(new Event(VOUCHER_WALLET_UPDATED_EVENT));
+        await markNotificationAsRead(notification, false);
+      } catch (error) {
+        if (isAlreadyClaimedError(error)) {
+          try {
+            const walletResponse = await voucherService.getMyVouchers();
+            const walletVoucher = findVoucherByNotification(
+              walletResponse.data || [],
+              voucherId,
+              voucherCode,
+            );
+
+            if (walletVoucher) {
+              toast.success('Voucher đã nằm trong ví ưu đãi của bạn.');
+              window.dispatchEvent(new Event(VOUCHER_WALLET_UPDATED_EVENT));
+              await markNotificationAsRead(notification, false);
+              return;
+            }
+          } catch {
+            // Fall through to the original error message.
+          }
+        }
+
+        toast.error(getApiErrorMessage(error, 'Không thể nhận voucher này.'));
+      } finally {
+        setClaimingVoucherId('');
+      }
+    },
+    [markNotificationAsRead],
   );
 
   const fetchNotifications = useCallback(async (showErrors = false) => {
@@ -272,29 +630,6 @@ export default function NotificationCenter({
 
       const items = extractNotificationItems(response.data);
       setNotifications(items);
-
-      const notifiedIds = readNotifiedVoucherIds();
-      const newVoucherNotifications = items.filter(
-        (notification) =>
-          !notification.isRead &&
-          isVoucherNotification(notification) &&
-          !notifiedIds.has(notification.notificationId),
-      );
-
-      newVoucherNotifications.slice(0, 2).forEach((notification) => {
-        toast(renderVoucherToast(notification), {
-          type: 'success',
-          icon: false,
-          autoClose: 6500,
-          className: 'g2c-toast g2c-voucher-toast',
-          progressClassName: 'g2c-toast-progress g2c-voucher-toast-progress',
-        });
-        notifiedIds.add(notification.notificationId);
-      });
-
-      if (newVoucherNotifications.length > 0) {
-        writeNotifiedVoucherIds(notifiedIds);
-      }
     } catch (error) {
       if (showErrors) {
         toast.error(getApiErrorMessage(error, 'Không tải được thông báo. Vui lòng thử lại.'));
@@ -342,29 +677,8 @@ export default function NotificationCenter({
     return null;
   }
 
-  const handleMarkAsRead = async (notification: NotificationItem) => {
-    if (notification.isRead) {
-      return;
-    }
-
-    try {
-      const response = await notificationService.markAsRead([
-        notification.notificationId,
-      ]);
-
-      assertResponseSuccess(response, 'Không thể đánh dấu đã đọc.');
-
-      setNotifications((current) =>
-        current.map((item) =>
-          item.notificationId === notification.notificationId
-            ? { ...item, isRead: true }
-            : item,
-        ),
-      );
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Không thể đánh dấu thông báo là đã đọc.'));
-    }
-  };
+  const handleMarkAsRead = (notification: NotificationItem) =>
+    markNotificationAsRead(notification);
 
   const handleMarkAllAsRead = async () => {
     if (unreadCount === 0) {
@@ -413,7 +727,7 @@ export default function NotificationCenter({
       {isOpen ? (
         <div
           className={[
-            'absolute right-0 top-[calc(100%+10px)] z-[80] w-[min(390px,calc(100vw-24px))] overflow-hidden rounded-2xl border shadow-2xl',
+            'absolute right-0 top-[calc(100%+8px)] z-[80] w-[min(360px,calc(100vw-20px))] overflow-hidden rounded-xl border shadow-2xl',
             isLightMode
               ? 'border-slate-200 bg-white text-slate-950 shadow-slate-900/15'
               : 'border-white/10 bg-[#0F172A] text-white shadow-black/50',
@@ -421,14 +735,14 @@ export default function NotificationCenter({
         >
           <div
             className={[
-              'flex items-start justify-between gap-3 border-b px-4 py-3',
+              'flex items-center justify-between gap-2 border-b px-3 py-2.5',
               isLightMode ? 'border-slate-200' : 'border-white/10',
             ].join(' ')}
           >
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-black">Thông báo</p>
               <p
-                className={`mt-0.5 text-xs font-semibold ${
+                className={`mt-0.5 truncate text-[11px] font-semibold ${
                   isLightMode ? 'text-slate-500' : 'text-white/55'
                 }`}
               >
@@ -443,7 +757,7 @@ export default function NotificationCenter({
                 onClick={() => void fetchNotifications(true)}
                 disabled={loading}
                 className={[
-                  'grid h-8 w-8 place-items-center rounded-lg border text-xs transition disabled:cursor-not-allowed disabled:opacity-50',
+                  'grid h-7 w-7 place-items-center rounded-md border text-[11px] transition disabled:cursor-not-allowed disabled:opacity-50',
                   isLightMode
                     ? 'border-slate-200 text-slate-600 hover:bg-slate-100'
                     : 'border-white/10 text-slate-300 hover:bg-white/10 hover:text-white',
@@ -457,7 +771,7 @@ export default function NotificationCenter({
                 type="button"
                 onClick={() => void handleMarkAllAsRead()}
                 disabled={unreadCount === 0}
-                className="rounded-lg border border-emerald-400/25 px-2.5 py-1.5 text-[11px] font-black text-emerald-300 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-emerald-400/25 px-2.5 py-1 text-[11px] font-black text-emerald-300 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Đọc hết
               </button>
@@ -465,7 +779,7 @@ export default function NotificationCenter({
                 type="button"
                 onClick={() => setIsOpen(false)}
                 className={[
-                  'grid h-8 w-8 place-items-center rounded-lg border transition',
+                  'grid h-7 w-7 place-items-center rounded-md border text-[11px] transition',
                   isLightMode
                     ? 'border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-950'
                     : 'border-white/10 text-slate-400 hover:bg-white/10 hover:text-white',
@@ -477,7 +791,7 @@ export default function NotificationCenter({
             </div>
           </div>
 
-          <div className="max-h-[420px] overflow-y-auto p-2">
+          <div className="max-h-[360px] overflow-y-auto p-1.5">
             {loading && notifications.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm font-semibold text-slate-400">
                 Đang tải thông báo...
@@ -491,14 +805,29 @@ export default function NotificationCenter({
               notifications.map((notification) => {
                 const tone = getNotificationTone(notification);
                 const toneClasses = getToneClasses(tone, isLightMode);
+                const title = getNotificationDisplayText(
+                  notification.title,
+                  'Thông báo mới',
+                );
+                const message = getNotificationDisplayText(
+                  notification.message,
+                  'Bạn có cập nhật mới từ hệ thống.',
+                );
 
                 return (
-                  <button
+                  <div
                     key={notification.notificationId}
-                    type="button"
                     onClick={() => void handleMarkAsRead(notification)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        void handleMarkAsRead(notification);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
                     className={[
-                      'group mb-2 flex w-full gap-3 rounded-xl border p-3 text-left shadow-sm transition',
+                      'group mb-1.5 flex w-full gap-2.5 rounded-lg border px-2.5 py-2 text-left shadow-sm transition last:mb-0',
                       notification.isRead
                         ? toneClasses.readCard
                         : toneClasses.unreadCard,
@@ -506,29 +835,52 @@ export default function NotificationCenter({
                   >
                     <span
                       className={[
-                        'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
+                        'mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[13px]',
                         toneClasses.icon,
                       ].join(' ')}
                     >
                       {renderToneIcon(tone)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        {!notification.isRead ? (
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-rose-400" />
-                        ) : null}
-                        <span className="line-clamp-1 text-sm font-black">
-                          {notification.title || 'Thông báo mới'}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={[
+                            'h-1.5 w-1.5 shrink-0 rounded-full',
+                            notification.isRead ? 'bg-transparent' : 'bg-rose-400',
+                          ].join(' ')}
+                        />
+                        <span className="line-clamp-1 min-w-0 flex-1 text-[13px] font-black leading-5">
+                          {title}
                         </span>
                       </span>
-                      <span className="mt-1 line-clamp-2 text-xs font-semibold leading-5 opacity-80">
-                        {notification.message || 'Bạn có cập nhật mới từ hệ thống.'}
+                      <span className="mt-0.5 block line-clamp-2 text-[11px] font-semibold leading-4 opacity-80">
+                        {message}
                       </span>
-                      <span className="mt-2 block text-[11px] font-bold opacity-55">
-                        {formatRelativeTime(notification.createdAt)}
+                      <span className="mt-1 flex items-center justify-between gap-2">
+                        <span className="block text-[10px] font-bold opacity-55">
+                          {formatRelativeTime(notification.createdAt)}
+                        </span>
+                        {tone === 'voucher' && isClaimableVoucherNotification(notification) ? (
+                          <button
+                            type="button"
+                            disabled={Boolean(
+                              claimingVoucherId &&
+                                claimingVoucherId === getNotificationClaimKey(notification),
+                            )}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleClaimVoucherNotification(notification);
+                            }}
+                            className="shrink-0 rounded-md bg-[#FFD166] px-3 py-1 text-[11px] font-black text-slate-950 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {claimingVoucherId === getNotificationClaimKey(notification)
+                              ? 'Đang nhận...'
+                              : 'Nhận'}
+                          </button>
+                        ) : null}
                       </span>
                     </span>
-                  </button>
+                  </div>
                 );
               })
             )}
