@@ -18,6 +18,7 @@ import ManageSeatLayout from './pages/admin/ManageSeatLayout';
 import ManageShowtime from './pages/admin/ManageShowtime';
 import ManageStaff from './pages/admin/ManageStaff';
 import ManageVouchers from './pages/admin/ManageVouchers';
+import ManageRefunds from './pages/admin/ManageRefunds';
 import ReviewModeration from './pages/admin/ReviewModeration';
 import Login from './pages/auth/Login';
 import StaffSetPassword from './pages/auth/StaffSetPassword';
@@ -38,8 +39,11 @@ import Movies from './pages/user/Movies';
 import MyBookings from './pages/user/MyBookings';
 import MyVouchers from './pages/user/MyVouchers';
 import Profile from './pages/user/Profile';
+import RefundClaimPage from './pages/user/RefundClaimPage';
 import SeatSelection from './pages/user/SeatSelection';
 import TicketPrices from './pages/user/TicketPrices';
+import VnpayReturn from './pages/user/VnpayReturn';
+import ConfirmTimeChangePage from './pages/user/ConfirmTimeChangePage';
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
@@ -66,15 +70,19 @@ const router = createBrowserRouter([
           { path: '/cinema-schedule', element: <CinemaSchedule /> },
           { path: '/movies', element: <Movies /> },
           { path: '/movie/:movieId/showtimes', element: <MovieShowtimes /> },
+          { path: '/booking/confirm-time-change', element: <ConfirmTimeChangePage /> },
           {
             element: <RequireAuth allowedRoles={customerRoles} />,
             children: [
               { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
               { path: '/booking/checkout/:showtimeId', element: <Checkout /> },
+              { path: '/vnpay-return', element: <VnpayReturn /> },
               { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
               { path: '/my-bookings', element: <MyBookings /> },
               { path: '/my-vouchers', element: <MyVouchers /> },
               { path: '/profile', element: <Profile /> },
+              { path: '/refund-claim', element: <RefundClaimPage /> },
+              { path: '/refunds/claim', element: <RefundClaimPage /> },
             ],
           },
         ],
@@ -96,6 +104,7 @@ const router = createBrowserRouter([
               { path: 'review', element: <ReviewModeration /> },
               { path: 'vouchers', element: <ManageVouchers /> },
               { path: 'banners', element: <ManageBanner /> },
+              { path: 'refunds', element: <ManageRefunds /> },
             ],
           },
         ],
