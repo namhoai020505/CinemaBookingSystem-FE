@@ -36,6 +36,36 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   return apiError.response?.data?.message || fallback;
 };
 
+const extractUserItems = (response: unknown): { userId: string; fullName: string; email: string }[] => {
+  if (!response) return [];
+  const rawPayload = (response as Record<string, unknown>).data ?? response;
+  const list = Array.isArray(rawPayload)
+    ? rawPayload
+    : Array.isArray((rawPayload as Record<string, unknown>).items)
+    ? (rawPayload as Record<string, unknown>).items
+    : Array.isArray((rawPayload as Record<string, unknown>).data)
+    ? (rawPayload as Record<string, unknown>).data
+    : [];
+
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .map((item: unknown) => {
+      if (typeof item === 'string') {
+        return { userId: item, fullName: item, email: '' };
+      }
+      if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>;
+        const uId = String(obj.userId || obj.UserId || obj.id || obj.Id || '');
+        const fName = String(obj.fullName || obj.FullName || obj.name || obj.Name || '');
+        const mail = String(obj.email || obj.Email || '');
+        return { userId: uId, fullName: fName, email: mail };
+      }
+      return null;
+    })
+    .filter((u): u is { userId: string; fullName: string; email: string } => Boolean(u && u.userId));
+};
+
 
 
 export default function ManageNotifications() {
@@ -553,7 +583,7 @@ export default function ManageNotifications() {
                     </button>
                   </div>
 
-                  {/* Active Filter Badges */}
+                  {/* Active Filter Badges & Quick Auto-Fill */}
                   {(formData.isFlagged ||
                     formData.hasBooked ||
                     formData.roomId ||
@@ -586,6 +616,38 @@ export default function ManageNotifications() {
                           Phim: {formData.movieId}
                         </span>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            setIsSearchingUsers(true);
+                            const res = await notificationService.getFilteredUsers({
+                              isFlagged: formData.isFlagged || undefined,
+                              hasBooked: formData.hasBooked || undefined,
+                              roomId: formData.roomId?.trim() || undefined,
+                              showtimeId: formData.showtimeId?.trim() || undefined,
+                              movieId: formData.movieId?.trim() || undefined,
+                            });
+                            const items = extractUserItems(res);
+                            if (items.length === 0) {
+                              toast.warning('Không tìm thấy người dùng nào khớp với bộ lọc.');
+                            } else {
+                              const ids = items.map((u) => u.userId).join(', ');
+                              setFormData((prev) => ({ ...prev, userId: ids }));
+                              toast.success(`Tự động điền ${items.length} User ID phù hợp!`);
+                            }
+                          } catch {
+                            toast.error('Lỗi khi tra cứu danh sách người dùng.');
+                          } finally {
+                            setIsSearchingUsers(false);
+                          }
+                        }}
+                        className="rounded bg-cyan-500/20 px-2 py-0.5 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 font-bold"
+                      >
+                        ⚡ Nạp nhanh (Auto-fill)
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => {
@@ -1137,20 +1199,18 @@ export default function ManageNotifications() {
                   try {
                     setIsSearchingUsers(true);
                     const res = await notificationService.getFilteredUsers({
-                      isFlagged: tempFilters.isFlagged,
-                      hasBooked: tempFilters.hasBooked,
+                      isFlagged: tempFilters.isFlagged || undefined,
+                      hasBooked: tempFilters.hasBooked || undefined,
                       roomId: tempFilters.roomId?.trim() || undefined,
                       showtimeId: tempFilters.showtimeId?.trim() || undefined,
                       movieId: tempFilters.movieId?.trim() || undefined,
-                      targetGroup: formData.targetGroup || undefined,
                     });
-                    if (res && res.data) {
-                      setMatchedUsers(res.data);
-                      if (res.data.length === 0) {
-                        toast.warning('Không tìm thấy người dùng nào thỏa mãn tất cả điều kiện.');
-                      } else {
-                        toast.info(`Tìm thấy ${res.data.length} người dùng thỏa điều kiện.`);
-                      }
+                    const items = extractUserItems(res);
+                    setMatchedUsers(items);
+                    if (items.length === 0) {
+                      toast.warning('Không tìm thấy người dùng nào thỏa mãn tất cả điều kiện.');
+                    } else {
+                      toast.info(`Tìm thấy ${items.length} người dùng thỏa điều kiện.`);
                     }
                   } catch {
                     toast.error('Không thể kiểm tra danh sách người dùng.');
@@ -1187,15 +1247,14 @@ export default function ManageNotifications() {
                     try {
                       setIsSearchingUsers(true);
                       const res = await notificationService.getFilteredUsers({
-                        isFlagged: tempFilters.isFlagged,
-                        hasBooked: tempFilters.hasBooked,
+                        isFlagged: tempFilters.isFlagged || undefined,
+                        hasBooked: tempFilters.hasBooked || undefined,
                         roomId: tempFilters.roomId?.trim() || undefined,
                         showtimeId: tempFilters.showtimeId?.trim() || undefined,
                         movieId: tempFilters.movieId?.trim() || undefined,
-                        targetGroup: formData.targetGroup || undefined,
                       });
 
-                      const users = res?.data || [];
+                      const users = extractUserItems(res);
 
                       setFormData((prev) => ({
                         ...prev,
@@ -1208,13 +1267,8 @@ export default function ManageNotifications() {
 
                       if (users.length === 0) {
                         toast.warning('Không tìm thấy người dùng nào thỏa mãn tất cả điều kiện trên.');
-                      } else if (users.length === 1) {
-                        const singleId = users[0].userId || '';
-                        setFormData((prev) => ({ ...prev, userId: singleId }));
-                        setTargetType('SINGLE');
-                        toast.success(`Đã tự động điền User ID: ${singleId}`);
                       } else {
-                        const ids = users.map((u) => u.userId).filter(Boolean).join(', ');
+                        const ids = users.map((u) => u.userId).join(', ');
                         setFormData((prev) => ({ ...prev, userId: ids }));
                         setTargetType('SINGLE');
                         toast.success(`Đã tự động điền ${users.length} User ID vào ô người nhận!`);
