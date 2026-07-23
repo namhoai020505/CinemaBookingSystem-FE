@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useLocation, useOutletContext } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   FaBell,
@@ -80,6 +80,8 @@ const PRESET_TEMPLATES = [
 export default function ManageNotifications() {
   const context = useOutletContext<{ isLightMode?: boolean }>() || {};
   const isLightMode = context.isLightMode ?? false;
+  const location = useLocation();
+  const isManager = location.pathname.startsWith('/manager');
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'send' | 'list' | 'feeds'>('send');
@@ -97,10 +99,15 @@ export default function ManageNotifications() {
   // Send Notification Form State
   const [targetType, setTargetType] = useState<'GROUP' | 'SINGLE' | 'MULTIPLE'>('GROUP');
   const [formData, setFormData] = useState<SendNotificationRequest>({
-    targetGroup: 'ALL',
+    targetGroup: isManager ? 'STAFF' : 'ALL',
     userId: '',
     userIds: [],
     bookingId: '',
+    isFlagged: false,
+    hasBooked: false,
+    roomId: '',
+    showtimeId: '',
+    movieId: '',
     title: '',
     message: '',
     channel: 'App',
@@ -198,6 +205,11 @@ export default function ManageNotifications() {
       channel: formData.channel || 'App',
       type: formData.type || 'Transactional',
       bookingId: formData.bookingId?.trim() || null,
+      isFlagged: formData.isFlagged || false,
+      hasBooked: formData.hasBooked || false,
+      roomId: formData.roomId?.trim() || null,
+      showtimeId: formData.showtimeId?.trim() || null,
+      movieId: formData.movieId?.trim() || null,
     };
 
     if (targetType === 'GROUP') {
@@ -531,7 +543,7 @@ export default function ManageNotifications() {
                   </label>
                   <select
                     name="targetGroup"
-                    value={formData.targetGroup || 'ALL'}
+                    value={formData.targetGroup || (isManager ? 'STAFF' : 'ALL')}
                     onChange={handleInputChange}
                     className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-semibold outline-none transition-all ${
                       isLightMode
@@ -539,11 +551,10 @@ export default function ManageNotifications() {
                         : 'border-white/10 bg-slate-900 text-white focus:border-blue-500'
                     }`}
                   >
-                    <option value="ALL">Tất cả người dùng (ALL)</option>
-                    <option value="CUSTOMERS">Khách hàng (CUSTOMERS)</option>
+                    {!isManager && <option value="ALL">Tất cả người dùng (ALL)</option>}
                     <option value="STAFF">Nhân viên rạp (STAFF)</option>
-                    <option value="MANAGERS">Quản lý rạp (MANAGERS)</option>
-                    <option value="ADMINS">Quản trị viên (ADMINS)</option>
+                    <option value="CUSTOMERS">Khách hàng (CUSTOMERS)</option>
+                    {!isManager && <option value="MANAGERS">Quản lý rạp (MANAGERS)</option>}
                   </select>
                 </div>
               )}
@@ -552,7 +563,7 @@ export default function ManageNotifications() {
               {targetType === 'SINGLE' && (
                 <div>
                   <label className="mb-1.5 block text-xs font-bold">
-                    Nhập User ID Người Nhận
+                    Nhập User ID Người Nhận (Không bắt buộc nếu sử dụng Bộ lọc Điều kiện phía dưới)
                   </label>
                   <input
                     type="text"
@@ -588,6 +599,87 @@ export default function ManageNotifications() {
                   />
                 </div>
               )}
+
+              {/* User Filter Conditions Section */}
+              <div className={`rounded-xl border p-4 ${
+                isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'
+              }`}>
+                <label className="mb-2 block text-xs font-black uppercase tracking-wider text-cyan-400">
+                  🎯 Điều kiện lọc người nhận (User Conditions)
+                </label>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!formData.isFlagged}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, isFlagged: e.target.checked }))}
+                      className="rounded border-slate-300"
+                    />
+                    <span>🚩 User bị Flag / Vi phạm Spam</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!formData.hasBooked}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, hasBooked: e.target.checked }))}
+                      className="rounded border-slate-300"
+                    />
+                    <span>🎟️ User đã từng đặt vé</span>
+                  </label>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-bold text-slate-400">
+                      Lọc theo Room ID (Phòng)
+                    </label>
+                    <input
+                      type="text"
+                      name="roomId"
+                      placeholder="VD: room-01"
+                      value={formData.roomId || ''}
+                      onChange={handleInputChange}
+                      className={`w-full rounded-lg border px-3 py-1.5 text-xs outline-none ${
+                        isLightMode ? 'border-slate-300 bg-white text-slate-900' : 'border-white/10 bg-slate-900 text-white'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[11px] font-bold text-slate-400">
+                      Lọc theo Showtime ID (Suất chiếu)
+                    </label>
+                    <input
+                      type="text"
+                      name="showtimeId"
+                      placeholder="VD: st-1002"
+                      value={formData.showtimeId || ''}
+                      onChange={handleInputChange}
+                      className={`w-full rounded-lg border px-3 py-1.5 text-xs outline-none ${
+                        isLightMode ? 'border-slate-300 bg-white text-slate-900' : 'border-white/10 bg-slate-900 text-white'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-[11px] font-bold text-slate-400">
+                      Lọc theo Movie ID (Phim)
+                    </label>
+                    <input
+                      type="text"
+                      name="movieId"
+                      placeholder="VD: mov-501"
+                      value={formData.movieId || ''}
+                      onChange={handleInputChange}
+                      className={`w-full rounded-lg border px-3 py-1.5 text-xs outline-none ${
+                        isLightMode ? 'border-slate-300 bg-white text-slate-900' : 'border-white/10 bg-slate-900 text-white'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
 
               {/* Channel & Type Selection */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

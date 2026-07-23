@@ -18,9 +18,14 @@ export type SendNotificationRequest = {
   userIds?: string[] | null;
   targetGroup?: string | null; // ALL, CUSTOMERS, STAFF, MANAGERS, ADMINS
   bookingId?: string | null;
+  isFlagged?: boolean | null;
+  hasBooked?: boolean | null;
+  roomId?: string | null;
+  showtimeId?: string | null;
+  movieId?: string | null;
   title: string;
   message: string;
-  channel?: string; // App, Email, SMS, Signage, Internal
+  channel?: string; // App, Email, SMS, Internal
   type?: string; // Transactional, Loyalty, Promotional, Internal
 };
 
@@ -148,7 +153,4 @@ export const notificationService = {
 
   getInternalFeed: async () =>
     api.get<unknown, ApiResponse<FeedItem[]>>('/api/notifications/internal-feed'),
-
-  getSignageFeed: async () =>
-    api.get<unknown, ApiResponse<FeedItem[]>>('/api/notifications/signage'),
 };
