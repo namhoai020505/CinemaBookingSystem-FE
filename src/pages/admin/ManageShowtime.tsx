@@ -10,6 +10,8 @@ import {
   type MovieResponse,
   type CreateShowtimePayload,
 } from "../../services/showtimeService";
+import api from "../../lib/api";
+import { managerService } from "../../services/managerService";
 import { voucherService, type Voucher } from "../../services/voucherService";
 import {
   buildRecurringShowtimeDrafts,
@@ -220,7 +222,6 @@ export default function ManageShowtime() {
   const [selectedTargetRoomId, setSelectedTargetRoomId] = useState<string>('');
   const [compensationVoucherCode, setCompensationVoucherCode] = useState<string>('');
   const [compensationNote, setCompensationNote] = useState<string>('');
-  const [targetSeatType, setTargetSeatType] = useState<string>('');
   const [changeRoomLoading, setChangeRoomLoading] = useState<boolean>(false);
 
   // ---------- State: Update Showtime with Bookings Compensation Modal ----------
@@ -230,12 +231,16 @@ export default function ManageShowtime() {
   } | null>(null);
   const [updateVoucherCode, setUpdateVoucherCode] = useState<string>('');
   const [updateCompNote, setUpdateCompNote] = useState<string>('');
-  const [updateTargetSeatType, setUpdateTargetSeatType] = useState<string>('');
 
   // ---------- State: UX Edit Tracking & Batch Save ----------
   const [isDirty, setIsDirty] = useState(false);
   const [deletedShowtimeIds, setDeletedShowtimeIds] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState(false);
+
+  // ---------- State: Cancel showtime with bookings ----------
+  const [cancelConfirmShowtimes, setCancelConfirmShowtimes] = useState<{ id: string; movieName: string; roomName: string; startTimeStr: string }[]>([]);
+  const [cancelReason, setCancelReason] = useState("");
+  const [savePromiseResolve, setSavePromiseResolve] = useState<((value: boolean) => void) | null>(null);
 
   // ---------- Blocker: Chặn chuyển trang SPA khi chưa lưu lịch chiếu ----------
   const blocker = useBlocker(
@@ -619,7 +624,6 @@ export default function ManageShowtime() {
         newRoomId: selectedTargetRoomId,
         compensationVoucherCode: compensationVoucherCode.trim() || undefined,
         compensationNote: compensationNote.trim() || undefined,
-        targetSeatType: targetSeatType.trim() || undefined,
       });
       toast.success("Đổi phòng chiếu chuyên dụng thành công! Đã tự động cập nhật sơ đồ ghế và gửi email cho khách.");
       setChangeRoomModal(null);
@@ -807,14 +811,70 @@ export default function ManageShowtime() {
     return drafts;
   };
 
-  const executeSaveChanges = async (voucherCode?: string, note?: string, seatType?: string) => {
+  const executeSaveChanges = async (voucherCode?: string, note?: string) => {
     setActionLoading(true);
 
     try {
-      // 1. Thực hiện xóa các suất chiếu nằm trong deletedShowtimeIds
-      // 2. Thu thập danh sách các slot cần tạo mới và các slot cần cập nhật
+      // 1. Kiểm tra các suất chiếu bị xóa có đặt chỗ trước không
+      const showtimesToCancel: { id: string; movieName: string; roomName: string; startTimeStr: string }[] = [];
+      const showtimesToDelete: string[] = [];
+
+      for (const id of Array.from(deletedShowtimeIds)) {
+        const original = allShowtimes.find((st) => st.showtimeId === id);
+        try {
+          const res = await api.get(`/api/seats/showtimes/${id}/map`) as any;
+          const hasBookings = res?.success && res?.data && ((res.data.soldSeats?.length > 0) || (res.data.lockedSeats?.length > 0));
+          if (hasBookings) {
+            showtimesToCancel.push({
+              id,
+              movieName: original?.movieTitle || "Không rõ phim",
+              roomName: original?.roomName || "Phòng",
+              startTimeStr: original ? new Date(original.startTime).toLocaleString('vi-VN') : "Không rõ giờ",
+            });
+          } else {
+            showtimesToDelete.push(id);
+          }
+        } catch {
+          showtimesToDelete.push(id);
+        }
+      }
+
+      if (showtimesToCancel.length > 0) {
+        setCancelConfirmShowtimes(showtimesToCancel);
+        setCancelReason("");
+        
+        // Chờ người dùng nhập lý do hủy qua modal
+        const proceed = await new Promise<boolean>((resolve) => {
+          setSavePromiseResolve(() => resolve);
+        });
+
+        if (!proceed) {
+          setActionLoading(false);
+          return;
+        }
+      }
+
+      let totalPaidCompensated = 0;
+      let totalTicketsIssued = 0;
+      let totalCombosIssued = 0;
+
+      // Hủy các suất chiếu có đặt chỗ
+      for (const st of showtimesToCancel) {
+        const result = await managerService.cancelShowtime(st.id, cancelReason.trim() || "Hủy suất chiếu bởi Quản trị viên") as any;
+        if (result) {
+          totalPaidCompensated += result.paidBookingsCompensated || 0;
+          totalTicketsIssued += result.ticketVouchersIssued || 0;
+          totalCombosIssued += result.comboVouchersIssued || 0;
+        }
+      }
+
+      // Xóa các suất chiếu trống
+      for (const id of showtimesToDelete) {
+        await showtimeService.deleteShowtime(id);
+      }
+
       const newSlotsToCreate: ShowtimeSlot[] = [];
-      const updatedSlots: { slot: ShowtimeSlot; original: ShowtimeResponse }[] = [];
+      const updatedSlots: Array<{ slot: ShowtimeSlot; original: ShowtimeResponse }> = [];
 
       for (const roomId in schedule) {
         const slots = schedule[roomId] || [];
@@ -833,7 +893,6 @@ export default function ManageShowtime() {
           }
         }
       }
-
       // Sắp xếp các slot cập nhật theo thứ tự thông minh (Topological Order)
       const recurringDrafts = buildRecurringDraftsForNewSlots(newSlotsToCreate);
 
@@ -869,7 +928,6 @@ export default function ManageShowtime() {
           status: targetStatus,
           compensationVoucherCode: slot.hasBookings ? (voucherCode?.trim() || undefined) : undefined,
           compensationNote: slot.hasBookings ? (note?.trim() || undefined) : undefined,
-          targetSeatType: slot.hasBookings ? (seatType?.trim() || undefined) : undefined,
         });
         updatedCount++;
       }
@@ -908,6 +966,7 @@ export default function ManageShowtime() {
       setRecurrenceEndDate("");
       await fetchShowtimes(); // Reload database
     } catch (err: unknown) {
+      // Map BE errorCode → thông báo tiếng Việt rõ ràng
       const ERROR_MESSAGES: Record<string, string> = TEXT.SHOWTIME.BE_ERRORS;
       const hasApiResponse = Boolean(err && typeof err === "object" && "response" in err);
 
@@ -963,7 +1022,6 @@ export default function ManageShowtime() {
     if (slotsWithBookings.length > 0) {
       setUpdateVoucherCode("");
       setUpdateCompNote("");
-      setUpdateTargetSeatType("");
       setUpdateCompModal({
         slotsWithBookingsCount: slotsWithBookings.length,
         affectedMovieNames: Array.from(new Set(slotsWithBookings)),
@@ -1655,21 +1713,6 @@ export default function ManageShowtime() {
                     className="bg-[#1E293B] text-white border border-gray-700 rounded-xl p-2 text-xs font-medium focus:outline-none focus:border-cyan-400 transition-all placeholder:text-gray-600"
                   />
                 </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-semibold text-gray-400">
-                    Ưu tiên Nâng hạng ghế miễn phí (Seat Upgrade):
-                  </label>
-                  <select
-                    value={targetSeatType}
-                    onChange={(e) => setTargetSeatType(e.target.value)}
-                    className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
-                  >
-                    <option value="">-- Giữ nguyên hạng ghế tương đương --</option>
-                    <option value="VIP">Nâng lên Ghế VIP (Hàng ghế trung tâm)</option>
-                    <option value="COUPLE">Nâng lên Ghế Đôi / Sweetbox</option>
-                  </select>
-                </div>
               </div>
 
               {/* Notice */}
@@ -1767,20 +1810,6 @@ export default function ManageShowtime() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-semibold text-gray-400">
-                  Ưu tiên Nâng hạng ghế miễn phí (Seat Upgrade):
-                </label>
-                <select
-                  value={updateTargetSeatType}
-                  onChange={(e) => setUpdateTargetSeatType(e.target.value)}
-                  className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
-                >
-                  <option value="">-- Giữ nguyên hạng ghế tương đương --</option>
-                  <option value="VIP">Nâng lên Ghế VIP (Hàng ghế trung tâm)</option>
-                  <option value="COUPLE">Nâng lên Ghế Đôi / Sweetbox</option>
-                </select>
-              </div>
             </div>
 
             {/* Notice */}
@@ -1791,6 +1820,7 @@ export default function ManageShowtime() {
             {/* Action buttons */}
             <div className="flex gap-3 justify-end mt-1">
               <button
+                type="button"
                 disabled={actionLoading}
                 onClick={() => setUpdateCompModal(null)}
                 className="px-4 py-2.5 bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold rounded-xl border border-gray-700/60 transition-all text-xs cursor-pointer disabled:opacity-50"
@@ -1798,11 +1828,78 @@ export default function ManageShowtime() {
                 Hủy
               </button>
               <button
+                type="button"
                 disabled={actionLoading}
-                onClick={() => void executeSaveChanges(updateVoucherCode, updateCompNote, updateTargetSeatType)}
+                onClick={() => void executeSaveChanges(updateVoucherCode, updateCompNote)}
                 className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-xl shadow-lg shadow-amber-900/30 transition-all text-xs cursor-pointer disabled:opacity-50"
               >
                 {actionLoading ? "Đang lưu..." : "Xác nhận Lưu & Gửi Mail"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelConfirmShowtimes.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-lg rounded-2xl border border-amber-500/30 bg-[#0F172A] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 border-b border-gray-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">Xác nhận Hủy Suất Chiếu có Khách Đã Đặt</h3>
+                <p className="text-xs text-gray-400">Yêu cầu nhập lý do để thông báo & đền bù cho khách hàng</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+              <p className="text-xs font-semibold text-gray-300">
+                Phát hiện {cancelConfirmShowtimes.length} suất chiếu có vé đã thanh toán/giữ chỗ sẽ bị hủy:
+              </p>
+              {cancelConfirmShowtimes.map((st) => (
+                <div key={st.id} className="rounded-lg bg-gray-900/60 p-2.5 text-xs text-gray-300 border border-gray-800">
+                  <span className="font-bold text-amber-400">{st.movieName}</span> - {st.roomName} ({st.startTimeStr})
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-300">
+                Lý do hủy suất chiếu <span className="text-red-400">*</span>:
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="VD: Thay đổi lịch bảo trì phòng chiếu, sự cố kỹ thuật rạp..."
+                className="w-full h-20 rounded-xl border border-gray-700 bg-gray-900 p-3 text-xs text-white placeholder-gray-500 focus:border-amber-400 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelConfirmShowtimes([]);
+                  if (savePromiseResolve) {
+                    savePromiseResolve(false);
+                    setSavePromiseResolve(null);
+                  }
+                }}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-xl text-xs"
+              >
+                Hủy thay đổi
+              </button>
+              <button
+                type="button"
+                disabled={!cancelReason.trim()}
+                onClick={() => {
+                  setCancelConfirmShowtimes([]);
+                  if (savePromiseResolve) {
+                    savePromiseResolve(true);
+                    setSavePromiseResolve(null);
+                  }
+                }}
+                className="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-bold rounded-xl text-xs"
+              >
+                Xác nhận Hủy & Lưu
               </button>
             </div>
           </div>

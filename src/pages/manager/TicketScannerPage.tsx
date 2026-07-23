@@ -4,6 +4,7 @@ import { FaBarcode, FaCamera, FaCheckCircle, FaHistory, FaPrint, FaQrcode, FaSto
 import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser';
 import type { ManagerOutletContext } from '../../layouts/manager/ManagerLayout';
 import { managerService, type ScanTicketResponse } from '../../services/managerService';
+import { compensationService } from '../../services/compensationService';
 import type { RoomResponse } from '../../services/roomService';
 import {
   formatDateTime,
@@ -48,6 +49,16 @@ const TicketScannerPage = () => {
   const [lastScan, setLastScan] = useState<ScanTicketResponse | null>(null);
   const [ticketModal, setTicketModal] = useState<ScanTicketResponse | null>(null);
   const [history, setHistory] = useState<ScanHistoryItem[]>([]);
+
+  const [activeMode, setActiveMode] = useState<'SCAN_TICKET' | 'REDEEM_COMBO'>('SCAN_TICKET');
+  const activeModeRef = useRef(activeMode);
+  useEffect(() => {
+    activeModeRef.current = activeMode;
+  }, [activeMode]);
+
+  const [redeemLoading, setRedeemLoading] = useState(false);
+  const [redeemSuccess, setRedeemSuccess] = useState('');
+  const [redeemError, setRedeemError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -131,7 +142,11 @@ const TicketScannerPage = () => {
           scannerControlsRef.current = null;
           setCameraStatus('idle');
           scanHandledRef.current = true;
-          void scanTicketCode(value);
+          if (activeModeRef.current === 'SCAN_TICKET') {
+            void scanTicketCode(value);
+          } else {
+            void redeemComboCode(value);
+          }
         },
       );
 
@@ -207,9 +222,40 @@ const TicketScannerPage = () => {
     }
   }
 
+  const redeemComboCode = async (code: string) => {
+    if (!code.trim()) {
+      setRedeemError('Vui lòng nhập hoặc quét mã combo.');
+      return;
+    }
+    try {
+      setRedeemLoading(true);
+      setRedeemError('');
+      setRedeemSuccess('');
+      const response = await compensationService.redeemCompensationCombo(code.trim());
+      if (response.success) {
+        setRedeemSuccess(response.message || `Đổi combo ${code} thành công!`);
+        setQrCode('');
+        addHistory({ success: true, message: `[COMBO] Đổi thành công mã ${code}` });
+      } else {
+        setRedeemError(response.message || 'Đổi combo thất bại.');
+        addHistory({ success: false, message: `[COMBO] Đổi thất bại mã ${code}` });
+      }
+    } catch (error) {
+      const msg = getApiErrorMessage(error, 'Lỗi hệ thống khi đổi combo.');
+      setRedeemError(msg);
+      addHistory({ success: false, message: `[COMBO] Lỗi: ${msg}` });
+    } finally {
+      setRedeemLoading(false);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await scanTicketCode(qrCode);
+    if (activeMode === 'SCAN_TICKET') {
+      await scanTicketCode(qrCode);
+    } else {
+      await redeemComboCode(qrCode);
+    }
   };
 
   return (
@@ -241,6 +287,44 @@ const TicketScannerPage = () => {
               </div>
             </div>
 
+            {/* Tab Chọn Chế Độ: Soát Vé hoặc Đổi Combo */}
+            <div className="mt-5 flex border-b border-gray-800 gap-2 mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMode('SCAN_TICKET');
+                  setScanError('');
+                  setRedeemError('');
+                  setRedeemSuccess('');
+                }}
+                className={`pb-2.5 px-4 font-bold text-xs uppercase border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeMode === 'SCAN_TICKET'
+                    ? 'border-emerald-500 text-emerald-400'
+                    : 'border-transparent text-gray-500 hover:text-white'
+                }`}
+              >
+                <FaBarcode size={12} />
+                Soát vé xem phim
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMode('REDEEM_COMBO');
+                  setScanError('');
+                  setRedeemError('');
+                  setRedeemSuccess('');
+                }}
+                className={`pb-2.5 px-4 font-bold text-xs uppercase border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeMode === 'REDEEM_COMBO'
+                    ? 'border-yellow-500 text-yellow-400'
+                    : 'border-transparent text-gray-500 hover:text-white'
+                }`}
+              >
+                <FaUtensils size={12} />
+                Đổi combo bồi thường
+              </button>
+            </div>
+
             <div className="mt-5 grid gap-4">
               <div className={`rounded-lg border p-3 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'}`}>
                 <div className="overflow-hidden rounded-lg bg-black">
@@ -259,7 +343,7 @@ const TicketScannerPage = () => {
                     <button
                       type="button"
                       onClick={() => stopCamera('idle')}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 text-xs font-black text-rose-200 transition hover:bg-rose-500/20"
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 text-xs font-black text-rose-200 transition hover:bg-rose-500/20 cursor-pointer"
                     >
                       <FaStopCircle />
                       Tắt camera
@@ -268,7 +352,7 @@ const TicketScannerPage = () => {
                     <button
                       type="button"
                       onClick={() => void startCamera()}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 text-xs font-black text-cyan-200 transition hover:bg-cyan-500/20"
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 text-xs font-black text-cyan-200 transition hover:bg-cyan-500/20 cursor-pointer"
                     >
                       <FaCamera />
                       Bật camera
@@ -277,36 +361,47 @@ const TicketScannerPage = () => {
                 </div>
               </div>
 
-              <label className="grid gap-2">
-                <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Phòng chiếu</span>
-                <select value={selectedRoomId} onChange={(event) => setSelectedRoomId(event.target.value)} className={inputClass(isLightMode)}>
-                  {rooms.map((room) => (
-                    <option key={room.roomId} value={room.roomId}>
-                      {room.roomName} - {room.cinemaName}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {activeMode === 'SCAN_TICKET' && (
+                <label className="grid gap-2">
+                  <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Phòng chiếu</span>
+                  <select value={selectedRoomId} onChange={(event) => setSelectedRoomId(event.target.value)} className={inputClass(isLightMode)}>
+                    {rooms.map((room) => (
+                      <option key={room.roomId} value={room.roomId}>
+                        {room.roomName} - {room.cinemaName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               <label className="grid gap-2">
-                <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Mã QR / mã vé</span>
+                <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {activeMode === 'SCAN_TICKET' ? 'Mã QR / mã vé' : 'Mã bắp nước bồi hoàn'}
+                </span>
                 <textarea
                   value={qrCode}
                   onChange={(event) => setQrCode(event.target.value)}
                   className={`${inputClass(isLightMode)} min-h-36 resize-y py-3 font-mono`}
-                  placeholder="Dán dữ liệu QR hoặc nhập mã vé..."
+                  placeholder={activeMode === 'SCAN_TICKET' ? "Dán dữ liệu QR hoặc nhập mã vé..." : "Dán dữ liệu QR hoặc nhập mã combo bồi thường..."}
                   autoFocus
                 />
               </label>
 
-              {scanError ? (
+              {redeemSuccess && (
+                <div className="flex items-start gap-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm font-bold text-emerald-200">
+                  <FaCheckCircle className="mt-0.5 shrink-0 text-emerald-400" />
+                  <span>{redeemSuccess}</span>
+                </div>
+              )}
+
+              {(scanError || redeemError) ? (
                 <div className="flex items-start gap-3 rounded-lg border border-rose-400/30 bg-rose-500/10 p-4 text-sm font-bold text-rose-200">
                   <FaTimesCircle className="mt-0.5 shrink-0" />
-                  <span>{scanError}</span>
+                  <span>{scanError || redeemError}</span>
                 </div>
               ) : null}
 
-              {lastScan ? (
+              {activeMode === 'SCAN_TICKET' && lastScan ? (
                 <div className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
                   <div className="flex items-center gap-2 font-black">
                     <FaCheckCircle />
@@ -323,11 +418,13 @@ const TicketScannerPage = () => {
 
               <button
                 type="submit"
-                disabled={scanLoading}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={activeMode === 'SCAN_TICKET' ? scanLoading : redeemLoading}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
               >
                 <FaBarcode />
-                {scanLoading ? 'Đang soát vé...' : 'Xác nhận soát vé'}
+                {activeMode === 'SCAN_TICKET'
+                  ? (scanLoading ? 'Đang soát vé...' : 'Xác nhận soát vé')
+                  : (redeemLoading ? 'Đang đổi combo...' : 'Xác nhận đổi combo')}
               </button>
             </div>
           </form>

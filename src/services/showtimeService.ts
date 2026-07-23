@@ -39,7 +39,6 @@ export interface UpdateShowtimePayload {
   status?: string;      // default "OPEN"
   compensationVoucherCode?: string;
   compensationNote?: string;
-  targetSeatType?: string;
 }
 
 /** Khớp CinemaSystem.Contracts.Cinemas.CinemaResponse */
@@ -99,7 +98,6 @@ export interface ChangeRoomPayload {
   seatMapping?: Record<string, string>;
   compensationVoucherCode?: string;
   compensationNote?: string;
-  targetSeatType?: string;
 }
 
 // ============================================================

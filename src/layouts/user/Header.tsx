@@ -202,7 +202,7 @@ export default function Header() {
                 to="/my-vouchers"
                 className={`font-medium transition ${linkHoverClass}`}
               >
-                Ưu đãi của tôi
+                Voucher của tôi
               </Link>
               <span className={dividerClass}>|</span>
               <button

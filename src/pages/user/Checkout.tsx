@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "react-toastify";
 import {
   FaCheck,
   FaClock,
@@ -14,6 +15,8 @@ import {
   FaTicketAlt,
   FaTimesCircle,
   FaUserCircle,
+  FaCreditCard,
+  FaExternalLinkAlt,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import fallbackPoster from "../../assets/thumbnail-1-144816-050424-68.jpeg";
@@ -42,6 +45,8 @@ import {
   fbItemService,
   type FbItem,
 } from "../../services/fbItemService";
+import { voucherService, type Voucher } from "../../services/voucherService";
+import { compensationService } from "../../services/compensationService";
 import {
   VOUCHER_WALLET_UPDATED_EVENT,
   isPrivateOrCustomerScopedVoucher,
@@ -99,11 +104,19 @@ type CheckoutSeatMap = {
 };
 
 type CheckoutRouteState = {
+  freshCheckout?: boolean;
   selectedSeats?: CheckoutSeat[];
   totalAmount?: number;
   seatMap?: CheckoutSeatMap;
   resumeBooking?: BookingSummary;
-  freshCheckout?: boolean;
+  movie?: {
+    movieId?: string;
+    title?: string;
+    genre?: string;
+    duration?: string;
+    posterUrl?: string;
+    ageRating?: string;
+  };
 };
 
 type ShowtimeDetailResponse = {
@@ -120,6 +133,7 @@ type MovieDetailResponse = {
   title: string;
   durationMinutes?: number;
   genre?: string | null;
+  genres?: string[] | null;
   ageRating?: string | null;
   posterUrl?: string | null;
 };
@@ -492,6 +506,7 @@ export default function Checkout() {
   const [step, setStep] = useState<"extras" | "payment">(
     storedPaymentSession || resumeBooking ? "payment" : "extras",
   );
+  const [selectedProvider, setSelectedProvider] = useState<string>("PP_SEPAY");
   const [seatHoldSeconds, setSeatHoldSeconds] = useState(() =>
     getSeatHoldRemainingSeconds(showtimeId, userKey, selectedSeats),
   );
@@ -525,7 +540,22 @@ export default function Checkout() {
   const [errorMessage, setErrorMessage] = useState("");
   const [paymentStatusMessage, setPaymentStatusMessage] = useState("");
   const [displayDetails, setDisplayDetails] =
-    useState<CheckoutDisplayDetails | null>(null);
+    useState<CheckoutDisplayDetails | null>(() => {
+      if (routeState?.movie) {
+        return {
+          movieId: routeState.movie.movieId,
+          title: routeState.movie.title,
+          genre: routeState.movie.genre,
+          duration: routeState.movie.duration,
+          ageRating: routeState.movie.ageRating,
+          posterUrl: routeState.movie.posterUrl,
+          cinemaName: routeState.seatMap?.cinemaName,
+          roomName: routeState.seatMap?.roomName,
+          startTime: routeState.seatMap?.startTime,
+        };
+      }
+      return null;
+    });
 
   const seatsTotalAmount = useMemo(
     () =>
@@ -550,6 +580,27 @@ export default function Checkout() {
   const [activeVouchers, setActiveVouchers] = useState<Voucher[]>([]);
   const [voucherError, setVoucherError] = useState("");
 
+  const [ownedVouchers, setOwnedVouchers] = useState<Voucher[]>([]);
+  const [compensations, setCompensations] = useState<any[]>([]);
+  const [selectedCompensationCodes, setSelectedCompensationCodes] = useState<string[]>([]);
+
+  const handleToggleCompensationCode = useCallback((code: string) => {
+    setSelectedCompensationCodes((prev) => {
+      if (prev.includes(code)) {
+        return prev.filter((c) => c !== code);
+      }
+      if (prev.length >= selectedSeats.length) {
+        toast.warn(`Bạn chỉ có thể chọn tối đa ${selectedSeats.length} vé bồi thường tương ứng với số ghế đã chọn.`);
+        return prev;
+      }
+      // Clear event voucher when selecting compensation ticket
+      setAppliedVoucher(null);
+      setVoucherDiscount(0);
+      setVoucherCodeInput("");
+      return [...prev, code];
+    });
+  }, [selectedSeats.length]);
+
   const handleApplyVoucher = useCallback(async (codeStr: string) => {
     if (!codeStr.trim()) {
       setVoucherError("Vui lòng nhập mã voucher");
@@ -564,6 +615,7 @@ export default function Checkout() {
           setAppliedVoucher({ voucherCode: codeStr.trim().toUpperCase() });
           setVoucherDiscount(validateData.discountAmount);
           setVoucherError("");
+          setSelectedCompensationCodes([]); // Clear compensations when applying event voucher
         } else {
           setVoucherError(validateData.message || "Voucher không hợp lệ hoặc không đủ điều kiện");
           setAppliedVoucher(null);
@@ -636,6 +688,30 @@ export default function Checkout() {
   // Fetch vouchers that can be used at checkout: owned wallet vouchers + public vouchers + claimable private vouchers.
   useEffect(() => {
     let isMounted = true;
+    const loadVoucherAndCompensations = async () => {
+      try {
+        const [activeRes, walletRes, compRes] = await Promise.all([
+          voucherService.getActiveVouchers().catch(() => ({ success: false, data: [] })),
+          voucherService.getMyWallet().catch(() => ({ success: false, data: [] })),
+          compensationService.getCustomerCompensations().catch(() => ({ success: false, data: [] })),
+        ]);
+
+        if (isMounted) {
+          if (activeRes.success) {
+            setActiveVouchers(activeRes.data || []);
+          }
+          if (walletRes.success) {
+            setOwnedVouchers(walletRes.data || []);
+          }
+          if (compRes.success) {
+            setCompensations(compRes.data || []);
+          }
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải voucher và quyền lợi:", err);
+      }
+    };
+    loadVoucherAndCompensations();
 
     const fetchCheckoutVouchers = async () => {
       try {
@@ -708,10 +784,20 @@ export default function Checkout() {
     return () => window.clearTimeout(timeoutId);
   }, [appliedVoucherCode, estimatedTotalAmount, handleApplyVoucher]);
 
+  const compensationDiscount = useMemo(() => {
+    if (selectedCompensationCodes.length === 0) return 0;
+    const sortedSeats = [...selectedSeats].sort((a, b) => (b.price || 0) - (a.price || 0));
+    let discount = 0;
+    for (let i = 0; i < Math.min(selectedCompensationCodes.length, sortedSeats.length); i++) {
+      discount += sortedSeats[i].price || 0;
+    }
+    return discount;
+  }, [selectedCompensationCodes, selectedSeats]);
+
   const pointDiscount = 0;
   const payableAmount = Math.max(
     0,
-    estimatedTotalAmount - voucherDiscount - pointDiscount,
+    estimatedTotalAmount - voucherDiscount - compensationDiscount - pointDiscount,
   );
   const paymentQrUrl = getSepayQrUrl(payment);
   const isPaymentExpired = step === "payment" && paymentSeconds <= 0;
@@ -945,7 +1031,7 @@ export default function Checkout() {
         setDisplayDetails({
           movieId: showtime.movieId,
           title: movie?.title || showtime.movieTitle,
-          genre: movie?.genre || undefined,
+          genre: movie?.genres?.join(", ") || movie?.genre || undefined,
           duration: movie?.durationMinutes
             ? `${movie.durationMinutes} phút`
             : undefined,
@@ -1268,6 +1354,7 @@ export default function Checkout() {
         showtimeId,
         showtimeSeatIds,
         voucherCode: appliedVoucher?.voucherCode || undefined,
+        compensationTicketCodes: selectedCompensationCodes.length > 0 ? selectedCompensationCodes : undefined,
         foodItems: foodItems.length > 0 ? foodItems : undefined,
       };
       const attempt = checkoutAttempt && isSameCheckoutRequest(checkoutAttempt.request, checkoutPayload)
@@ -1305,6 +1392,14 @@ export default function Checkout() {
         createdAt: new Date().toISOString(),
         expiredAt: checkout.expiredAt,
       };
+      if (nextBooking.status === "PAID" || nextBooking.totalAmount === 0) {
+        removePaymentSession(showtimeId, userKey);
+        removeCheckoutAttempt(showtimeId, userKey);
+        removeSeatLockSession(showtimeId, userKey);
+        navigate(`/booking/success/${nextBooking.bookingId}`, { replace: true });
+        return;
+      }
+
       const bookedAttempt = { ...attempt, bookingId: nextBooking.bookingId };
       writeCheckoutAttempt(showtimeId, userKey, bookedAttempt);
       setCheckoutAttempt(bookedAttempt);
@@ -1318,7 +1413,7 @@ export default function Checkout() {
 
       const paymentResponse = await paymentService.createPayment({
         bookingId: nextBooking.bookingId,
-        paymentProviderId: PAYMENT_PROVIDER_ID,
+        paymentProviderId: selectedProvider,
       });
 
       if (!paymentResponse.success || !paymentResponse.data?.paymentId) {
@@ -1343,6 +1438,12 @@ export default function Checkout() {
 
       writePaymentSession(nextSession);
       removeSeatLockSession(showtimeId, userKey);
+
+      if (selectedProvider === "PP_VNPAY" && paymentResponse.data.checkoutUrl) {
+        window.location.href = paymentResponse.data.checkoutUrl;
+        return;
+      }
+
       setBooking(nextBooking);
       setPayment(paymentResponse.data);
       setPaymentExpiresAt(expiresAt);
@@ -1449,30 +1550,50 @@ export default function Checkout() {
               </div>
 
               <div className="mt-7 grid gap-6 xl:grid-cols-[310px_minmax(0,1fr)]">
-                <div className="rounded-lg border border-white/10 bg-[#0D1637] p-4">
-                  <div className="flex aspect-square items-center justify-center rounded-md bg-white p-4">
-                    {paymentQrUrl ? (
-                      <img
-                        src={paymentQrUrl}
-                        alt="QR thanh toán SePay"
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <div className="text-center text-sm font-bold text-slate-700">
-                        QR sẽ hiển thị khi BE có cấu hình ngân hàng.
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-4 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-4 py-3">
-                    <div className="flex items-start gap-3">
-                      <FaRegCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
-                      <p className="text-sm font-semibold leading-5 text-emerald-50">
-                        Sau khi thanh toán, vé sẽ được xác nhận tự động. Bạn cũng có
-                        thể bấm kiểm tra nếu ngân hàng đã trừ tiền.
+                {payment?.checkoutUrl ? (
+                  <div className="rounded-lg border border-white/10 bg-[#0D1637] p-6 text-center flex flex-col justify-between items-center gap-6">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-blue-500/10 text-blue-400">
+                      <FaExternalLinkAlt className="h-10 w-10" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-blue-300">Thanh toán với VNPay</h3>
+                      <p className="mt-2 text-xs text-slate-400 leading-5">
+                        Hệ thống đang chờ bạn thực hiện thanh toán trên cổng VNPay. Vui lòng bấm vào nút bên dưới nếu bạn lỡ đóng trang thanh toán.
                       </p>
                     </div>
+                    <a
+                      href={payment.checkoutUrl}
+                      className="w-full rounded-md bg-blue-600 py-3 text-xs font-black uppercase text-white hover:bg-blue-500 transition block text-center"
+                    >
+                      Mở cổng VNPay
+                    </a>
                   </div>
-                </div>
+                ) : (
+                  <div className="rounded-lg border border-white/10 bg-[#0D1637] p-4">
+                    <div className="flex aspect-square items-center justify-center rounded-md bg-white p-4">
+                      {paymentQrUrl ? (
+                        <img
+                          src={paymentQrUrl}
+                          alt="QR thanh toán SePay"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <div className="text-center text-sm font-bold text-slate-700">
+                          QR sẽ hiển thị khi BE có cấu hình ngân hàng.
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-4 py-3">
+                      <div className="flex items-start gap-3">
+                        <FaRegCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+                        <p className="text-sm font-semibold leading-5 text-emerald-50">
+                          Sau khi thanh toán, vé sẽ được xác nhận tự động. Bạn cũng có
+                          thể bấm kiểm tra nếu ngân hàng đã trừ tiền.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -1494,71 +1615,95 @@ export default function Checkout() {
                     </div>
                   </div>
 
-                  <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      Ngân hàng nhận
-                    </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs text-slate-400">Ngân hàng</p>
-                        <p className="mt-1 font-bold">
-                          {payment?.bankName || "Đang cấu hình"}
+                  {payment?.checkoutUrl ? (
+                    <>
+                      <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          Cổng thanh toán
+                        </p>
+                        <p className="mt-1 text-base font-black text-blue-400">
+                          Cổng thanh toán trực tuyến VNPay
                         </p>
                       </div>
-                      <div>
-                        <p className="text-xs text-slate-400">Chủ tài khoản</p>
-                        <p className="mt-1 font-bold">
-                          {payment?.accountName || "G2Cinema"}
+
+                      <div className="rounded-md border border-blue-400/30 bg-blue-950/30 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">
+                          Mã giao dịch (TxnRef)
+                        </p>
+                        <p className="mt-1 font-mono text-lg font-black text-blue-50">
+                          {payment?.transactionCode || "—"}
                         </p>
                       </div>
-                    </div>
-                  </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          Ngân hàng nhận
+                        </p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <p className="text-xs text-slate-400">Ngân hàng</p>
+                            <p className="mt-1 font-bold">
+                              {payment?.bankName || "Đang cấu hình"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400">Chủ tài khoản</p>
+                            <p className="mt-1 font-bold">
+                              {payment?.accountName || "G2Cinema"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
 
-                  <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      Số tài khoản
-                    </p>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <p className="break-all font-mono text-lg font-black">
-                        {payment?.bankAccount || "Đang cấu hình"}
-                      </p>
-                      {payment?.bankAccount && (
-                        <button
-                          type="button"
-                          title="Sao chép số tài khoản"
-                          onClick={() =>
-                            void handleCopy(payment.bankAccount, "account")
-                          }
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white transition hover:border-[#FFD166] hover:text-[#FFD166]"
-                        >
-                          {copiedField === "account" ? <FaCheck /> : <FaCopy />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                      <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          Số tài khoản
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <p className="break-all font-mono text-lg font-black">
+                            {payment?.bankAccount || "Đang cấu hình"}
+                          </p>
+                          {payment?.bankAccount && (
+                            <button
+                              type="button"
+                              title="Sao chép số tài khoản"
+                              onClick={() =>
+                                void handleCopy(payment.bankAccount, "account")
+                              }
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white transition hover:border-[#FFD166] hover:text-[#FFD166]"
+                            >
+                              {copiedField === "account" ? <FaCheck /> : <FaCopy />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
 
-                  <div className="rounded-md border border-blue-400/30 bg-blue-950/30 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">
-                      Nội dung chuyển khoản
-                    </p>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <p className="break-all font-mono text-xl font-black text-blue-50">
-                        {payment?.transactionCode || "Đang tạo mã giao dịch..."}
-                      </p>
-                      {payment?.transactionCode && (
-                        <button
-                          type="button"
-                          title="Sao chép nội dung chuyển khoản"
-                          onClick={() =>
-                            void handleCopy(payment.transactionCode, "content")
-                          }
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-blue-300/40 bg-blue-400/10 text-blue-50 transition hover:bg-blue-400/20"
-                        >
-                          {copiedField === "content" ? <FaCheck /> : <FaCopy />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                      <div className="rounded-md border border-blue-400/30 bg-blue-950/30 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">
+                          Nội dung chuyển khoản
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <p className="break-all font-mono text-xl font-black text-blue-50">
+                            {payment?.transactionCode || "Đang tạo mã giao dịch..."}
+                          </p>
+                          {payment?.transactionCode && (
+                            <button
+                              type="button"
+                              title="Sao chép nội dung chuyển khoản"
+                              onClick={() =>
+                                void handleCopy(payment.transactionCode, "content")
+                              }
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-blue-300/40 bg-blue-400/10 text-blue-50 transition hover:bg-blue-400/20"
+                            >
+                              {copiedField === "content" ? <FaCheck /> : <FaCopy />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {paymentStatusMessage && (
                     <p className="rounded-md border border-amber-500/30 bg-amber-950/40 px-4 py-3 text-sm font-bold text-amber-100">
@@ -1573,7 +1718,7 @@ export default function Checkout() {
                 </div>
               </div>
 
-              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => void handleCheckPaymentStatus()}
@@ -1582,6 +1727,17 @@ export default function Checkout() {
                 >
                   <FaSyncAlt className={checkingPayment ? "animate-spin" : ""} />
                   {checkingPayment ? "Đang kiểm tra..." : "Tôi đã thanh toán"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    removePaymentSession(showtimeId, userKey);
+                    setPayment(null);
+                    setStep("extras");
+                  }}
+                  className="rounded-md border border-white/10 bg-slate-800 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-white transition hover:bg-slate-700"
+                >
+                  Thay đổi phương thức
                 </button>
                 <button
                   type="button"
@@ -1836,18 +1992,18 @@ export default function Checkout() {
             <div className="mt-7">
               <div className="mb-4 flex items-center gap-2 text-base font-black">
                 <FaGift className="h-5 w-5 text-white/90" />
-                Giảm giá
+                Khuyến mãi & Ưu đãi
               </div>
 
-              <div className="space-y-4 border-b border-white/10 pb-5">
-                {/* G2C Voucher Apply */}
-                <div>
-                  <div className="flex items-center justify-between text-sm mb-2">
-                    <span className="font-black">G2C Voucher</span>
+              <div className="space-y-6 border-b border-white/10 pb-5">
+                {/* Vùng chọn Voucher Sự Kiện */}
+                <div className="rounded-xl border border-white/5 bg-white/5 p-4 space-y-4">
+                  <div className="flex items-center justify-between text-xs font-black text-slate-300">
+                    <span className="uppercase tracking-wider">A. Voucher Sự Kiện (Chọn tối đa 1)</span>
                     {appliedVoucher ? (
-                      <span className="text-xs text-emerald-400 font-bold">Đã áp dụng mã: {appliedVoucher.voucherCode}</span>
+                      <span className="text-[11px] text-emerald-400 font-bold">Đã chọn 1 mã</span>
                     ) : (
-                      <span className="text-xs text-slate-400">Nhập mã hoặc chọn bên dưới</span>
+                      <span className="text-[11px] text-slate-500">Chưa chọn</span>
                     )}
                   </div>
 
@@ -1858,12 +2014,14 @@ export default function Checkout() {
                         placeholder="Nhập mã voucher..."
                         value={voucherCodeInput}
                         onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                        className="flex-1 rounded-lg border border-gray-800 bg-[#0F172A] px-3 py-1.5 text-xs text-white uppercase font-mono outline-none focus:ring-1 focus:ring-blue-500"
+                        disabled={selectedCompensationCodes.length > 0}
+                        className="flex-1 rounded-lg border border-gray-805 bg-[#0F172A] px-3 py-1.5 text-xs text-white uppercase font-mono outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                       />
                       <button
                         type="button"
                         onClick={() => handleApplyVoucher(voucherCodeInput)}
-                        className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-1.5 text-xs font-bold text-white transition"
+                        disabled={selectedCompensationCodes.length > 0}
+                        className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-1.5 text-xs font-bold text-white transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                       >
                         Áp dụng
                       </button>
@@ -1874,55 +2032,164 @@ export default function Checkout() {
                       <button
                         type="button"
                         onClick={handleRemoveVoucher}
-                        className="text-xs text-red-400 hover:text-red-300 font-bold"
+                        className="text-xs text-red-400 hover:text-red-300 font-bold cursor-pointer"
                       >
                         Hủy
                       </button>
                     </div>
                   )}
+
+                  {selectedCompensationCodes.length > 0 && (
+                    <p className="text-[10px] text-[#FFD166] font-semibold">
+                      *Đang chọn Quyền lợi sự cố. Vui lòng bỏ chọn vé bồi thường để áp dụng voucher sự kiện.
+                    </p>
+                  )}
+
                   {voucherError && (
                     <p className="text-[11px] text-red-400 mt-1 font-semibold">{voucherError}</p>
                   )}
+
+                  {/* List of active & owned vouchers */}
+                  {((activeVouchers.length > 0) || (ownedVouchers.length > 0)) && !appliedVoucher && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-slate-400">Voucher của bạn & hệ thống:</p>
+                      <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1">
+                        {/* Merge active and owned vouchers */}
+                        {(() => {
+                          const allMerged = [...activeVouchers, ...ownedVouchers];
+                          const uniqueMap = new Map();
+                          allMerged.forEach(v => {
+                            if (v && v.voucherCode) {
+                              uniqueMap.set(v.voucherCode, v);
+                            }
+                          });
+                          return Array.from(uniqueMap.values()).map((v: any) => {
+                            const isEligible = estimatedTotalAmount >= (v.minOrderAmount || 0);
+                            const isOwned = ownedVouchers.some(ov => ov.voucherCode === v.voucherCode);
+                            return (
+                              <button
+                                key={v.voucherId}
+                                type="button"
+                                disabled={!isEligible || selectedCompensationCodes.length > 0}
+                                onClick={() => {
+                                  setVoucherCodeInput(v.voucherCode);
+                                  void handleApplyVoucher(v.voucherCode);
+                                }}
+                                className={`flex items-center justify-between border rounded-lg p-2 text-left transition select-none ${
+                                  isEligible && selectedCompensationCodes.length === 0
+                                    ? 'border-gray-800 hover:border-blue-500 hover:bg-blue-950/10 cursor-pointer text-white'
+                                    : 'border-gray-900 opacity-40 cursor-not-allowed text-gray-500'
+                                }`}
+                              >
+                                <div>
+                                  <div className="text-xs font-bold font-mono text-blue-400 flex items-center gap-1.5">
+                                    {v.voucherCode}
+                                    {isOwned && (
+                                      <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1 py-0.2 rounded font-sans uppercase">
+                                        Sở hữu
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 mt-0.5">
+                                    Giảm {v.discountType === 'PERCENT' ? `${v.discountValue}%` : formatCurrency(v.discountValue)}
+                                  </div>
+                                </div>
+                                <div className="text-[9px] text-right text-gray-400">
+                                  <div>Đơn tối thiểu: {formatCurrency(v.minOrderAmount || 0)}</div>
+                                  {!isEligible && <div className="text-red-400 font-bold">Chưa đủ điều kiện</div>}
+                                </div>
+                              </button>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Available Vouchers List */}
-                {activeVouchers.length > 0 && !appliedVoucher && (
-                  <div>
-                    <p className="text-[11px] font-bold text-slate-400 mb-2">Voucher có thể áp dụng:</p>
-                    <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1">
-                      {activeVouchers.map((v) => {
-                        const isEligible = estimatedTotalAmount >= (v.minOrderAmount || 0);
-                        return (
-                          <button
-                            key={v.voucherId}
-                            type="button"
-                            disabled={!isEligible}
-                            onClick={() => {
-                              setVoucherCodeInput(v.voucherCode);
-                              handleApplyVoucher(v.voucherCode);
-                            }}
-                            className={`flex items-center justify-between border rounded-lg p-2 text-left transition select-none ${
-                              isEligible
-                                ? 'border-gray-800 hover:border-blue-500 hover:bg-blue-950/10 cursor-pointer text-white'
-                                : 'border-gray-955 opacity-40 cursor-not-allowed text-gray-500'
-                            }`}
-                          >
-                            <div>
-                              <div className="text-xs font-bold font-mono text-blue-400">{v.voucherCode}</div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">
-                                Giảm {v.discountType === 'PERCENT' ? `${v.discountValue}%` : formatCurrency(v.discountValue)}
-                              </div>
-                            </div>
-                            <div className="text-[9px] text-right text-gray-400">
-                              <div>Đơn tối thiểu: {formatCurrency(v.minOrderAmount || 0)}</div>
-                              {!isEligible && <div className="text-red-400 font-bold">Chưa đủ điều kiện</div>}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                {/* Vùng chọn Quyền Lợi Sự Cố */}
+                <div className="rounded-xl border border-white/5 bg-white/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-black text-slate-300">
+                    <span className="uppercase tracking-wider">B. Vé Bồi Thường Sự Cố (Tối đa {selectedSeats.length} vé)</span>
+                    <span className="text-[11px] text-yellow-500 font-bold">
+                      Đã chọn: {selectedCompensationCodes.length}/{selectedSeats.length}
+                    </span>
                   </div>
-                )}
+
+                  {(() => {
+                    const activeCompTickets: { voucherCode: string; expiresAt: string; sourceBookingId: string }[] = [];
+                    compensations.forEach((c) => {
+                      if (c.status === "ACTIVE") {
+                        c.tickets.forEach((t: any) => {
+                          if (t.status === "ACTIVE") {
+                            activeCompTickets.push({
+                              voucherCode: t.voucherCode,
+                              expiresAt: c.expiresAt,
+                              sourceBookingId: String(c.sourceBookingId)
+                            });
+                          }
+                        });
+                      }
+                    });
+
+                    if (activeCompTickets.length === 0) {
+                      return (
+                        <p className="text-xs text-gray-500 py-2 italic text-center">
+                          Bạn không có vé bồi thường sự cố nào khả dụng.
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                        {activeCompTickets.map((t) => {
+                          const isSelected = selectedCompensationCodes.includes(t.voucherCode);
+                          const isDisabled = !isSelected && selectedCompensationCodes.length >= selectedSeats.length;
+
+                          return (
+                            <label
+                              key={t.voucherCode}
+                              className={`flex items-center justify-between border rounded-lg p-2.5 transition select-none ${
+                                isSelected
+                                  ? 'border-[#FFD166] bg-[#FFD166]/5 text-white'
+                                  : isDisabled
+                                    ? 'border-gray-900 opacity-40 cursor-not-allowed text-gray-500'
+                                    : 'border-gray-800 hover:border-[#FFD166]/40 cursor-pointer text-white'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  disabled={isDisabled || !!appliedVoucher}
+                                  onChange={() => handleToggleCompensationCode(t.voucherCode)}
+                                  className="h-4 w-4 rounded border-gray-700 bg-gray-800 text-[#FFD166] focus:ring-0 cursor-pointer disabled:cursor-not-allowed"
+                                />
+                                <div className="text-left">
+                                  <div className="text-xs font-bold font-mono text-[#FFD166]">
+                                    {t.voucherCode}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 mt-0.5">
+                                    Nguồn hủy booking: #{t.sourceBookingId}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-[9px] text-right text-gray-500">
+                                Hạn dùng: {new Date(t.expiresAt).toLocaleDateString('vi-VN')}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
+                  {appliedVoucher && (
+                    <p className="text-[10px] text-[#FFD166] font-semibold">
+                      *Đang áp dụng voucher sự kiện. Bấm hủy voucher để sử dụng vé bồi thường sự cố.
+                    </p>
+                  )}
+                </div>
 
                 {/* Points */}
                 <div className="flex items-center justify-between text-sm border-t border-white/5 pt-3">
@@ -1932,22 +2199,76 @@ export default function Checkout() {
               </div>
             </div>
 
-            <div className="mt-7">
-              <div className="mb-4 flex items-center gap-2 text-base font-black uppercase">
-                <FaQrcode className="h-5 w-5 text-white/90" />
-                Phương thức thanh toán
+            {payableAmount > 0 ? (
+              <div className="mt-7">
+                <div className="mb-4 flex items-center gap-2 text-base font-black uppercase">
+                  <FaCreditCard className="h-5 w-5 text-white/90" />
+                  Phương thức thanh toán
+                </div>
+                <p className="mb-3 text-xs font-bold text-slate-300">
+                  Chọn cổng thanh toán
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {/* SePay Card */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProvider("PP_SEPAY")}
+                    className={`flex items-center gap-3 rounded-md border p-4 text-left transition select-none ${
+                      selectedProvider === "PP_SEPAY"
+                        ? "border-[#FFD166] bg-[#FFD166]/10 text-white"
+                        : "border-white/10 hover:border-white/30 text-slate-300"
+                    }`}
+                  >
+                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      selectedProvider === "PP_SEPAY" ? "border-[#FFD166]" : "border-slate-500"
+                    }`}>
+                      {selectedProvider === "PP_SEPAY" && (
+                        <span className="h-2 w-2 rounded-full bg-[#FFD166]" />
+                      )}
+                    </span>
+                    <FaQrcode className="h-6 w-6 text-white shrink-0" />
+                    <div>
+                      <p className="text-xs font-black">Chuyển khoản VietQR</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Xác nhận tự động qua QR</p>
+                    </div>
+                  </button>
+
+                  {/* VNPay Card */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProvider("PP_VNPAY")}
+                    className={`flex items-center gap-3 rounded-md border p-4 text-left transition select-none ${
+                      selectedProvider === "PP_VNPAY"
+                        ? "border-[#FFD166] bg-[#FFD166]/10 text-white"
+                        : "border-white/10 hover:border-white/30 text-slate-300"
+                    }`}
+                  >
+                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      selectedProvider === "PP_VNPAY" ? "border-[#FFD166]" : "border-slate-500"
+                    }`}>
+                      {selectedProvider === "PP_VNPAY" && (
+                        <span className="h-2 w-2 rounded-full bg-[#FFD166]" />
+                      )}
+                    </span>
+                    <FaCreditCard className="h-6 w-6 text-white shrink-0" />
+                    <div>
+                      <p className="text-xs font-black">Cổng VNPay</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Thanh toán thẻ ATM/Quốc tế</p>
+                    </div>
+                  </button>
+                </div>
               </div>
-              <p className="mb-3 text-xs font-bold text-slate-300">
-                Chọn thẻ thanh toán
-              </p>
-              <div className="flex w-fit items-center gap-3 rounded-md border border-blue-400 bg-blue-500/10 px-4 py-3">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full border border-blue-300">
-                  <span className="h-2 w-2 rounded-full bg-blue-400" />
-                </span>
-                <FaQrcode className="h-7 w-7 text-white" />
-                <span className="text-sm font-black">Mã QR</span>
+            ) : (
+              <div className="mt-7 rounded-md border border-[#FFD166]/20 bg-[#FFD166]/5 p-5">
+                <div className="flex items-center gap-2 text-base font-black uppercase text-[#FFD166]">
+                  <FaGift className="h-5 w-5" />
+                  Thanh toán bằng Voucher / Quyền lợi sự cố
+                </div>
+                <p className="mt-2 text-xs text-slate-300 leading-5">
+                  Số tiền cần thanh toán là 0đ sau khi sử dụng Voucher hoặc Quyền lợi sự cố. Nhấn <strong>Tiếp tục</strong> để xác nhận và nhận vé của bạn.
+                </p>
               </div>
-            </div>
+            )}
 
             <div className="mt-7 grid gap-4 border-t border-white/10 pt-5 lg:grid-cols-[1fr_230px] lg:items-end">
               <div className="space-y-1 text-[11px] font-bold text-white">
@@ -1964,7 +2285,7 @@ export default function Checkout() {
                 </div>
                 <div className="flex justify-between gap-5">
                   <span className="text-slate-300">Số tiền được giảm:</span>
-                  <span className="font-black">{formatCurrency(voucherDiscount)}</span>
+                  <span className="font-black">{formatCurrency(voucherDiscount + compensationDiscount)}</span>
                 </div>
                 <div className="flex justify-between gap-5">
                   <span className="text-slate-300">Số tiền cần thanh toán:</span>
