@@ -2,6 +2,19 @@ import api from '../lib/api';
 
 export type DiscountType = 'PERCENT' | 'AMOUNT';
 export type VoucherStatus = 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
+export const VOUCHER_CATEGORIES = ['EVENT', 'FOOD_BEVERAGE', 'COMPENSATION'] as const;
+export const VOUCHER_APPLICABLE_SCOPES = [
+  'TOTAL_ORDER',
+  'TICKET_ONLY',
+  'FOOD_BEVERAGE_ONLY',
+] as const;
+export const VOUCHER_TARGET_TYPES = ['ALL_CUSTOMERS', 'SPECIFIC_CUSTOMERS'] as const;
+
+export type VoucherCategory = (typeof VOUCHER_CATEGORIES)[number] | (string & {});
+export type VoucherApplicableScope =
+  | (typeof VOUCHER_APPLICABLE_SCOPES)[number]
+  | (string & {});
+export type VoucherTargetType = (typeof VOUCHER_TARGET_TYPES)[number] | (string & {});
 
 export interface Voucher {
   voucherId: string;
@@ -19,6 +32,13 @@ export interface Voucher {
   startDate: string;
   endDate: string;
   voucherStatus: VoucherStatus;
+  category?: VoucherCategory;
+  applicableScope: VoucherApplicableScope;
+  targetType: VoucherTargetType;
+  targetCustomerIds: string | null;
+  specificFbItemIds: string | null;
+  isPrivate: boolean;
+  requiredTicketCount?: number | null;
 }
 
 export interface CreateVoucherPayload {
@@ -34,6 +54,13 @@ export interface CreateVoucherPayload {
   perCustomerLimit?: number;
   startDate: string;
   endDate: string;
+  category?: VoucherCategory;
+  applicableScope?: VoucherApplicableScope;
+  targetType?: VoucherTargetType;
+  targetCustomerIds?: string | null;
+  specificFbItemIds?: string | null;
+  isPrivate?: boolean;
+  requiredTicketCount?: number | null;
 }
 
 export interface UpdateVoucherPayload {
@@ -47,6 +74,13 @@ export interface UpdateVoucherPayload {
   perCustomerLimit?: number;
   startDate: string;
   endDate: string;
+  category?: VoucherCategory;
+  applicableScope?: VoucherApplicableScope;
+  targetType?: VoucherTargetType;
+  targetCustomerIds?: string | null;
+  specificFbItemIds?: string | null;
+  isPrivate?: boolean;
+  requiredTicketCount?: number | null;
 }
 
 export interface ValidateVoucherResponse {
@@ -59,10 +93,14 @@ export interface ValidateVoucherResponse {
 export interface ApiResponse<T = unknown> {
   success: boolean;
   message?: string;
-  data: T;
+  data?: T | null;
   errorCode?: string | null;
   errors?: Record<string, string[]> | null;
 }
+
+const isActiveCompensationVoucher = (voucher: Voucher) =>
+  voucher.voucherStatus === 'ACTIVE' &&
+  (voucher.category || '').toUpperCase() === 'COMPENSATION';
 
 export const voucherService = {
   // Admin APIs
@@ -86,6 +124,17 @@ export const voucherService = {
   // Public/Customer Vouchers APIs
   getActiveVouchers: async () =>
     api.get<unknown, ApiResponse<Voucher[]>>('/api/vouchers'),
+
+  getMyVouchers: async () =>
+    api.get<unknown, ApiResponse<Voucher[]>>('/api/vouchers/my-wallet'),
+
+  claimVoucher: async (voucherId: string) =>
+    api.post<unknown, ApiResponse<boolean>>(`/api/vouchers/${voucherId}/claim`),
+
+  getCompensationVouchers: async () => {
+    const response = await voucherService.getAllAdminVouchers(undefined, 'ACTIVE');
+    return (response.data || []).filter(isActiveCompensationVoucher);
+  },
 
   validateVoucher: async (code: string, bookingAmount: number) =>
     api.get<unknown, ApiResponse<ValidateVoucherResponse>>(`/api/vouchers/validate`, {

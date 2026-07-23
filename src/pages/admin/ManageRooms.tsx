@@ -76,7 +76,7 @@ export default function ManageRooms() {
       ]);
       setRooms(roomsData);
       setCinemas(cinemasData);
-    } catch (err) {
+    } catch {
       toast.error(TEXT.ROOM.ERR_FETCH_ROOMS);
     } finally {
       setLoading(false);
@@ -84,7 +84,11 @@ export default function ManageRooms() {
   }, []);
 
   useEffect(() => {
-    void fetchData();
+    const timeoutId = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [fetchData]);
 
   // Esc to close modal
@@ -158,7 +162,7 @@ export default function ManageRooms() {
       setIsModalOpen(false);
       setEditingRoom(null);
       await fetchData();
-    } catch (err) {
+    } catch {
       toast.error(TEXT.ROOM.ERR_SAVE);
     } finally {
       setSubmitting(false);
@@ -179,7 +183,7 @@ export default function ManageRooms() {
       });
       toast.success(TEXT.ROOM.SUCCESS_DEACTIVATE.replace("{0}", room.roomName));
       await fetchData();
-    } catch (err) {
+    } catch {
       toast.error(TEXT.ROOM.ERR_DEACTIVATE);
     } finally {
       setLoading(false);
@@ -199,7 +203,7 @@ export default function ManageRooms() {
       });
       toast.success(`Đã kích hoạt lại phòng "${room.roomName}" thành công.`);
       await fetchData();
-    } catch (err) {
+    } catch {
       toast.error('Không thể kích hoạt lại phòng chiếu này.');
     } finally {
       setLoading(false);

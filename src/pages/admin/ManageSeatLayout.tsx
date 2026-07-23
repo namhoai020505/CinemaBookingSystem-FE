@@ -20,6 +20,26 @@ const getSeatColor = (seatTypeId: string) => {
   return found ?? SEAT_TYPES[0];
 };
 
+const readAisleColumns = (roomId?: string) => {
+  if (!roomId) {
+    return [];
+  }
+
+  const saved = localStorage.getItem(`aisles-${roomId}`);
+  if (!saved) {
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(saved);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is number => typeof value === 'number')
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 // ============================================================
 // Component
 // ============================================================
@@ -121,18 +141,11 @@ export default function ManageSeatLayout() {
 
   // Tải cấu hình lối đi khi đổi phòng chiếu
   useEffect(() => {
-    if (roomId) {
-      const saved = localStorage.getItem(`aisles-${roomId}`);
-      if (saved) {
-        try {
-          setAisleCols(JSON.parse(saved));
-        } catch (e) {
-          setAisleCols([]);
-        }
-      } else {
-        setAisleCols([]);
-      }
-    }
+    const timeoutId = window.setTimeout(() => {
+      setAisleCols(readAisleColumns(roomId));
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [roomId]);
 
   // Đo đạc kích thước khung sơ đồ ghế thực tế để tự động co giãn ô ghế
@@ -185,7 +198,7 @@ export default function ManageSeatLayout() {
       ]);
       setRoom(roomData);
       setSeats(seatsData);
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SEAT_LAYOUT.ERR_FETCH_DATA);
     } finally {
       setLoading(false);
@@ -193,7 +206,11 @@ export default function ManageSeatLayout() {
   }, [roomId]);
 
   useEffect(() => {
-    void fetchData();
+    const timeoutId = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [fetchData]);
 
   // ──────────────────────────────────────────
@@ -498,7 +515,7 @@ export default function ManageSeatLayout() {
               console.error("Lỗi khi xóa ghế khi tạo lối đi: ", e);
             }
           }
-        } catch (err) {
+        } catch {
           toast.error("Gặp lỗi trong quá trình dọn dẹp ghế trên cột lối đi.");
         } finally {
           setActionLoading(false);
@@ -519,7 +536,8 @@ export default function ManageSeatLayout() {
       const roomsList = await roomService.getRooms();
       const filtered = roomsList.filter((r) => r.roomId !== roomId);
       setOtherRooms(filtered);
-    } catch (err) {
+    } catch {
+      setOtherRooms([]);
     }
   };
 
@@ -608,7 +626,7 @@ export default function ManageSeatLayout() {
 
       setSelectedSeatIds(new Set());
       await fetchData();
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SEAT_LAYOUT.ERR_COPY_FAIL);
     } finally {
       setActionLoading(false);
@@ -938,7 +956,7 @@ export default function ManageSeatLayout() {
       setSelectedSeatIds(new Set());
       setSelectedVirtualSlots(new Set());
       await fetchData();
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SEAT_LAYOUT.ERR_REACTIVATE_FAIL);
     } finally {
       setActionLoading(false);
@@ -959,8 +977,8 @@ export default function ManageSeatLayout() {
       for (const seat of seats) {
         try {
           await roomService.deleteSeat(seat.seatId);
-        } catch (e) {
-          // Bỏ qua lỗi cục bộ trên từng ghế để hoàn tất xóa
+        } catch (error) {
+          console.warn("Không thể xóa ghế khi reset sơ đồ:", seat.seatId, error);
         }
       }
       
@@ -978,7 +996,7 @@ export default function ManageSeatLayout() {
       
       toast.success("Đã reset toàn bộ sơ đồ ghế và kích thước khung rạp về mặc định thành công!");
       await fetchData();
-    } catch (err) {
+    } catch {
       toast.error("Gặp lỗi trong quá trình reset sơ đồ ghế.");
     } finally {
       setActionLoading(false);
@@ -1167,7 +1185,7 @@ export default function ManageSeatLayout() {
       }
       setSelectedSeatIds(new Set());
       await fetchData();
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SEAT_LAYOUT.ERR_CHANGE_TYPE_FAIL);
     } finally {
       setActionLoading(false);
@@ -1210,7 +1228,7 @@ export default function ManageSeatLayout() {
 
       setSelectedSeatIds(new Set());
       await fetchData();
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SEAT_LAYOUT.ERR_DEACTIVATE_FAIL);
     } finally {
       setActionLoading(false);
@@ -1891,7 +1909,7 @@ export default function ManageSeatLayout() {
                               console.error("Lỗi khi xóa ghế ngoài phạm vi: ", e);
                             }
                           }
-                        } catch (err) {
+                        } catch {
                           toast.error("Gặp lỗi trong quá trình dọn dẹp ghế ngoài phạm vi.");
                         } finally {
                           setActionLoading(false);

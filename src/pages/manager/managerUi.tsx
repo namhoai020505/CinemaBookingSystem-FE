@@ -20,12 +20,23 @@ export const formatDateTime = (value?: string) => {
     return '-';
   }
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const clean = value.replace(/(?:z|[+-]\d{2}:\d{2})$/i, "");
+  const [datePart, timePart = ""] = clean.includes("T")
+    ? clean.split("T")
+    : clean.split(" ");
+  const [year, month, date] = datePart ? datePart.split("-") : [];
+  const shortTime = timePart ? timePart.substring(0, 5) : "";
+
+  if (year && month && date && shortTime) {
+    return `${shortTime} ${date}/${month}/${year}`;
+  }
+
+  const d = new Date(clean);
+  if (Number.isNaN(d.getTime())) {
     return value;
   }
 
-  return date.toLocaleString('vi-VN', {
+  return d.toLocaleString('vi-VN', {
     hour: '2-digit',
     minute: '2-digit',
     day: '2-digit',

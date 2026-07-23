@@ -1,15 +1,30 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { movieService } from "../../services/movieService";
 import type { MovieResponse } from "../../services/movieService";
 import { getMediaUrl } from "../../lib/media";
 import { TEXT } from "../../constants/vi";
 
+type ApiErrorLike = {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+};
+
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  const apiError = error as ApiErrorLike;
+  return apiError.response?.data?.message || fallback;
+};
+
 export default function ManageMovie() {
   const [allMovies, setAllMovies] = useState<MovieResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
+  const [autofillUrl, setAutofillUrl] = useState("");
+  const [isAutofilling, setIsAutofilling] = useState(false);
 
   // Pagination states
   const [pageIndex, setPageIndex] = useState(1);
@@ -24,6 +39,7 @@ export default function ManageMovie() {
     ageRating: "",
     description: "",
     trailerUrl: "",
+    bannerUrl: "",
     highlight: "",
     movieStatus: "",
     director: "",
@@ -33,6 +49,9 @@ export default function ManageMovie() {
   const [posterFile, setPosterFile] = useState<File | null>(null);
   const [posterPreview, setPosterPreview] = useState<string>("");
   const [originalPosterUrl, setOriginalPosterUrl] = useState<string>("");
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string>("");
+  const [isUploadingBanner, setIsUploadingBanner] = useState<boolean>(false);
 
   const [errors, setErrors] = useState<{ title?: string; durationMinutes?: string }>({});
 
@@ -53,32 +72,30 @@ export default function ManageMovie() {
   const [filterGenreSearchInput, setFilterGenreSearchInput] = useState("");
   const filterGenreDropdownRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!isGenreDropdownOpen) {
-      setGenreSearchInput("");
-    }
-  }, [isGenreDropdownOpen]);
+  const closeGenreDropdown = useCallback(() => {
+    setIsGenreDropdownOpen(false);
+    setGenreSearchInput("");
+  }, []);
 
-  useEffect(() => {
-    if (!isFilterGenreDropdownOpen) {
-      setFilterGenreSearchInput("");
-    }
-  }, [isFilterGenreDropdownOpen]);
+  const closeFilterGenreDropdown = useCallback(() => {
+    setIsFilterGenreDropdownOpen(false);
+    setFilterGenreSearchInput("");
+  }, []);
 
   // 1. Hàm lấy danh sách phim (Fetch tất cả để xử lý client-side)
-  const fetchMovies = async () => {
+  const fetchMovies = useCallback(async () => {
     try {
       setLoading(true);
       const response = await movieService.getMoviesWithPagination(1, 1000, "");
       if (response) {
         setAllMovies(response.items || []);
       }
-    } catch (error) {
+    } catch {
       toast.error(TEXT.MOVIE.ERR_FETCH_MOVIES);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const filteredMovies = React.useMemo(() => {
     return allMovies.filter(movie => {
@@ -100,18 +117,22 @@ export default function ManageMovie() {
   const totalPages = Math.ceil(totalCount / pageSize);
   const movies = filteredMovies.slice((pageIndex - 1) * pageSize, pageIndex * pageSize);
 
-  const fetchGenres = async () => {
+  const fetchGenres = useCallback(async () => {
     try {
       const data = await movieService.getGenres();
       setGenres(data || []);
-    } catch (error) {
+    } catch {
       toast.error(TEXT.MOVIE.ERR_FETCH_GENRES);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    void fetchGenres();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void fetchGenres();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchGenres]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -119,25 +140,28 @@ export default function ManageMovie() {
         genreDropdownRef.current &&
         !genreDropdownRef.current.contains(event.target as Node)
       ) {
-        setIsGenreDropdownOpen(false);
+        closeGenreDropdown();
       }
       if (
         filterGenreDropdownRef.current &&
         !filterGenreDropdownRef.current.contains(event.target as Node)
       ) {
-        setIsFilterGenreDropdownOpen(false);
+        closeFilterGenreDropdown();
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [closeFilterGenreDropdown, closeGenreDropdown]);
 
   useEffect(() => {
-    void fetchMovies();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void fetchMovies();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchMovies]);
 
 
 
@@ -171,6 +195,7 @@ export default function ManageMovie() {
       ageRating: "P",
       description: "",
       trailerUrl: "",
+      bannerUrl: "",
       highlight: "",
       movieStatus: "",
       director: "",
@@ -179,7 +204,10 @@ export default function ManageMovie() {
     setPosterFile(null);
     setPosterPreview("");
     setOriginalPosterUrl("");
+    setBannerFile(null);
+    setBannerPreview("");
     setErrors({});
+    setAutofillUrl("");
     setIsModalOpen(true);
   };
 
@@ -198,6 +226,7 @@ export default function ManageMovie() {
           ageRating: detail.ageRating || "P",
           description: detail.description || "",
           trailerUrl: detail.trailerUrl || "",
+          bannerUrl: detail.bannerUrl || "",
           highlight: detail.highlight || "",
           movieStatus: detail.movieStatus || "",
           director: detail.director || "",
@@ -212,10 +241,13 @@ export default function ManageMovie() {
         setPosterFile(null);
         setPosterPreview(getMediaUrl(detail.posterUrl) || "");
         setOriginalPosterUrl(detail.posterUrl || "");
+        setBannerFile(null);
+        setBannerPreview((detail.bannerUrl && detail.bannerUrl !== "none") ? getMediaUrl(detail.bannerUrl) : "");
         setErrors({});
+        setAutofillUrl("");
         setIsModalOpen(true);
       }
-    } catch (error) {
+    } catch {
       toast.error(TEXT.MOVIE.ERR_FETCH_DETAIL_EDIT);
     } finally {
       setLoading(false);
@@ -230,7 +262,7 @@ export default function ManageMovie() {
         await movieService.deleteMovie(movie.id);
         toast.success(TEXT.MOVIE.SUCCESS_HIDE);
         await handleReloadAfterSave();
-      } catch (error) {
+      } catch {
         toast.error(TEXT.MOVIE.ERR_HIDE);
       } finally {
         setLoading(false);
@@ -284,12 +316,53 @@ export default function ManageMovie() {
         await movieService.updateMovie(detail.movieId, submitData);
         toast.success(TEXT.MOVIE.SUCCESS_REACTIVATE);
         await handleReloadAfterSave();
-      } catch (error: any) {
-        const errorMsg = error?.response?.data?.message || TEXT.MOVIE.ERR_REACTIVATE;
-        toast.error(errorMsg);
+      } catch (error) {
+        toast.error(getApiErrorMessage(error, TEXT.MOVIE.ERR_REACTIVATE));
       } finally {
         setLoading(false);
       }
+    }
+  };
+
+  const handleAutofillClick = async () => {
+    if (!autofillUrl) return;
+    setIsAutofilling(true);
+    try {
+      const data = await movieService.autofillMovie(autofillUrl);
+      
+      setFormData(prev => ({
+        ...prev,
+        title: data.title || prev.title,
+        durationMinutes: data.durationMinutes || prev.durationMinutes,
+        language: data.language || prev.language,
+        releaseDate: data.releaseDate || prev.releaseDate,
+        ageRating: data.ageRating || prev.ageRating,
+        description: data.description || prev.description,
+        trailerUrl: data.trailerUrl || prev.trailerUrl,
+        bannerUrl: data.bannerUrl || prev.bannerUrl,
+        director: data.director || prev.director,
+      }));
+
+      // Set poster preview to the extracted URL
+      if (data.posterUrl) {
+        setPosterPreview(data.posterUrl);
+      }
+      if (data.bannerUrl && data.bannerUrl !== "none") {
+        setBannerPreview(data.bannerUrl);
+      }
+
+      if (data.genres && data.genres.length > 0) {
+        const matchedIds = data.genres
+          .map(name => genres.find(g => g.name.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(g.name.toLowerCase()))?.genreId)
+          .filter((id): id is number => id !== undefined);
+        setSelectedGenreIds(matchedIds);
+      }
+
+      toast.success("Tự động trích xuất thông tin phim thành công!");
+    } catch {
+      toast.error("Không thể đọc thông tin phim từ link này. Vui lòng kiểm tra lại!");
+    } finally {
+      setIsAutofilling(false);
     }
   };
 
@@ -314,6 +387,74 @@ export default function ManageMovie() {
       }
       setPosterFile(file);
       setPosterPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleBannerFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 8 * 1024 * 1024) {
+        toast.error("File banner không được vượt quá 8MB.");
+        e.target.value = "";
+        return;
+      }
+      setBannerFile(file);
+      setBannerPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleUploadBanner = async () => {
+    if (!editingMovieId) {
+      toast.error("Vui lòng lưu thông tin phim trước khi tải banner.");
+      return;
+    }
+    if (!bannerFile && !formData.bannerUrl) {
+      toast.error("Vui lòng chọn file banner hoặc nhập banner URL.");
+      return;
+    }
+
+    try {
+      setIsUploadingBanner(true);
+      const updatedBannerUrl = await movieService.uploadMovieBanner(
+        editingMovieId,
+        bannerFile || undefined,
+        bannerFile ? undefined : formData.bannerUrl
+      );
+      
+      setFormData(prev => ({ ...prev, bannerUrl: updatedBannerUrl }));
+      setBannerPreview(getMediaUrl(updatedBannerUrl));
+      setBannerFile(null);
+      toast.success("Tải banner phim lên thành công!");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Không thể tải banner lên."));
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
+  const handleDeleteBanner = async () => {
+    if (!editingMovieId) {
+      setBannerFile(null);
+      setBannerPreview("");
+      setFormData(prev => ({ ...prev, bannerUrl: "" }));
+      return;
+    }
+
+    if (!window.confirm("Bạn có chắc chắn muốn xóa banner của phim này?")) {
+      return;
+    }
+
+    try {
+      setIsUploadingBanner(true);
+      await movieService.deleteMovieBanner(editingMovieId);
+      setFormData(prev => ({ ...prev, bannerUrl: "none" }));
+      setBannerPreview("");
+      setBannerFile(null);
+      toast.success("Xóa banner phim thành công!");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Không thể xóa banner."));
+    } finally {
+      setIsUploadingBanner(false);
     }
   };
 
@@ -347,17 +488,16 @@ export default function ManageMovie() {
       if (formData.ageRating) submitData.append("AgeRating", formData.ageRating);
       if (formData.description) submitData.append("Description", formData.description);
       if (formData.trailerUrl) submitData.append("TrailerUrl", formData.trailerUrl);
+      if (formData.bannerUrl) submitData.append("BannerUrl", formData.bannerUrl);
       if (formData.highlight) submitData.append("Highlight", formData.highlight);
       if (formData.director) submitData.append("Director", formData.director);
 
       // Gửi MovieStatus cho cả create và update
       submitData.append("MovieStatus", formData.movieStatus);
 
-      if (editingMovieId) {
-        // Nếu giữ ảnh cũ, gửi lại URL để BE lưu trữ
-        if (posterPreview && !posterFile) {
-          submitData.append("PosterUrl", originalPosterUrl);
-        }
+      // Nếu không upload file mới, gửi URL poster cũ hoặc URL poster trích xuất từ Gemini
+      if (!posterFile && posterPreview) {
+        submitData.append("PosterUrl", originalPosterUrl || posterPreview);
       }
 
       if (posterFile) {
@@ -377,10 +517,11 @@ export default function ManageMovie() {
       setPosterFile(null);
       setPosterPreview("");
       setOriginalPosterUrl("");
+      setBannerFile(null);
+      setBannerPreview("");
       await handleReloadAfterSave();
-    } catch (error: any) {
-      const errorMsg = error?.response?.data?.message || TEXT.MOVIE.ERR_SAVE;
-      toast.error(errorMsg);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, TEXT.MOVIE.ERR_SAVE));
     } finally {
       setLoading(false);
     }
@@ -475,7 +616,13 @@ export default function ManageMovie() {
               />
               <div
                 className="absolute right-3 cursor-pointer"
-                onClick={() => setIsFilterGenreDropdownOpen(!isFilterGenreDropdownOpen)}
+                onClick={() => {
+                  if (isFilterGenreDropdownOpen) {
+                    closeFilterGenreDropdown();
+                  } else {
+                    setIsFilterGenreDropdownOpen(true);
+                  }
+                }}
               >
                 <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -490,7 +637,7 @@ export default function ManageMovie() {
                     onClick={() => {
                       setSearchGenres([]);
                       setPageIndex(1);
-                      setIsFilterGenreDropdownOpen(false);
+                      closeFilterGenreDropdown();
                     }}
                     className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${searchGenres.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
                       }`}
@@ -752,6 +899,44 @@ export default function ManageMovie() {
               onSubmit={handleSubmit}
               className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin scrollbar-track-[#0F172A] scrollbar-thumb-[#1E293B]"
             >
+              {/* Tự động điền với Gemini */}
+              <div className="bg-[#1e293b]/40 p-4 rounded-xl border border-gray-800 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                    Tự động điền thông tin phim
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    Nhập link IMDb, Wikipedia... rồi ấn Trích xuất để Gemini điền form
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="Ví dụ: https://www.imdb.com/title/tt11858890/"
+                    value={autofillUrl}
+                    onChange={(e) => setAutofillUrl(e.target.value)}
+                    className="flex-1 px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    disabled={isAutofilling || !autofillUrl}
+                    onClick={handleAutofillClick}
+                    className="px-4 py-2 bg-[#4318FF] hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-400 rounded-xl text-xs font-semibold transition shrink-0 flex items-center gap-1.5 shadow-md text-white"
+                  >
+                    {isAutofilling ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Đang trích xuất...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Trích xuất</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
               {/* Tên phim & Thời lượng */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
@@ -812,10 +997,16 @@ export default function ManageMovie() {
                       placeholder={TEXT.MOVIE.PLACEHOLDER_GENRE}
                       className="w-full px-4 py-2 pr-10 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] truncate"
                     />
-                    <div
-                      className="absolute right-3 cursor-pointer"
-                      onClick={() => setIsGenreDropdownOpen(!isGenreDropdownOpen)}
-                    >
+                      <div
+                        className="absolute right-3 cursor-pointer"
+                        onClick={() => {
+                          if (isGenreDropdownOpen) {
+                            closeGenreDropdown();
+                          } else {
+                            setIsGenreDropdownOpen(true);
+                          }
+                        }}
+                      >
                       <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                       </svg>
@@ -828,7 +1019,7 @@ export default function ManageMovie() {
                         <div
                           onClick={() => {
                             setSelectedGenreIds([]);
-                            setIsGenreDropdownOpen(false);
+                            closeGenreDropdown();
                           }}
                           className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${selectedGenreIds.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
                             }`}
@@ -993,6 +1184,67 @@ export default function ManageMovie() {
                   placeholder="https://youtube.com/watch?v=..."
                   className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* Banner URL & Upload */}
+              <div>
+                <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
+                  Banner (Ảnh ngang hiển thị trang chủ, khuyên dùng tỉ lệ ngang rộng 2:1 hoặc 16:9, ví dụ: 1920x620)
+                </label>
+                
+                {/* Cách 1: URL Link */}
+                <input
+                  type="text"
+                  name="bannerUrl"
+                  value={formData.bannerUrl}
+                  onChange={handleInputChange}
+                  placeholder="https://example.com/banner.jpg hoặc để trống nếu tải file"
+                  className="w-full px-4 py-2 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                />
+
+                {/* Cách 2: File Upload */}
+                <div className="flex gap-4 items-center">
+                  {bannerPreview ? (
+                    <div className="relative w-32 h-20 rounded-xl overflow-hidden border border-gray-700 shadow-md bg-[#0F172A]">
+                      <img src={bannerPreview} alt="Banner Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={handleDeleteBanner}
+                        disabled={isUploadingBanner}
+                        className="absolute top-1 right-1 w-5 h-5 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center text-[10px] shadow"
+                        title="Xóa Banner"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-32 h-20 rounded-xl bg-[#0F172A] border border-dashed border-gray-700 flex flex-col items-center justify-center text-gray-500 text-xs text-center p-2">
+                      <span>Chưa có Banner</span>
+                    </div>
+                  )}
+
+                  <div className="flex-1 flex gap-2">
+                    <div className="flex-1 border border-dashed border-gray-700 rounded-xl p-2 text-center hover:border-blue-500 transition cursor-pointer relative bg-[#0F172A]">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleBannerFileChange}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <span className="text-xs text-gray-400">Chọn file ảnh</span>
+                    </div>
+                    {(bannerFile || (formData.bannerUrl && editingMovieId)) && (
+                      <button
+                        type="button"
+                        onClick={handleUploadBanner}
+                        disabled={isUploadingBanner}
+                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-xl text-xs font-semibold shadow transition"
+                      >
+                        {isUploadingBanner ? "Đang tải..." : "Tải lên"}
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Tải ảnh poster trực quan */}

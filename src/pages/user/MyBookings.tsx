@@ -9,17 +9,22 @@ import {
   FaReceipt,
   FaRegCheckCircle,
   FaTicketAlt,
+  FaTimesCircle,
   FaWallet,
   FaUniversity,
 } from "react-icons/fa";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { Link } from "react-router-dom";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import { getCurrentUserProfile } from "../../lib/auth";
 import {
   bookingService,
   shouldHideBookingFromHistory,
   type BookingSummary,
 } from "../../services/bookingService";
 import { compensationService } from "../../services/compensationService";
+import { removeCheckoutAttempt } from "../../services/checkoutAttempt";
 
 type BookingFilter = "ALL" | "PENDING_PAYMENT" | "PAID";
 
@@ -33,12 +38,24 @@ const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";
   }
-
-  return /(?:z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`;
+  return value.replace(/(?:z|[+-]\d{2}:\d{2})$/i, "");
 };
 
-const parseBackendDate = (value?: string | null) => {
-  const timestamp = Date.parse(normalizeBackendDate(value));
+const parseBackendDate = (value?: string | null): number => {
+  if (!value) {
+    return 0;
+  }
+  let str = value.trim();
+  if (!str) {
+    return 0;
+  }
+  if (!str.includes("T") && str.includes(" ")) {
+    str = str.replace(" ", "T");
+  }
+  if (!str.endsWith("Z") && !str.endsWith("z") && !/[+-]\d{2}:\d{2}$/.test(str)) {
+    str += "Z";
+  }
+  const timestamp = Date.parse(str);
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
@@ -46,8 +63,22 @@ const formatCurrency = (value: number) =>
   value.toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " đ";
 
 const formatDateTime = (value?: string | null) => {
-  const timestamp = parseBackendDate(value);
+  if (!value) {
+    return "Đang cập nhật";
+  }
 
+  const clean = normalizeBackendDate(value);
+  const [datePart, timePart = ""] = clean.includes("T")
+    ? clean.split("T")
+    : clean.split(" ");
+  const [year, month, date] = datePart ? datePart.split("-") : [];
+  const shortTime = timePart ? timePart.substring(0, 5) : "";
+
+  if (year && month && date && shortTime) {
+    return `${shortTime} ${date}/${month}/${year}`;
+  }
+
+  const timestamp = parseBackendDate(value);
   if (timestamp === 0) {
     return "Đang cập nhật";
   }
@@ -108,6 +139,33 @@ const formatShowtimeShortTime = (value?: string | null) => {
     hour: "2-digit",
     minute: "2-digit",
   });
+const formatShortDate = (value?: string | null) => {
+  if (!value) return "--/--";
+  const clean = normalizeBackendDate(value);
+  const [datePart] = clean.split("T");
+  const [, month, date] = datePart ? datePart.split("-") : [];
+  if (date && month) return `${date}/${month}`;
+  return "--/--";
+};
+
+const formatWeekday = (value?: string | null) => {
+  if (!value) return "Ngày chiếu";
+  const clean = normalizeBackendDate(value);
+  const [datePart] = clean.split("T");
+  const [year, month, date] = datePart ? datePart.split("-").map(Number) : [];
+  if (year && month && date) {
+    const d = new Date(year, month - 1, date);
+    return d.toLocaleDateString("vi-VN", { weekday: "short" });
+  }
+  return "Ngày chiếu";
+};
+
+const formatShortTime = (value?: string | null) => {
+  if (!value) return "--:--";
+  const clean = normalizeBackendDate(value);
+  const [, timePart = ""] = clean.split("T");
+  if (timePart) return timePart.substring(0, 5);
+  return "--:--";
 };
 
 const getShortBookingId = (bookingId: string) => {
@@ -196,12 +254,35 @@ const isPendingPayment = (booking: BookingSummary) =>
 const isPaid = (booking: BookingSummary) =>
   booking.status.toUpperCase() === "PAID";
 
+const getUserKey = () => {
+  const profile = getCurrentUserProfile();
+  return profile?.userId || profile?.email || "anonymous";
+};
+
+const getPaymentStorageKey = (showtimeId: string) =>
+  `g2c-payment:${getUserKey()}:${showtimeId}`;
+
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "object" && error && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string } } })
+      .response;
+    if (response?.data?.message) {
+      return response.data.message;
+    }
+  }
+
+  return error instanceof Error ? error.message : fallback;
+};
+
 export default function MyBookings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [activeFilter, setActiveFilter] = useState<BookingFilter>("ALL");
+  const [cancellingBookingId, setCancellingBookingId] = useState("");
+  const [cancelTargetBooking, setCancelTargetBooking] =
+    useState<BookingSummary | null>(null);
 
   useEffect(() => {
     const success = searchParams.get("success");
@@ -295,6 +376,33 @@ export default function MyBookings() {
     ALL: visibleBookings.length,
     PENDING_PAYMENT: stats.pending,
     PAID: stats.paid,
+  };
+
+  const handleCancelBooking = async (booking: BookingSummary) => {
+    if (cancellingBookingId) {
+      return;
+    }
+
+    try {
+      setCancellingBookingId(booking.bookingId);
+      setErrorMessage("");
+      await bookingService.cancelPendingBooking(booking.bookingId);
+      localStorage.removeItem(getPaymentStorageKey(booking.showtimeId));
+      removeCheckoutAttempt(booking.showtimeId, getUserKey());
+      setBookings((currentBookings) =>
+        currentBookings.map((currentBooking) =>
+          currentBooking.bookingId === booking.bookingId
+            ? { ...currentBooking, status: "CANCELLED" }
+            : currentBooking,
+        ),
+      );
+      setCancelTargetBooking(null);
+    } catch (error) {
+      console.error("Lỗi hủy giao dịch:", error);
+      setErrorMessage(getApiErrorMessage(error, "Không thể hủy giao dịch. Vui lòng thử lại."));
+    } finally {
+      setCancellingBookingId("");
+    }
   };
 
   if (loading) {
@@ -589,14 +697,27 @@ export default function MyBookings() {
 
                       <div className="flex flex-col gap-3 lg:min-w-40 lg:justify-end">
                         {pendingPayment && (
-                          <Link
-                            to={`/booking/checkout/${booking.showtimeId}`}
-                            state={{ resumeBooking: booking }}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FFD166] px-5 py-3 text-center text-sm font-black uppercase tracking-wider text-black transition hover:bg-[#FFE7A3]"
-                          >
-                            <FaCreditCard />
-                            Thanh toán
-                          </Link>
+                          <>
+                            <Link
+                              to={`/booking/checkout/${booking.showtimeId}`}
+                              state={{ resumeBooking: booking }}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#FFD166] px-5 py-3 text-center text-sm font-black uppercase tracking-wider text-black transition hover:bg-[#FFE7A3]"
+                            >
+                              <FaCreditCard />
+                              Thanh toán
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => setCancelTargetBooking(booking)}
+                              disabled={cancellingBookingId === booking.bookingId}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-400/40 bg-rose-500/10 px-5 py-3 text-center text-sm font-black uppercase tracking-wider text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+                            >
+                              <FaTimesCircle />
+                              {cancellingBookingId === booking.bookingId
+                                ? "Đang hủy"
+                                : "Hủy giao dịch"}
+                            </button>
+                          </>
                         )}
                         {(booking.status.toUpperCase() === "CANCELLED" || booking.status.toUpperCase() === "CANCELED") && (
                           <Link
@@ -627,6 +748,24 @@ export default function MyBookings() {
           )}
         </section>
       </div>
+      <ConfirmDialog
+        open={Boolean(cancelTargetBooking)}
+        title="Hủy giao dịch đặt vé?"
+        message="Giao dịch chưa thanh toán sẽ bị hủy và ghế đang giữ sẽ được mở lại cho người khác đặt."
+        confirmLabel="Hủy giao dịch"
+        cancelLabel="Giữ giao dịch"
+        loading={Boolean(cancellingBookingId)}
+        onClose={() => {
+          if (!cancellingBookingId) {
+            setCancelTargetBooking(null);
+          }
+        }}
+        onConfirm={() => {
+          if (cancelTargetBooking) {
+            void handleCancelBooking(cancelTargetBooking);
+          }
+        }}
+      />
     </div>
   );
 }

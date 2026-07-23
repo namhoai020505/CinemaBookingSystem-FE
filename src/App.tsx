@@ -1,15 +1,37 @@
-import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
+import {
+  createBrowserRouter,
+  Navigate,
+  Outlet,
+  RouterProvider,
+} from 'react-router-dom';
+import RequireAuth from './components/RequireAuth';
+import { useIdleTimeout } from './hooks/useIdleTimeout';
 import AdminLayout from './layouts/admin/AdminLayout';
 import ManagerLayout from './layouts/manager/ManagerLayout';
 import StaffLayout from './layouts/staff/StaffLayout';
 import UserLayout from './layouts/user/UserLayout';
 import Dashboard from './pages/admin/Dashboard';
+import ManageBanner from './pages/admin/ManageBanner';
+import ManageMovie from './pages/admin/ManageMovie';
+import ManageRooms from './pages/admin/ManageRooms';
+import ManageSeatLayout from './pages/admin/ManageSeatLayout';
+import ManageShowtime from './pages/admin/ManageShowtime';
+import ManageStaff from './pages/admin/ManageStaff';
+import ManageVouchers from './pages/admin/ManageVouchers';
+import ReviewModeration from './pages/admin/ReviewModeration';
+import Login from './pages/auth/Login';
+import StaffSetPassword from './pages/auth/StaffSetPassword';
 import ManagerDashboardPage from './pages/manager/ManagerDashboardPage';
-import ManagerShowtimesPage from './pages/manager/ManagerShowtimesPage';
 import ManagerRefundsPage from './pages/manager/ManagerRefundsPage';
-import TicketScannerPage from './pages/manager/TicketScannerPage';
-import StaffTicketScannerPage from './pages/staff/StaffTicketScannerPage';
+import ManagerShowtimesPage from './pages/manager/ManagerShowtimesPage';
 import MyCinemaPage from './pages/manager/MyCinemaPage';
+import TicketScannerPage from './pages/manager/TicketScannerPage';
+import CounterFbSalesPage from './pages/staff/CounterFbSalesPage';
+import StaffTicketScannerPage from './pages/staff/StaffTicketScannerPage';
+import BookingSuccess from './pages/user/BookingSuccess';
+import Checkout from './pages/user/Checkout';
+import Cinemas from './pages/user/Cinemas';
+import CinemaSchedule from './pages/user/CinemaSchedule';
 import Home from './pages/user/Home';
 import Profile from './pages/user/Profile';
 import Login from './pages/auth/Login';
@@ -24,58 +46,48 @@ import ManageSeatLayout from './pages/admin/ManageSeatLayout';
 import ManageRefunds from './pages/admin/ManageRefunds';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import MovieShowtimes from './pages/user/MovieShowtimes';
-import SeatSelection from './pages/user/SeatSelection';
-import Checkout from './pages/user/Checkout';
-import ReviewModeration from './pages/admin/ReviewModeration';
-import BookingSuccess from './pages/user/BookingSuccess';
+import Movies from './pages/user/Movies';
 import MyBookings from './pages/user/MyBookings';
 import MyVouchers from './pages/user/MyVouchers';
 import ManageVouchers from './pages/admin/ManageVouchers';
 import RefundClaimPage from './pages/user/RefundClaimPage';
 import VnpayReturn from './pages/user/VnpayReturn';
 import ConfirmTimeChangePage from './pages/user/ConfirmTimeChangePage';
+import Profile from './pages/user/Profile';
+import SeatSelection from './pages/user/SeatSelection';
+import TicketPrices from './pages/user/TicketPrices';
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
 const managerRoles = ['manager'];
 const staffRoles = ['staff'];
 
-/**
- * RootLayout: wrapper ngoài cùng, luôn render bên trong RouterProvider
- * → có thể dùng useNavigate, useLocation, useBlocker...
- */
 const RootLayout = () => {
   useIdleTimeout(10);
   return <Outlet />;
 };
 
-
-
-// Sử dụng createBrowserRouter (Data Router) để hỗ trợ useBlocker
 const router = createBrowserRouter([
   {
-    // Root wrapper — bao mọi route để GlobalTimer hoạt động trong router context
     element: <RootLayout />,
     children: [
+      { path: '/login', element: <Login /> },
+      { path: '/staff/set-password', element: <StaffSetPassword /> },
       {
-        path: '/login',
-        element: <Login />,
-      },
-      {
-        path: '/staff/set-password',
-        element: <StaffSetPassword />,
-      },
-      {
-        // User layout
         element: <UserLayout />,
         children: [
           { path: '/', element: <Home /> },
+          { path: '/ticket-prices', element: <TicketPrices /> },
+          { path: '/cinemas', element: <Cinemas /> },
+          { path: '/cinema-schedule', element: <CinemaSchedule /> },
+          { path: '/movies', element: <Movies /> },
           { path: '/movie/:movieId/showtimes', element: <MovieShowtimes /> },
           { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
           { path: '/booking/confirm-time-change', element: <ConfirmTimeChangePage /> },
           {
             element: <RequireAuth allowedRoles={customerRoles} />,
             children: [
+              { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
               { path: '/booking/checkout/:showtimeId', element: <Checkout /> },
               { path: '/vnpay-return', element: <VnpayReturn /> },
               { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
@@ -89,7 +101,6 @@ const router = createBrowserRouter([
         ],
       },
       {
-        // Admin layout
         element: <RequireAuth allowedRoles={adminRoles} verifyAdmin />,
         children: [
           {
@@ -111,7 +122,6 @@ const router = createBrowserRouter([
         ],
       },
       {
-        // Manager layout
         element: <RequireAuth allowedRoles={managerRoles} />,
         children: [
           {
@@ -124,13 +134,13 @@ const router = createBrowserRouter([
               { path: 'refunds', element: <ManagerRefundsPage /> },
               { path: 'ticket-scanner', element: <TicketScannerPage /> },
               { path: 'vouchers', element: <ManageVouchers /> },
+              { path: 'banners', element: <ManageBanner /> },
               { path: 'my-cinema', element: <MyCinemaPage /> },
             ],
           },
         ],
       },
       {
-        // Staff layout
         element: <RequireAuth allowedRoles={staffRoles} />,
         children: [
           {
@@ -139,14 +149,12 @@ const router = createBrowserRouter([
             children: [
               { index: true, element: <Navigate to="ticket-scanner" replace /> },
               { path: 'ticket-scanner', element: <StaffTicketScannerPage /> },
+              { path: 'fb-counter', element: <CounterFbSalesPage /> },
             ],
           },
         ],
       },
-      {
-        path: '*',
-        element: <Navigate to="/" replace />,
-      },
+      { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
 ]);

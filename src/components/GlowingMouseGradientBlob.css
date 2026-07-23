@@ -1,0 +1,163 @@
+.glowing-blob-page {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  width: 100%;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  background: #ffffff;
+}
+
+.glowing-blob-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.glowing-blob {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: min(72vw, 760px);
+  min-width: 430px;
+  aspect-ratio: 1;
+  pointer-events: none;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 121, 238, 0.98), transparent 28%),
+    radial-gradient(circle at 70% 34%, rgba(255, 0, 148, 0.94), transparent 36%),
+    radial-gradient(circle at 42% 76%, rgba(181, 0, 255, 0.76), transparent 42%),
+    radial-gradient(circle at 62% 66%, rgba(255, 33, 177, 0.88), transparent 44%);
+  filter: blur(92px) saturate(1.34);
+  mix-blend-mode: multiply;
+  opacity: 0.88;
+  transform: translate3d(50vw, 50vh, 0) translate(-50%, -50%);
+  will-change: transform;
+}
+
+.glowing-blob--background {
+  width: min(50vw, 580px);
+  min-width: 360px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 30% 30%,
+      rgb(var(--gradient-glow-blue, 0 153 255) / 0.9),
+      transparent 52%
+    ),
+    radial-gradient(
+      circle at 68% 34%,
+      rgb(var(--gradient-glow-indigo, 67 56 202) / 0.84),
+      transparent 56%
+    ),
+    radial-gradient(
+      circle at 52% 70%,
+      rgb(var(--gradient-glow-purple, 139 92 246) / 0.9),
+      transparent 60%
+    );
+  filter: blur(88px) saturate(1.45);
+  mix-blend-mode: screen;
+  opacity: 0.46;
+}
+
+.glowing-blob::after {
+  position: absolute;
+  inset: 12%;
+  content: "";
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(255, 0, 166, 0.58), transparent 68%);
+  filter: blur(64px);
+}
+
+.glowing-blob--background::after {
+  inset: 8%;
+  background: radial-gradient(
+    circle,
+    rgb(var(--gradient-glow-indigo, 67 56 202) / 0.52),
+    rgb(var(--gradient-glow-purple, 139 92 246) / 0.3) 42%,
+    transparent 72%
+  );
+  filter: blur(52px);
+}
+
+.glowing-blob-title {
+  position: relative;
+  z-index: 1;
+  max-width: min(900px, calc(100vw - 32px));
+  margin: 0;
+  color: #000000;
+  font-size: clamp(2.8rem, 9vw, 7.5rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.user-gradient-shell {
+  --gradient-glow-blue: 0 153 255;
+  --gradient-glow-indigo: 67 56 202;
+  --gradient-glow-purple: 139 92 246;
+
+  position: relative;
+  isolation: isolate;
+}
+
+html body .user-gradient-shell .user-page-surface > * {
+  background-color: transparent !important;
+}
+
+.user-gradient-shell #movies-section {
+  background-color: transparent !important;
+}
+
+html.light .user-gradient-shell,
+body.g2c-light-mode .user-gradient-shell {
+  --gradient-glow-blue: 56 189 248;
+  --gradient-glow-indigo: 129 140 248;
+  --gradient-glow-purple: 139 92 246;
+}
+
+html.light .glowing-blob--background,
+body.g2c-light-mode .glowing-blob--background {
+  filter: blur(84px) saturate(1.55);
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+
+html.light .glowing-blob--background::after,
+body.g2c-light-mode .glowing-blob--background::after {
+  background: radial-gradient(
+    circle,
+    rgb(var(--gradient-glow-indigo) / 0.44),
+    rgb(var(--gradient-glow-purple) / 0.3) 42%,
+    transparent 72%
+  );
+}
+
+@media (max-width: 640px) {
+  .glowing-blob {
+    width: 540px;
+    min-width: 0;
+    filter: blur(76px) saturate(1.28);
+  }
+
+  .glowing-blob-title {
+    font-size: clamp(2.65rem, 15vw, 5.2rem);
+  }
+
+  .glowing-blob--background {
+    width: 420px;
+    min-width: 0;
+    opacity: 0.46;
+  }
+
+  html.light .glowing-blob--background,
+  body.g2c-light-mode .glowing-blob--background {
+    opacity: 0.52;
+  }
+}

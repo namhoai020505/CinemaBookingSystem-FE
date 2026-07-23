@@ -2,17 +2,23 @@ import { Outlet } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 import Chatbot from '../../components/Chatbot';
+import GlowingMouseGradientBlob from '../../components/GlowingMouseGradientBlob';
+import MobileBottomNav from './MobileBottomNav';
 
 export default function UserLayout() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#182437] text-slate-900 dark:text-slate-100 transition-colors duration-300">
+    <div className="user-gradient-shell min-h-screen flex flex-col bg-white dark:bg-black text-slate-900 dark:text-slate-100 transition-colors duration-300">
+      <GlowingMouseGradientBlob variant="background" />
       <Header />
       
-      <main className="flex-1 bg-slate-50 dark:bg-[#182437] pt-[94px] transition-colors duration-300">
+      <main className="user-page-surface relative z-10 flex-1 bg-transparent pb-24 pt-[66px] transition-colors duration-300 md:pb-0 md:pt-[94px]">
         <Outlet />
       </main>
 
-      <Footer />
+      <div className="user-layout-footer relative z-20 hidden md:block">
+        <Footer />
+      </div>
+      <MobileBottomNav />
       <Chatbot />
     </div>
   );

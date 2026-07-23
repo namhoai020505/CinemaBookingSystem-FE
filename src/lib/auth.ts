@@ -20,6 +20,46 @@ type JwtPayload = {
   [key: string]: unknown;
 };
 
+type AuthSession = {
+  accessToken: string | null;
+  refreshToken: string | null;
+  fullName: string | null;
+};
+
+export type AuthSessionInput = {
+  accessToken: string;
+  refreshToken?: string | null;
+  fullName?: string | null;
+};
+
+export const AUTH_SESSION_EVENT = 'g2c-auth-session-changed';
+
+const LEGACY_TOKEN_KEYS = ['role'];
+
+const authSession: AuthSession = {
+  accessToken: null,
+  refreshToken: null,
+  fullName:
+    typeof window === 'undefined' ? null : localStorage.getItem('fullName'),
+};
+
+const removeLegacyStoredTokens = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  for (const key of LEGACY_TOKEN_KEYS) {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  }
+};
+
+const notifyAuthSessionChanged = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
+  }
+};
+
 const decodeBase64Url = (value: string) => {
   const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
   const paddedBase64 = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
@@ -29,15 +69,45 @@ const decodeBase64Url = (value: string) => {
   return new TextDecoder().decode(bytes);
 };
 
+removeLegacyStoredTokens();
+
+export const setAuthSession = ({
+  accessToken,
+  refreshToken = null,
+  fullName = null,
+}: AuthSessionInput) => {
+  authSession.accessToken = accessToken;
+  authSession.refreshToken = refreshToken;
+  localStorage.setItem('accessToken', accessToken);
+
+  if (refreshToken) {
+    localStorage.setItem('refreshToken', refreshToken);
+  }
+
+  authSession.fullName = fullName || 'Người dùng';
+
+  removeLegacyStoredTokens();
+  localStorage.setItem('fullName', authSession.fullName);
+  notifyAuthSessionChanged();
+};
+
 export const getAccessToken = () => localStorage.getItem('accessToken');
 
 export const getRefreshToken = () => localStorage.getItem('refreshToken');
 
+export const getAuthFullName = () =>
+  authSession.fullName || localStorage.getItem('fullName') || 'Thành viên';
+
 export const clearAuthSession = () => {
+  authSession.accessToken = null;
+  authSession.refreshToken = null;
+  authSession.fullName = null;
+
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
-  localStorage.removeItem('role');
+  removeLegacyStoredTokens();
   localStorage.removeItem('fullName');
+  notifyAuthSessionChanged();
 };
 
 export const getJwtPayload = (token: string | null = getAccessToken()): JwtPayload | null => {
@@ -143,7 +213,7 @@ export const getCurrentUserProfile = (token: string | null = getAccessToken()) =
   return {
     userId: getStringClaim(payload, userIdClaimKeys),
     email: getStringClaim(payload, emailClaimKeys),
-    fullName: localStorage.getItem('fullName') || 'Thành viên',
+    fullName: getAuthFullName(),
     role: getRoleFromAccessToken(token) || '',
     expiresAt: payload.exp ? new Date(payload.exp * 1000) : null,
   };

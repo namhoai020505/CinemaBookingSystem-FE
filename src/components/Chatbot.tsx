@@ -24,6 +24,22 @@ export default function Chatbot() {
   const [isFocused, setIsFocused] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageIdRef = useRef(0);
+
+  const createMessage = (
+    sender: Message['sender'],
+    text: string,
+    prefix: string,
+  ): Message => {
+    messageIdRef.current += 1;
+
+    return {
+      id: `${prefix}-${messageIdRef.current}`,
+      sender,
+      text,
+      timestamp: new Date(),
+    };
+  };
 
   // Auto scroll to bottom
   const scrollToBottom = () => {
@@ -42,12 +58,7 @@ export default function Chatbot() {
     if (!text) return;
 
     // Add user message
-    const userMsg: Message = {
-      id: `user-${Date.now()}`,
-      sender: 'user',
-      text,
-      timestamp: new Date(),
-    };
+    const userMsg = createMessage('user', text, 'user');
     
     setMessages((prev) => [...prev, userMsg]);
     setInputValue('');
@@ -56,20 +67,14 @@ export default function Chatbot() {
     try {
       const responseText = await chatbotService.sendMessage(text);
       
-      const botMsg: Message = {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: responseText,
-        timestamp: new Date(),
-      };
+      const botMsg = createMessage('bot', responseText, 'bot');
       setMessages((prev) => [...prev, botMsg]);
-    } catch (err) {
-      const errorMsg: Message = {
-        id: `bot-err-${Date.now()}`,
-        sender: 'bot',
-        text: 'Xin lỗi, tôi không thể xử lý yêu cầu lúc này.',
-        timestamp: new Date(),
-      };
+    } catch {
+      const errorMsg = createMessage(
+        'bot',
+        'Xin lỗi, tôi không thể xử lý yêu cầu lúc này.',
+        'bot-err',
+      );
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsTyping(false);
@@ -84,7 +89,7 @@ export default function Chatbot() {
   ];
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 select-none">
+    <div className="fixed bottom-24 right-4 z-50 select-none md:bottom-6 md:right-6">
       {/* Floating Chat Button */}
       {!isOpen && (
         <button
@@ -102,7 +107,7 @@ export default function Chatbot() {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="flex h-[550px] w-[380px] flex-col rounded-2xl border border-slate-200 dark:border-indigo-500/20 bg-white dark:bg-gradient-to-br dark:from-slate-900 dark:to-indigo-950 shadow-2xl overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-5 text-slate-800 dark:text-slate-100">
+        <div className="flex h-[min(550px,calc(100vh-128px))] w-[calc(100vw-32px)] max-w-[380px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-5 dark:border-indigo-500/20 dark:bg-gradient-to-br dark:from-slate-900 dark:to-indigo-950 dark:text-slate-100">
           {/* Header */}
           <div className="bg-slate-100 dark:bg-indigo-600/30 backdrop-blur-sm p-4 border-b border-slate-200 dark:border-indigo-500/30 flex justify-between items-center">
             <div className="flex items-center space-x-2">

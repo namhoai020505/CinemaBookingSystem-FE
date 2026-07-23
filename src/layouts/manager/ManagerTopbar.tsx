@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FaBars, FaMoon, FaPowerOff, FaSun, FaUserShield } from 'react-icons/fa';
+import NotificationCenter from '../../components/NotificationCenter';
 import { getCurrentUserProfile } from '../../lib/auth';
 import { logout } from '../../services/authService';
 
@@ -97,6 +98,8 @@ const ManagerTopbar = ({
           <FaUserShield />
           Rạp của tôi
         </div>
+
+        <NotificationCenter isLightMode={isLightMode} buttonClassName={iconButtonClass} />
 
         <button
           type="button"

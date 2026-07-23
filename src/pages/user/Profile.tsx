@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import {
   FiAlertCircle,
   FiCheckCircle,
@@ -9,11 +9,11 @@ import {
   FiEdit3,
   FiFilm,
   FiLock,
+  FiLogOut,
   FiMail,
   FiMapPin,
   FiPhone,
   FiShield,
-  FiUser,
 } from 'react-icons/fi';
 import { getCurrentUserProfile } from '../../lib/auth';
 import {
@@ -21,6 +21,7 @@ import {
   type CustomerProfile,
   type UpdateCustomerProfileRequest,
 } from '../../services/customerService';
+import { logout } from '../../services/authService';
 
 type AuthProfile = NonNullable<ReturnType<typeof getCurrentUserProfile>>;
 
@@ -196,6 +197,7 @@ const StatusMessage = ({
 };
 
 export default function Profile() {
+  const navigate = useNavigate();
   const authProfile = useMemo(() => getCurrentUserProfile(), []);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [profileForm, setProfileForm] = useState<ProfileFormState>(emptyProfileForm);
@@ -269,6 +271,11 @@ export default function Profile() {
   const displayName = displayProfile.fullName || authProfile.fullName || 'Thành viên';
   const displayEmail = displayProfile.email || authProfile.email || 'Chưa có email';
   const displayInitial = (displayName || displayEmail || 'G').trim().charAt(0).toUpperCase();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   const updateProfileForm = (field: keyof ProfileFormState, value: string) => {
     setProfileForm((current) => ({
@@ -502,15 +509,6 @@ export default function Profile() {
                 </div>
               </div>
               <div className="flex items-start gap-3 rounded-md bg-white/5 p-3">
-                <FiUser className="mt-0.5 shrink-0 text-[#FFD166]" />
-                <div className="min-w-0">
-                  <p className="text-white/50">Mã tài khoản</p>
-                  <p className="truncate font-semibold">
-                    {displayProfile.userId || 'Không xác định'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-md bg-white/5 p-3">
                 <FiClock className="mt-0.5 shrink-0 text-[#FFD166]" />
                 <div className="min-w-0">
                   <p className="text-white/50">Phiên đăng nhập hết hạn</p>
@@ -518,6 +516,15 @@ export default function Profile() {
                 </div>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-red-400/30 bg-red-500/10 px-4 text-sm font-extrabold uppercase text-red-100 transition hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+            >
+              <FiLogOut size={17} aria-hidden="true" />
+              Đăng xuất
+            </button>
           </aside>
 
           <div className="space-y-6">

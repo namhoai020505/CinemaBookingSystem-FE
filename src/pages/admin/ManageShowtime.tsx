@@ -8,9 +8,18 @@ import {
   type CinemaResponse,
   type RoomResponse,
   type MovieResponse,
+  type CreateShowtimePayload,
 } from "../../services/showtimeService";
 import api from "../../lib/api";
 import { managerService } from "../../services/managerService";
+import { voucherService, type Voucher } from "../../services/voucherService";
+import {
+  buildRecurringShowtimeDrafts,
+  getRecurringDateKeys,
+  type RecurrenceFrequency,
+  type RecurrenceSourceShowtime,
+  type RecurringShowtimeDraft,
+} from "../../utils/showtimeRecurrence";
 
 // =================================================================
 // 💡 CẤU HÌNH TIMELINE CHUẨN: 8H ĐẾN 24H (16 TIẾNG)
@@ -21,6 +30,17 @@ const TOTAL_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR; // 16 tiếng
 const HOUR_WIDTH = 120; // 1 tiếng cố định đúng 120px
 const MINUTE_WIDTH = HOUR_WIDTH / 60; // ~2px cho mỗi phút
 const DEFAULT_BASE_PRICE = 75000; // Giá vé mặc định 75.000đ
+
+const RECURRENCE_OPTIONS: Array<{
+  value: RecurrenceFrequency;
+  label: string;
+  helper: string;
+}> = [
+  { value: "NONE", label: "Không lặp", helper: "Chỉ tạo suất trong ngày đang chọn." },
+  { value: "DAILY", label: "Hàng ngày", helper: "Tạo thêm mỗi ngày đến ngày kết thúc." },
+  { value: "WEEKLY", label: "Hàng tuần", helper: "Tạo thêm cùng thứ mỗi tuần." },
+  { value: "MONTHLY", label: "Hàng tháng", helper: "Tạo thêm cùng ngày trong tháng." },
+];
 
 // =================================================================
 // 💡 PALETTE MÀU TỰ ĐỘNG CHO CÁC PHIM
@@ -57,6 +77,7 @@ type ShowtimeSlot = {
   endTime: string;       // ISO
   basePrice: number;
   status: string;
+  hasBookings?: boolean;
 };
 
 type DraggingMovie =
@@ -113,12 +134,36 @@ const formatDateToYMD = (date: Date): string => {
   return `${y}-${m}-${d}`;
 };
 
+const formatVoucherDiscount = (voucher: Voucher): string => {
+  if (voucher.discountType === "PERCENT") {
+    return `${voucher.discountValue}%`;
+  }
+
+  return `${new Intl.NumberFormat("vi-VN").format(voucher.discountValue)}đ`;
+};
+
+const getVoucherScopeLabel = (voucher: Voucher): string => {
+  switch ((voucher.applicableScope || "").toUpperCase()) {
+    case "TICKET_ONLY":
+      return "tiền vé";
+    case "FOOD_BEVERAGE_ONLY":
+      return "F&B";
+    default:
+      return "toàn đơn";
+  }
+};
+
+const getCompensationVoucherLabel = (voucher: Voucher): string =>
+  `${voucher.voucherCode} - ${voucher.title || "Voucher đền bù"} (${formatVoucherDiscount(voucher)} · ${getVoucherScopeLabel(voucher)})`;
+
 /** Tạo ISO datetime từ ngày đã chọn + số phút tính từ 08:00 */
 const minutesFrom8AMToISO = (selectedDate: string, minutesFrom8AM: number): string => {
+  const [y, m, d] = selectedDate.split("-").map(Number);
   const totalMinutes = TIMELINE_START_HOUR * 60 + minutesFrom8AM;
   const hours = Math.floor(totalMinutes / 60);
   const mins = Math.floor(totalMinutes % 60);
-  return `${selectedDate}T${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:00Z`;
+  const dateObj = new Date(Date.UTC(y, m - 1, d, hours, mins, 0));
+  return dateObj.toISOString();
 };
 
 /** Map màu sắc cho phim dựa trên movieId → stable color */
@@ -141,10 +186,13 @@ export default function ManageShowtime() {
   const [rooms, setRooms] = useState<RoomResponse[]>([]);
   const [movies, setMovies] = useState<MovieResponse[]>([]);
   const [allShowtimes, setAllShowtimes] = useState<ShowtimeResponse[]>([]);
+  const [compensationVouchers, setCompensationVouchers] = useState<Voucher[]>([]);
 
   // ---------- State: Bộ lọc ----------
   const [selectedCinemaId, setSelectedCinemaId] = useState("");
   const [selectedDate, setSelectedDate] = useState(formatDateToYMD(new Date()));
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>("NONE");
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
 
   // ---------- Computed: ngày quá khứ (để cảnh báo và khóa chỉnh sửa) ----------
   const isPastDate = selectedDate < formatDateToYMD(new Date());
@@ -154,6 +202,7 @@ export default function ManageShowtime() {
   const [draggingMovie, setDraggingMovie] = useState<DraggingMovie | null>(null);
   const [loading, setLoading] = useState(true);
   const isToastActive = useRef(false);
+  const dragOffsetXRef = useRef<number>(0);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     roomId: string;
     slotId: string;
@@ -161,6 +210,29 @@ export default function ManageShowtime() {
     roomName: string;
     startTimeStr: string;
   } | null>(null);
+
+  // ---------- State: ChangeRoom Modal ----------
+  const [changeRoomModal, setChangeRoomModal] = useState<{
+    showtimeId: string;
+    movieName: string;
+    currentRoomId: string;
+    currentRoomName: string;
+    startTimeStr: string;
+  } | null>(null);
+  const [selectedTargetRoomId, setSelectedTargetRoomId] = useState<string>('');
+  const [compensationVoucherCode, setCompensationVoucherCode] = useState<string>('');
+  const [compensationNote, setCompensationNote] = useState<string>('');
+  const [targetSeatType, setTargetSeatType] = useState<string>('');
+  const [changeRoomLoading, setChangeRoomLoading] = useState<boolean>(false);
+
+  // ---------- State: Update Showtime with Bookings Compensation Modal ----------
+  const [updateCompModal, setUpdateCompModal] = useState<{
+    slotsWithBookingsCount: number;
+    affectedMovieNames: string[];
+  } | null>(null);
+  const [updateVoucherCode, setUpdateVoucherCode] = useState<string>('');
+  const [updateCompNote, setUpdateCompNote] = useState<string>('');
+  const [updateTargetSeatType, setUpdateTargetSeatType] = useState<string>('');
 
   // ---------- State: UX Edit Tracking & Batch Save ----------
   const [isDirty, setIsDirty] = useState(false);
@@ -206,8 +278,12 @@ export default function ManageShowtime() {
   }, [isDirty]);
 
   // ---------- Computed: Phòng chiếu lọc theo rạp đã chọn ----------
-  const filteredRooms = rooms.filter(
-    (r) => r.cinemaId === selectedCinemaId && r.roomStatus === "ACTIVE"
+  const filteredRooms = React.useMemo(
+    () =>
+      rooms.filter(
+        (r) => r.cinemaId === selectedCinemaId && r.roomStatus === "ACTIVE",
+      ),
+    [rooms, selectedCinemaId],
   );
 
   // ---------- Computed: Danh sách phim chờ (sidebar) ----------
@@ -218,6 +294,24 @@ export default function ManageShowtime() {
     ageRating: m.ageRating || "P",
     color: getMovieColor(m.id),
   }));
+
+  const newTempShowtimeCount = React.useMemo(
+    () =>
+      Object.values(schedule).reduce(
+        (count, slots) => count + slots.filter((slot) => slot.id.startsWith("temp_")).length,
+        0,
+      ),
+    [schedule],
+  );
+
+  const recurringDateKeys = React.useMemo(
+    () => getRecurringDateKeys(selectedDate, recurrenceEndDate, recurrenceFrequency),
+    [recurrenceEndDate, recurrenceFrequency, selectedDate],
+  );
+
+  const recurringPreviewCount = newTempShowtimeCount * recurringDateKeys.length;
+  const activeRecurrenceOption =
+    RECURRENCE_OPTIONS.find((option) => option.value === recurrenceFrequency) ?? RECURRENCE_OPTIONS[0];
 
   // =================================================================
   // 💡 FETCH DATA TỪ API
@@ -231,7 +325,7 @@ export default function ManageShowtime() {
       if (activeCinemas.length > 0 && !selectedCinemaId) {
         setSelectedCinemaId(activeCinemas[0].cinemaId);
       }
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SHOWTIME.ERR_FETCH_CINEMAS);
     }
   }, [selectedCinemaId]);
@@ -240,7 +334,7 @@ export default function ManageShowtime() {
     try {
       const data = await showtimeService.getRooms();
       setRooms(data);
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SHOWTIME.ERR_FETCH_ROOMS);
     }
   }, []);
@@ -249,7 +343,7 @@ export default function ManageShowtime() {
     try {
       const data = await showtimeService.getMoviesForScheduling();
       setMovies(data);
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SHOWTIME.ERR_FETCH_MOVIES);
     }
   }, []);
@@ -258,8 +352,18 @@ export default function ManageShowtime() {
     try {
       const data = await showtimeService.getShowtimes();
       setAllShowtimes(data);
-    } catch (err) {
+    } catch {
       toast.error(TEXT.SHOWTIME.ERR_FETCH_SHOWTIMES);
+    }
+  }, []);
+
+  const fetchCompensationVouchers = useCallback(async () => {
+    try {
+      const data = await voucherService.getCompensationVouchers();
+      setCompensationVouchers(data);
+    } catch {
+      setCompensationVouchers([]);
+      toast.warn("Không tải được danh sách voucher đền bù. Bạn vẫn có thể đổi phòng nhưng không thể chọn voucher.");
     }
   }, []);
 
@@ -272,6 +376,7 @@ export default function ManageShowtime() {
         fetchRooms(),
         fetchMovies(),
         fetchShowtimes(),
+        fetchCompensationVouchers(),
       ]);
       setLoading(false);
     };
@@ -283,61 +388,65 @@ export default function ManageShowtime() {
   // 💡 BUILD SCHEDULE TỪ SHOWTIMES + FILTERS
   // =================================================================
   useEffect(() => {
-    if (isDirty) return;
+    if (isDirty) return undefined;
 
-    if (filteredRooms.length === 0) {
-      setSchedule({});
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      if (filteredRooms.length === 0) {
+        setSchedule({});
+        return;
+      }
 
-    // Khởi tạo schedule rỗng cho mỗi phòng
-    const newSchedule: Schedule = {};
-    for (const room of filteredRooms) {
-      newSchedule[room.roomId] = [];
-    }
+      // Khởi tạo schedule rỗng cho mỗi phòng
+      const newSchedule: Schedule = {};
+      for (const room of filteredRooms) {
+        newSchedule[room.roomId] = [];
+      }
 
-    // Lọc showtime theo cinema + ngày + status
-    for (const st of allShowtimes) {
-      // Chỉ hiển thị showtimes thuộc cinema đang chọn
-      if (st.cinemaId !== selectedCinemaId) continue;
+      // Lọc showtime theo cinema + ngày + status
+      for (const st of allShowtimes) {
+        // Chỉ hiển thị showtimes thuộc cinema đang chọn
+        if (st.cinemaId !== selectedCinemaId) continue;
 
-      // Chỉ hiển thị OPEN/CLOSED (bỏ CANCELLED)
-      if (st.status === "CANCELLED") continue;
+        // Chỉ hiển thị OPEN/CLOSED (bỏ CANCELLED)
+        if (st.status === "CANCELLED") continue;
 
-      // Lọc theo ngày đã chọn (tách chuỗi trực tiếp để tránh lệch múi giờ)
-      const stDateStr = st.startTime.split("T")[0];
-      if (stDateStr !== selectedDate) continue;
+        // Lọc theo ngày đã chọn (tách chuỗi trực tiếp để tránh lệch múi giờ)
+        const stDateStr = st.startTime.split("T")[0];
+        if (stDateStr !== selectedDate) continue;
 
-      // Chỉ thêm nếu phòng thuộc cinema đang chọn
-      if (!newSchedule[st.roomId]) continue;
+        // Chỉ thêm nếu phòng thuộc cinema đang chọn
+        if (!newSchedule[st.roomId]) continue;
 
-      const CLEAN_UP_BUFFER = 15;
-      const durationMin = diffMinutes(st.startTime, st.endTime) - CLEAN_UP_BUFFER;
-      const startMin = isoToMinutesFrom8AM(st.startTime);
+        const CLEAN_UP_BUFFER = 15;
+        const durationMin = diffMinutes(st.startTime, st.endTime) - CLEAN_UP_BUFFER;
+        const startMin = isoToMinutesFrom8AM(st.startTime);
 
-      // Khấu trừ 15 phút dọn phòng để tính endTime hiển thị thực tế của bộ phim
-      const endTimeDate = new Date(st.endTime);
-      endTimeDate.setMinutes(endTimeDate.getMinutes() - CLEAN_UP_BUFFER);
-      const endTimeISO = endTimeDate.toISOString();
+        // Khấu trừ 15 phút dọn phòng để tính endTime hiển thị thực tế của bộ phim
+        const endTimeDate = new Date(st.endTime);
+        endTimeDate.setMinutes(endTimeDate.getMinutes() - CLEAN_UP_BUFFER);
+        const endTimeISO = endTimeDate.toISOString();
 
-      newSchedule[st.roomId].push({
-        id: st.showtimeId,
-        movieId: st.movieId,
-        roomId: st.roomId,
-        movieNameVn: st.movieTitle,
-        startMinutesFrom8AM: startMin,
-        duration: durationMin,
-        color: getMovieColor(st.movieId),
-        startTime: st.startTime,
-        endTime: endTimeISO,
-        basePrice: st.basePrice,
-        status: st.status,
-      });
-    }
+        newSchedule[st.roomId].push({
+          id: st.showtimeId,
+          movieId: st.movieId,
+          roomId: st.roomId,
+          movieNameVn: st.movieTitle,
+          startMinutesFrom8AM: startMin,
+          duration: durationMin,
+          color: getMovieColor(st.movieId),
+          startTime: st.startTime,
+          endTime: endTimeISO,
+          basePrice: st.basePrice,
+          status: st.status,
+          hasBookings: st.hasBookings,
+        });
+      }
 
-    setSchedule(newSchedule);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allShowtimes, selectedCinemaId, selectedDate, filteredRooms.length, isDirty]);
+      setSchedule(newSchedule);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [allShowtimes, selectedCinemaId, selectedDate, filteredRooms, isDirty]);
 
   // =================================================================
   // 💡 DRAG & DROP HANDLERS
@@ -345,11 +454,18 @@ export default function ManageShowtime() {
 
   const handleDragStartFromSidebar = (movie: UnscheduledMovie) => {
     isToastActive.current = false;
+    dragOffsetXRef.current = 0;
     setDraggingMovie({ ...movie, isNew: true });
   };
 
-  const handleDragStartFromTimeline = (roomShowtime: ShowtimeSlot, roomId: string) => {
+  const handleDragStartFromTimeline = (
+    e: React.DragEvent<HTMLDivElement>,
+    roomShowtime: ShowtimeSlot,
+    roomId: string
+  ) => {
     isToastActive.current = false;
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragOffsetXRef.current = e.clientX - rect.left;
     setDraggingMovie({ ...roomShowtime, isNew: false, originalRoomId: roomId });
   };
 
@@ -361,8 +477,8 @@ export default function ManageShowtime() {
     const rowElement = e.currentTarget as HTMLElement;
     const rect = rowElement.getBoundingClientRect();
 
-    // Tính tọa độ vị trí thả chuột chuẩn xác 100%
-    const relativeX = e.clientX - rect.left;
+    // Tính tọa độ vị trí thả chuột trừ đi độ lệch điểm cầm trên thẻ phim (dragOffsetX)
+    const relativeX = (e.clientX - rect.left) - dragOffsetXRef.current;
     const rawStartMinutes = Math.round(relativeX / MINUTE_WIDTH);
 
     const SNAP_INTERVAL = 15;
@@ -498,12 +614,40 @@ export default function ManageShowtime() {
     toast.info(TEXT.SHOWTIME.TOAST_TEMP_DELETED);
   };
 
+  /** Thực thi Đổi phòng chuyên dụng (ChangeRoom) */
+  const handleChangeRoomSubmit = async () => {
+    if (!changeRoomModal || !selectedTargetRoomId) {
+      toast.error("Vui lòng chọn phòng chiếu mới.");
+      return;
+    }
+    try {
+      setChangeRoomLoading(true);
+      await showtimeService.changeRoom(changeRoomModal.showtimeId, {
+        newRoomId: selectedTargetRoomId,
+        compensationVoucherCode: compensationVoucherCode.trim() || undefined,
+        compensationNote: compensationNote.trim() || undefined,
+        targetSeatType: targetSeatType.trim() || undefined,
+      });
+      toast.success("Đổi phòng chiếu chuyên dụng thành công! Đã tự động cập nhật sơ đồ ghế và gửi email cho khách.");
+      setChangeRoomModal(null);
+      await fetchShowtimes();
+    } catch (error: unknown) {
+      console.error("ChangeRoom error:", error);
+      const beMsg = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(beMsg || "Không thể đổi phòng chiếu. Vui lòng thử lại.");
+    } finally {
+      setChangeRoomLoading(false);
+    }
+  };
+
   const handleCancelChanges = () => {
     const confirm = window.confirm(TEXT.SHOWTIME.CONFIRM_CANCEL_CHANGES);
     if (!confirm) return;
 
     setIsDirty(false);
     setDeletedShowtimeIds(new Set());
+    setRecurrenceFrequency("NONE");
+    setRecurrenceEndDate("");
 
     // Nạp lại schedule từ database
     if (filteredRooms.length > 0) {
@@ -549,13 +693,128 @@ export default function ManageShowtime() {
     toast.info(TEXT.SHOWTIME.TOAST_RESTORED_ORIGINAL);
   };
 
-  const handleSaveChanges = async () => {
-    // Chặn lưu khi đang xem ngày quá khứ (BE sẽ từ chối với INVALID_START_TIME)
-    if (isPastDate) {
-      toast.error(TEXT.SHOWTIME.ERR_PAST_DATE_SAVE);
-      return;
+  const buildRecurringDraftsForNewSlots = (newSlotsToCreate: ShowtimeSlot[]): RecurringShowtimeDraft[] => {
+    if (recurrenceFrequency === "NONE" || newSlotsToCreate.length === 0) {
+      return [];
     }
 
+    if (!recurrenceEndDate) {
+      throw new Error("Vui lòng chọn ngày kết thúc lặp lại.");
+    }
+
+    if (recurrenceEndDate < selectedDate) {
+      throw new Error("Ngày kết thúc lặp lại không được nhỏ hơn ngày bắt đầu.");
+    }
+
+    const recurringDateKeys = getRecurringDateKeys(
+      selectedDate,
+      recurrenceEndDate,
+      recurrenceFrequency,
+    );
+
+    if (recurringDateKeys.length === 0) {
+      throw new Error("Khoảng lặp hiện tại chưa tạo thêm suất nào. Hãy chọn ngày kết thúc xa hơn.");
+    }
+
+    const sources: RecurrenceSourceShowtime[] = newSlotsToCreate.map((slot) => ({
+      sourceId: slot.id,
+      movieId: slot.movieId,
+      roomId: slot.roomId,
+      startMinutesFrom8AM: slot.startMinutesFrom8AM,
+      duration: slot.duration,
+      basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
+      status: slot.status || "OPEN",
+    }));
+
+    const drafts = buildRecurringShowtimeDrafts({
+      sources,
+      frequency: recurrenceFrequency,
+      startDate: selectedDate,
+      endDate: recurrenceEndDate,
+      timelineStartHour: TIMELINE_START_HOUR,
+    });
+
+    const sourceMap = new Map(newSlotsToCreate.map((slot) => [slot.id, slot]));
+    const generatedWindows: Array<{
+      roomId: string;
+      dateKey: string;
+      startMinutesFrom8AM: number;
+      duration: number;
+      movieNameVn: string;
+    }> = [];
+
+    const hasOverlap = (
+      start: number,
+      duration: number,
+      otherStart: number,
+      otherDuration: number,
+    ) => {
+      const cleanUpBuffer = 15;
+      const end = start + duration;
+      const otherEnd = otherStart + otherDuration;
+      return start < otherEnd + cleanUpBuffer && end + cleanUpBuffer > otherStart;
+    };
+
+    for (const draft of drafts) {
+      const source = sourceMap.get(draft.sourceId);
+      if (!source) continue;
+
+      const existingConflict = allShowtimes.find((showtime) => {
+        if (showtime.cinemaId !== selectedCinemaId) return false;
+        if (showtime.roomId !== draft.roomId) return false;
+        if (showtime.status === "CANCELLED") return false;
+        if (showtime.startTime.split("T")[0] !== draft.startDate) return false;
+
+        const existingDuration = Math.max(0, diffMinutes(showtime.startTime, showtime.endTime) - 15);
+        return hasOverlap(
+          source.startMinutesFrom8AM,
+          source.duration,
+          isoToMinutesFrom8AM(showtime.startTime),
+          existingDuration,
+        );
+      });
+
+      if (existingConflict) {
+        const roomName =
+          filteredRooms.find((room) => room.roomId === draft.roomId)?.roomName || draft.roomId;
+        throw new Error(
+          `Lịch lặp ngày ${draft.startDate} tại ${roomName} bị trùng với "${existingConflict.movieTitle}".`,
+        );
+      }
+
+      const generatedConflict = generatedWindows.find(
+        (item) =>
+          item.roomId === draft.roomId &&
+          item.dateKey === draft.startDate &&
+          hasOverlap(
+            source.startMinutesFrom8AM,
+            source.duration,
+            item.startMinutesFrom8AM,
+            item.duration,
+          ),
+      );
+
+      if (generatedConflict) {
+        const roomName =
+          filteredRooms.find((room) => room.roomId === draft.roomId)?.roomName || draft.roomId;
+        throw new Error(
+          `Các suất lặp ngày ${draft.startDate} tại ${roomName} đang tự trùng giờ với "${generatedConflict.movieNameVn}".`,
+        );
+      }
+
+      generatedWindows.push({
+        roomId: draft.roomId,
+        dateKey: draft.startDate,
+        startMinutesFrom8AM: source.startMinutesFrom8AM,
+        duration: source.duration,
+        movieNameVn: source.movieNameVn,
+      });
+    }
+
+    return drafts;
+  };
+
+  const executeSaveChanges = async (voucherCode?: string, note?: string, seatType?: string) => {
     setActionLoading(true);
 
     try {
@@ -617,41 +876,18 @@ export default function ManageShowtime() {
         await showtimeService.deleteShowtime(id);
       }
 
-      // 2. Thực hiện tạo mới và cập nhật
-      let createdCount = 0;
-      let updatedCount = 0;
-
-      // Duyệt qua tất cả các slot trong schedule hiện tại
       for (const roomId in schedule) {
         const slots = schedule[roomId] || [];
         for (const slot of slots) {
           if (slot.id.startsWith("temp_")) {
-            // Tạo mới
-            await showtimeService.createShowtime({
-              movieId: slot.movieId,
-              roomId: slot.roomId,
-              startTime: slot.startTime,
-              basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
-              status: slot.status,
-            });
-            createdCount++;
+            newSlotsToCreate.push(slot);
           } else {
-            // Kiểm tra xem có thay đổi so với dữ liệu gốc không
             const original = allShowtimes.find((st) => st.showtimeId === slot.id);
             if (original) {
               const hasRoomChanged = original.roomId !== slot.roomId;
               const hasTimeChanged = original.startTime !== slot.startTime;
-
               if (hasRoomChanged || hasTimeChanged) {
-                // Có thay đổi thực sự -> Cập nhật
-                await showtimeService.updateShowtime(slot.id, {
-                  movieId: slot.movieId,
-                  roomId: slot.roomId,
-                  startTime: slot.startTime,
-                  basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
-                  status: slot.status,
-                });
-                updatedCount++;
+                updatedSlots.push({ slot, original });
               }
             }
           }
@@ -667,31 +903,145 @@ export default function ManageShowtime() {
       }
       successMsg += ")";
       toast.success(successMsg);
+      // Sắp xếp các slot cập nhật theo thứ tự thông minh (Topological Order)
+      const recurringDrafts = buildRecurringDraftsForNewSlots(newSlotsToCreate);
+
+      for (const id of Array.from(deletedShowtimeIds)) {
+        await showtimeService.deleteShowtime(id);
+      }
+
+      const forwardMoved = updatedSlots.filter(
+        (item) => new Date(item.slot.startTime).getTime() > new Date(item.original.startTime).getTime()
+      ).sort(
+        (a, b) => new Date(b.slot.startTime).getTime() - new Date(a.slot.startTime).getTime()
+      );
+
+      const backwardMoved = updatedSlots.filter(
+        (item) => new Date(item.slot.startTime).getTime() <= new Date(item.original.startTime).getTime()
+      ).sort(
+        (a, b) => new Date(a.slot.startTime).getTime() - new Date(b.slot.startTime).getTime()
+      );
+
+      const sortedUpdateList = [...forwardMoved, ...backwardMoved];
+
+      let createdCount = 0;
+      let updatedCount = 0;
+
+      // Thực hiện cập nhật các suất chiếu đã có theo thứ tự tối ưu
+      for (const { slot } of sortedUpdateList) {
+        const targetStatus = slot.status === "SUSPENDED" ? "OPEN" : (slot.status || "OPEN");
+        await showtimeService.updateShowtime(slot.id, {
+          movieId: slot.movieId,
+          roomId: slot.roomId,
+          startTime: slot.startTime,
+          basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
+          status: targetStatus,
+          compensationVoucherCode: slot.hasBookings ? (voucherCode?.trim() || undefined) : undefined,
+          compensationNote: slot.hasBookings ? (note?.trim() || undefined) : undefined,
+          targetSeatType: slot.hasBookings ? (seatType?.trim() || undefined) : undefined,
+        });
+        updatedCount++;
+      }
+
+      // Thực hiện tạo mới các suất chiếu temp
+      const createPayloads: CreateShowtimePayload[] = [
+        ...newSlotsToCreate.map((slot) => ({
+          movieId: slot.movieId,
+          roomId: slot.roomId,
+          startTime: slot.startTime,
+          basePrice: slot.basePrice || DEFAULT_BASE_PRICE,
+          status: slot.status || "OPEN",
+        })),
+        ...recurringDrafts.map((draft) => ({
+          movieId: draft.movieId,
+          roomId: draft.roomId,
+          startTime: draft.startTime,
+          basePrice: draft.basePrice || DEFAULT_BASE_PRICE,
+          status: draft.status || "OPEN",
+        })),
+      ];
+
+      for (const payload of createPayloads) {
+        await showtimeService.createShowtime(payload);
+        createdCount++;
+      }
+
+      toast.success(
+        `Đã lưu lịch chiếu thành công! (Tạo: ${createdCount}, Cập nhật: ${updatedCount}, Xóa: ${deletedShowtimeIds.size})`
+      );
 
       setIsDirty(false);
       setDeletedShowtimeIds(new Set());
+      setUpdateCompModal(null);
+      setRecurrenceFrequency("NONE");
+      setRecurrenceEndDate("");
       await fetchShowtimes(); // Reload database
     } catch (err: unknown) {
       // Map BE errorCode → thông báo tiếng Việt rõ ràng
       const ERROR_MESSAGES: Record<string, string> = TEXT.SHOWTIME.BE_ERRORS;
+      const hasApiResponse = Boolean(err && typeof err === "object" && "response" in err);
 
       let errorMsg = TEXT.SHOWTIME.ERR_GENERIC_SAVE;
-      if (err && typeof err === "object" && "response" in err) {
+      if (hasApiResponse) {
         const axiosErr = err as { response?: { data?: { message?: string; errorCode?: string } } };
         const beMessage = axiosErr.response?.data?.message;
         const beCode = axiosErr.response?.data?.errorCode ?? "";
         const mapped = ERROR_MESSAGES[beCode];
-        errorMsg = mapped ?? beMessage ?? errorMsg;
+        errorMsg = beMessage ?? mapped ?? errorMsg;
+      } else if (err instanceof Error) {
+        errorMsg = err.message;
       }
       toast.error(errorMsg, { autoClose: 7000 });
 
-      // Nạp lại dữ liệu cũ để tránh hiển thị sai lệch
-      setIsDirty(false);
-      setDeletedShowtimeIds(new Set());
-      await fetchShowtimes();
+      if (hasApiResponse) {
+        setIsDirty(false);
+        setDeletedShowtimeIds(new Set());
+        setUpdateCompModal(null);
+        await fetchShowtimes();
+      }
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleSaveChanges = async () => {
+    // Chặn lưu khi đang xem ngày quá khứ
+    if (isPastDate) {
+      toast.error(TEXT.SHOWTIME.ERR_PAST_DATE_SAVE);
+      return;
+    }
+
+    // Kiểm tra xem có suất chiếu nào ĐÃ CÓ VÉ ĐẶT bị thay đổi không
+    const slotsWithBookings: string[] = [];
+    for (const roomId in schedule) {
+      const slots = schedule[roomId] || [];
+      for (const slot of slots) {
+        if (!slot.id.startsWith("temp_")) {
+          const original = allShowtimes.find((st) => st.showtimeId === slot.id);
+          if (original) {
+            const hasRoomChanged = original.roomId !== slot.roomId;
+            const hasTimeChanged = original.startTime !== slot.startTime;
+            if ((hasRoomChanged || hasTimeChanged) && slot.hasBookings) {
+              slotsWithBookings.push(slot.movieNameVn);
+            }
+          }
+        }
+      }
+    }
+
+    // Nếu có suất chiếu có vé đã đặt bị thay đổi, mở Modal nhập Voucher Đền Bù
+    if (slotsWithBookings.length > 0) {
+      setUpdateVoucherCode("");
+      setUpdateCompNote("");
+      setUpdateTargetSeatType("");
+      setUpdateCompModal({
+        slotsWithBookingsCount: slotsWithBookings.length,
+        affectedMovieNames: Array.from(new Set(slotsWithBookings)),
+      });
+      return;
+    }
+
+    await executeSaveChanges();
   };
 
   // =================================================================
@@ -707,6 +1057,8 @@ export default function ManageShowtime() {
     setSelectedCinemaId(nextVal);
     setIsDirty(false);
     setDeletedShowtimeIds(new Set());
+    setRecurrenceFrequency("NONE");
+    setRecurrenceEndDate("");
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -716,8 +1068,13 @@ export default function ManageShowtime() {
       if (!confirm) return;
     }
     setSelectedDate(nextVal);
+    if (recurrenceEndDate && recurrenceEndDate < nextVal) {
+      setRecurrenceEndDate("");
+    }
     setIsDirty(false);
     setDeletedShowtimeIds(new Set());
+    setRecurrenceFrequency("NONE");
+    setRecurrenceEndDate("");
   };
 
   // =================================================================
@@ -744,7 +1101,148 @@ export default function ManageShowtime() {
       </div>
 
       {/* BỘ LỌC RẠP + NGÀY */}
-      <div className="flex gap-4 mb-6 bg-[#111C44] p-4 rounded-xl border border-gray-800 shadow-xl flex-wrap">
+      <div className="mb-6 rounded-2xl border border-slate-700/80 bg-[#111827] p-4 shadow-xl">
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_190px_minmax(440px,1.7fr)_minmax(220px,.8fr)]">
+          <div className="min-w-0">
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+              Rạp chiếu
+            </label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center text-cyan-300">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21h18M5 21V6a2 2 0 012-2h10a2 2 0 012 2v15M9 8h1m4 0h1M9 12h1m4 0h1M9 16h1m4 0h1" />
+                </svg>
+              </span>
+              <select
+                value={selectedCinemaId}
+                onChange={handleCinemaChange}
+                className="h-12 w-full appearance-none rounded-xl border border-slate-700 bg-[#0F172A] pl-12 pr-10 text-sm font-bold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+              >
+                {cinemas.length === 0 && <option value="" className="bg-[#0F172A] text-white">{TEXT.SHOWTIME.NO_CINEMAS}</option>}
+                {cinemas.map((c) => (
+                  <option key={c.cinemaId} value={c.cinemaId} className="bg-[#0F172A] text-white">
+                    {c.cinemaName}
+                  </option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </span>
+            </div>
+          </div>
+
+          <div className="min-w-0">
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+              Ngày xếp lịch
+            </label>
+            <div className="relative">
+              <span className={`pointer-events-none absolute left-4 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center ${isPastDate ? "text-amber-400" : "text-cyan-300"}`}>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </span>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={handleDateChange}
+                style={{ colorScheme: "dark" }}
+                className={`h-12 w-full rounded-xl border pl-12 pr-4 text-sm font-bold outline-none transition focus:ring-2 ${
+                  isPastDate
+                    ? "border-amber-500/40 bg-amber-950/20 text-amber-300 focus:ring-amber-500/25"
+                    : "border-slate-700 bg-[#0F172A] text-blue-50 focus:border-cyan-400 focus:ring-cyan-500/25"
+                }`}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+            <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300">
+              Lặp lại lịch chiếu
+            </label>
+            <div className={`grid gap-3 ${recurrenceFrequency !== "NONE" ? "sm:grid-cols-[1fr_180px]" : "sm:grid-cols-[1fr]"}`}>
+              <select
+                value={recurrenceFrequency}
+                onChange={(e) => {
+                  const nextFrequency = e.target.value as RecurrenceFrequency;
+                  setRecurrenceFrequency(nextFrequency);
+                  if (nextFrequency === "NONE") {
+                    setRecurrenceEndDate("");
+                  } else if (!recurrenceEndDate) {
+                    setRecurrenceEndDate(selectedDate);
+                  }
+                }}
+                disabled={isPastDate}
+                className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {RECURRENCE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value} className="bg-[#0F172A] text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              {recurrenceFrequency !== "NONE" && (
+                <input
+                  type="date"
+                  value={recurrenceEndDate}
+                  min={selectedDate}
+                  onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                  disabled={isPastDate}
+                  style={{ colorScheme: "dark" }}
+                  className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              )}
+            </div>
+            <div className="mt-3 rounded-lg border border-white/10 bg-[#0B1220] px-3 py-2 text-[11px] font-semibold leading-5 text-cyan-100">
+              {activeRecurrenceOption.helper}
+              {recurrenceFrequency !== "NONE" && (
+                <span className="ml-2 text-amber-200">
+                  Dự kiến tạo thêm {recurringPreviewCount} suất từ {newTempShowtimeCount} suất mới.
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex min-h-full flex-col justify-between gap-3 rounded-xl border border-slate-700 bg-[#0F172A] p-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+              <span className="inline-block h-3 w-3 rounded bg-blue-500/40 ring-1 ring-blue-500/30"></span>
+              {TEXT.SHOWTIME.DEFAULT_TICKET_PRICE} {DEFAULT_BASE_PRICE.toLocaleString("vi-VN")}đ
+            </div>
+            {isPastDate && (
+              <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300">
+                {TEXT.SHOWTIME.PAST_DATE_WARNING}
+              </div>
+            )}
+            {isDirty && !isPastDate && (
+              <div className="space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2">
+                <div className="text-xs font-bold text-amber-300">{TEXT.SHOWTIME.UNSAVED_CHANGES_WARNING}</div>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    onClick={handleSaveChanges}
+                    disabled={actionLoading}
+                    className="h-9 w-full rounded-lg bg-emerald-600 px-3 text-[11px] font-black leading-none text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    <span className="block truncate">
+                      {actionLoading ? TEXT.SHOWTIME.BTN_SAVING : TEXT.SHOWTIME.BTN_SAVE_SCHEDULE}
+                    </span>
+                  </button>
+                  <button
+                    onClick={handleCancelChanges}
+                    disabled={actionLoading}
+                    className="h-9 w-full rounded-lg bg-red-600 px-3 text-[11px] font-black leading-none text-white transition hover:bg-red-500 disabled:opacity-50"
+                  >
+                    <span className="block truncate">{TEXT.SHOWTIME.BTN_CANCEL}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden">
         <div className="relative group">
           <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-blue-400 group-hover:text-blue-300 transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -789,9 +1287,62 @@ export default function ManageShowtime() {
         </div>
 
         {/* Cảnh báo ngày quá khứ */}
+        <div className="flex min-w-[360px] flex-1 flex-wrap items-end gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+          <div className="min-w-[150px] flex-1">
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-cyan-300">
+              Lặp lại lịch chiếu
+            </label>
+            <select
+              value={recurrenceFrequency}
+              onChange={(e) => {
+                const nextFrequency = e.target.value as RecurrenceFrequency;
+                setRecurrenceFrequency(nextFrequency);
+                if (nextFrequency === "NONE") {
+                  setRecurrenceEndDate("");
+                } else if (!recurrenceEndDate) {
+                  setRecurrenceEndDate(selectedDate);
+                }
+              }}
+              disabled={isPastDate}
+              className="w-full rounded-xl border border-gray-700 bg-[#0F172A] px-3 py-2.5 text-sm font-semibold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {RECURRENCE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value} className="bg-[#0F172A] text-white">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {recurrenceFrequency !== "NONE" && (
+            <div className="min-w-[160px] flex-1">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-cyan-300">
+                Ngày kết thúc lặp
+              </label>
+              <input
+                type="date"
+                value={recurrenceEndDate}
+                min={selectedDate}
+                onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                disabled={isPastDate}
+                style={{ colorScheme: "dark" }}
+                className="w-full rounded-xl border border-gray-700 bg-[#0F172A] px-3 py-2.5 text-sm font-semibold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </div>
+          )}
+
+          <div className="min-w-[220px] flex-1 rounded-lg border border-white/10 bg-[#0B1220] px-3 py-2 text-[11px] font-semibold text-gray-300">
+            <div className="text-cyan-200">{activeRecurrenceOption.helper}</div>
+            {recurrenceFrequency !== "NONE" && (
+              <div className="mt-1 text-amber-200">
+                Dự kiến tạo thêm {recurringPreviewCount} suất từ {newTempShowtimeCount} suất mới.
+              </div>
+            )}
+          </div>
+        </div>
+
         {isPastDate && (
           <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/25 px-3 py-1.5 rounded-lg text-amber-400 text-xs font-semibold">
-            <span>⚠️</span>
             <span>{TEXT.SHOWTIME.PAST_DATE_WARNING}</span>
           </div>
         )}
@@ -915,7 +1466,7 @@ export default function ManageShowtime() {
                             <div
                               key={slot.id}
                               draggable={!isPastDate}
-                              onDragStart={() => { if (!isPastDate) handleDragStartFromTimeline(slot, room.roomId); }}
+                              onDragStart={(e) => { if (!isPastDate) handleDragStartFromTimeline(e, slot, room.roomId); }}
                               className={`absolute top-3 bottom-3 rounded-xl shadow-xl border border-white/10 px-3 py-2 flex flex-col justify-between overflow-hidden transition-all pointer-events-auto ${isPastDate
                                 ? 'cursor-default opacity-60'
                                 : 'cursor-grab active:cursor-grabbing hover:brightness-110 hover:scale-[1.01] hover:shadow-2xl hover:z-50'
@@ -923,21 +1474,45 @@ export default function ManageShowtime() {
                               style={{ left: `${leftPx}px`, width: `${widthPx}px`, backgroundColor: slot.color }}
                             >
                               <div className="flex justify-between items-start gap-1">
-                                <div className="text-xs font-bold truncate text-white max-w-[82%]">
+                                <div className="text-xs font-bold truncate text-white max-w-[70%]">
                                   {slot.movieNameVn}
                                 </div>
-                                {/* Ẩn nút xóa khi xem ngày quá khứ */}
-                                {!isPastDate && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); void handleDeleteShowtime(room.roomId, slot.id); }}
-                                    className="text-white/60 hover:text-white bg-black/40 hover:bg-red-600 w-4 h-4 rounded-full flex items-center justify-center text-[10px] transition-all shrink-0 z-50 shadow-md"
-                                  >
-                                    &times;
-                                  </button>
-                                )}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {/* Nút Đổi Phòng Chuyên Dụng ChangeRoom (Chỉ hiện khi suất chiếu ĐÃ CÓ vé đặt) */}
+                                  {!isPastDate && !slot.id.startsWith("temp_") && slot.hasBookings && (
+                                    <button
+                                      title="Đổi phòng chiếu chuyên dụng (ChangeRoom)"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedTargetRoomId("");
+                                        setCompensationVoucherCode("");
+                                        setCompensationNote("");
+                                        setChangeRoomModal({
+                                          showtimeId: slot.id,
+                                          movieName: slot.movieNameVn,
+                                          currentRoomId: room.roomId,
+                                          currentRoomName: room.roomName,
+                                          startTimeStr: `${startShort} - ${endShort}`,
+                                        });
+                                      }}
+                                      className="text-white/80 hover:text-white bg-black/40 hover:bg-cyan-600 px-1.5 py-0.5 rounded-full flex items-center justify-center text-[9px] transition-all shrink-0 z-50 shadow-md cursor-pointer"
+                                    >
+                                      Đổi
+                                    </button>
+                                  )}
+                                  {/* Ẩn nút xóa khi xem ngày quá khứ */}
+                                  {!isPastDate && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); void handleDeleteShowtime(room.roomId, slot.id); }}
+                                      className="text-white/60 hover:text-white bg-black/40 hover:bg-red-600 w-4 h-4 rounded-full flex items-center justify-center text-[10px] transition-all shrink-0 z-50 shadow-md cursor-pointer"
+                                    >
+                                      &times;
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                               <div className="text-[9px] text-white/90 font-medium tracking-wide">
-                                {startShort && endShort ? `🕒 ${startShort} - ${endShort}` : "N/A"}
+                                {startShort && endShort ? `${startShort} - ${endShort}` : "N/A"}
                               </div>
                             </div>
                           );
@@ -976,7 +1551,7 @@ export default function ManageShowtime() {
                 >
                   <div className="text-sm font-bold text-white">{movie.movieNameVn}</div>
                   <div className="text-[10px] text-gray-400 mt-1 flex justify-between items-center">
-                    <span>⏱️ {movie.duration} {TEXT.SHOWTIME.MINUTES} ({movie.ageRating})</span>
+                    <span>{movie.duration} {TEXT.SHOWTIME.MINUTES} ({movie.ageRating})</span>
                     <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded text-white shadow-sm" style={{ backgroundColor: movie.color }}>
                       {isPastDate ? 'Chỉ Xem' : 'Kéo Thả'}
                     </span>
@@ -1028,7 +1603,7 @@ export default function ManageShowtime() {
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Khung giờ</span>
-                  <span className="text-yellow-400 text-xs font-semibold">🕒 {deleteConfirm.startTimeStr}</span>
+                  <span className="text-yellow-400 text-xs font-semibold">{deleteConfirm.startTimeStr}</span>
                 </div>
               </div>
             </div>
@@ -1052,49 +1627,235 @@ export default function ManageShowtime() {
         </div>
       )}
 
-      {/* CONFIRM CANCEL SHOWTIME MODAL */}
-      {cancelConfirmShowtimes.length > 0 && (
+      {/* Modal Đổi Phòng Chuyên Dụng (ChangeRoom) */}
+      {changeRoomModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-all duration-300">
-          <div className="bg-[#111C44] border border-amber-500/20 rounded-2xl w-full max-w-md p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-modal-scale flex flex-col gap-5">
-            {/* Header / Warning Icon */}
+          <div className="bg-[#111C44] border border-cyan-500/30 rounded-2xl w-full max-w-md p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-modal-scale flex flex-col gap-5">
+            {/* Header */}
             <div className="flex items-center gap-4 border-b border-gray-800/80 pb-4">
-              <div className="bg-amber-500/10 text-amber-500 p-3 rounded-xl border border-amber-500/20 shadow-inner shrink-0 animate-pulse">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <div className="bg-cyan-500/10 text-cyan-400 p-3 rounded-xl border border-cyan-500/20 shadow-inner shrink-0">
+                <svg className="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                 </svg>
               </div>
               <div className="text-left">
-                <h3 className="text-lg font-bold text-white tracking-wide">Yêu cầu hủy &amp; bồi hoàn suất chiếu</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Một hoặc nhiều suất chiếu bạn chọn xóa hiện đã có vé bán ra hoặc giữ ghế.</p>
+                <h3 className="text-lg font-bold text-white tracking-wide">Đổi phòng chiếu (ChangeRoom)</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Dành cho suất chiếu đã phát sinh đơn đặt vé.</p>
               </div>
             </div>
 
-            {/* List of affected showtimes */}
-            <div className="bg-[#0F172A] border border-gray-800/80 rounded-xl p-3 text-left max-h-40 overflow-y-auto flex flex-col gap-2">
-              <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Danh sách suất chiếu bị hủy:</span>
-              {cancelConfirmShowtimes.map((st) => (
-                <div key={st.id} className="border-b border-gray-800/60 pb-2 last:border-0 last:pb-0 text-xs">
-                  <div className="font-bold text-white line-clamp-1">{st.movieName}</div>
-                  <div className="text-gray-400 mt-0.5 flex justify-between">
-                    <span>{st.roomName}</span>
-                    <span className="text-yellow-500 font-semibold">{st.startTimeStr}</span>
-                  </div>
+            {/* Info details */}
+            <div className="bg-[#0F172A] border border-gray-800/80 rounded-xl p-4 text-left flex flex-col gap-3">
+              <div className="flex flex-col gap-1 border-b border-gray-800 pb-2.5">
+                <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Phim</span>
+                <span className="text-white text-sm font-bold line-clamp-2">{changeRoomModal.movieName}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4 border-b border-gray-800 pb-2.5">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Phòng hiện tại</span>
+                  <span className="text-red-400 text-xs font-semibold">{changeRoomModal.currentRoomName}</span>
                 </div>
-              ))}
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Khung giờ</span>
+                  <span className="text-yellow-400 text-xs font-semibold">{changeRoomModal.startTimeStr}</span>
+                </div>
+              </div>
+
+              {/* Target Room Selection */}
+              <div className="flex flex-col gap-1.5 pt-1">
+                <label className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">
+                  Chọn phòng chiếu mới *
+                </label>
+                <select
+                  value={selectedTargetRoomId}
+                  onChange={(e) => setSelectedTargetRoomId(e.target.value)}
+                  className="bg-[#1E293B] text-white border border-cyan-500/40 rounded-xl p-2.5 text-xs font-medium focus:outline-none focus:border-cyan-400 transition-all"
+                >
+                  <option value="">-- Chọn phòng chiếu mới --</option>
+                  {filteredRooms
+                    .filter((r) => r.roomId !== changeRoomModal.currentRoomId)
+                    .map((r) => (
+                      <option key={r.roomId} value={r.roomId}>
+                        {r.roomName} ({r.capacity} ghế)
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Voucher & Compensation Section */}
+              <div className="flex flex-col gap-3 pt-2.5 border-t border-gray-800/80">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">
+                    Đền bù & Voucher cho khách hàng (Tùy chọn)
+                  </label>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-semibold text-gray-400">
+                    Chọn voucher đền bù:
+                  </label>
+                  <select
+                    value={compensationVoucherCode}
+                    onChange={(e) => setCompensationVoucherCode(e.target.value)}
+                    className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
+                  >
+                    <option value="">-- Không áp dụng voucher đền bù --</option>
+                    {compensationVouchers.map((voucher) => (
+                      <option key={voucher.voucherId} value={voucher.voucherCode}>
+                        {getCompensationVoucherLabel(voucher)}
+                      </option>
+                    ))}
+                  </select>
+                  {compensationVouchers.length === 0 && (
+                    <span className="text-[10px] font-semibold text-amber-300/80">
+                      Chưa có voucher nhóm COMPENSATION đang ACTIVE.
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-semibold text-gray-400">
+                    Ghi chú quyền lợi đền bù (Compensation Note):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Tặng 01 Combo Bắp Nước miễn phí tại quầy CSKH..."
+                    value={compensationNote}
+                    onChange={(e) => setCompensationNote(e.target.value)}
+                    className="bg-[#1E293B] text-white border border-gray-700 rounded-xl p-2 text-xs font-medium focus:outline-none focus:border-cyan-400 transition-all placeholder:text-gray-600"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-semibold text-gray-400">
+                    Ưu tiên Nâng hạng ghế miễn phí (Seat Upgrade):
+                  </label>
+                  <select
+                    value={targetSeatType}
+                    onChange={(e) => setTargetSeatType(e.target.value)}
+                    className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
+                  >
+                    <option value="">-- Giữ nguyên hạng ghế tương đương --</option>
+                    <option value="VIP">Nâng lên Ghế VIP (Hàng ghế trung tâm)</option>
+                    <option value="COUPLE">Nâng lên Ghế Đôi / Sweetbox</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Notice */}
+              <div className="bg-cyan-950/40 border border-cyan-500/20 rounded-lg p-2.5 text-[11px] text-cyan-200/90 leading-relaxed">
+                Hệ thống sẽ tự động gán vị trí ghế tương đương, đính kèm Voucher đền bù (nếu có) và gửi Email AI thông báo quyền lợi trực tiếp cho khách hàng.
+              </div>
             </div>
 
-            {/* Input reason */}
-            <div className="text-left flex flex-col gap-2">
-              <label htmlFor="cancelReasonInput" className="text-xs font-bold text-slate-300">
-                Lý do hủy suất chiếu (Gửi tới email/thông báo khách hàng):
-              </label>
-              <textarea
-                id="cancelReasonInput"
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="Nhập lý do chi tiết (ví dụ: Sự cố kỹ thuật phòng chiếu, Sự cố mất điện, ...)"
-                className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-3.5 py-2.5 text-xs text-white outline-none focus:ring-1 focus:ring-amber-500 min-h-20 resize-none"
-              />
+            {/* Action buttons */}
+            <div className="flex gap-3 justify-end mt-1">
+              <button
+                disabled={changeRoomLoading}
+                onClick={() => setChangeRoomModal(null)}
+                className="px-4 py-2.5 bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold rounded-xl border border-gray-700/60 transition-all text-xs cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                disabled={changeRoomLoading || !selectedTargetRoomId}
+                onClick={() => void handleChangeRoomSubmit()}
+                className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-cyan-900/30 transition-all text-xs cursor-pointer disabled:opacity-50"
+              >
+                {changeRoomLoading ? "Đang đổi phòng..." : "Xác nhận đổi phòng"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Cập nhật Suất chiếu có Booking (Đền bù & Voucher) */}
+      {updateCompModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm transition-all duration-300">
+          <div className="bg-[#111C44] border border-amber-500/30 rounded-2xl w-full max-w-md p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-modal-scale flex flex-col gap-5">
+            {/* Header */}
+            <div className="flex items-center gap-4 border-b border-gray-800/80 pb-4">
+              <div className="text-left">
+                <h3 className="text-lg font-bold text-white tracking-wide">Cập nhật suất chiếu có vé đã đặt</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Phát hiện {updateCompModal.slotsWithBookingsCount} suất chiếu có vé đã được khách đặt bị thay đổi.</p>
+              </div>
+            </div>
+
+            {/* Movie list info */}
+            <div className="bg-[#0F172A] border border-gray-800/80 rounded-xl p-3.5 text-left flex flex-col gap-2">
+              <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Phim bị ảnh hưởng:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {updateCompModal.affectedMovieNames.map((name, i) => (
+                  <span key={i} className="text-xs bg-amber-950/60 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg font-semibold">
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Voucher & Compensation Input */}
+            <div className="flex flex-col gap-3 text-left">
+              <div className="flex items-center gap-1.5">
+                <label className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">
+                  Cấu hình Đền bù & Voucher cho khách (Tùy chọn)
+                </label>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-gray-400">
+                  Chọn voucher đền bù:
+                </label>
+                <select
+                  value={updateVoucherCode}
+                  onChange={(e) => setUpdateVoucherCode(e.target.value)}
+                  className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
+                >
+                  <option value="">-- Không áp dụng voucher đền bù --</option>
+                  {compensationVouchers.map((voucher) => (
+                    <option key={voucher.voucherId} value={voucher.voucherCode}>
+                      {getCompensationVoucherLabel(voucher)}
+                    </option>
+                  ))}
+                </select>
+                {compensationVouchers.length === 0 && (
+                  <span className="text-[10px] font-semibold text-amber-300/80">
+                    Chưa có voucher nhóm COMPENSATION đang ACTIVE.
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-gray-400">
+                  Ghi chú quyền lợi đền bù (Compensation Note):
+                </label>
+                <input
+                  type="text"
+                  placeholder="VD: Tặng 01 Combo Bắp Nước + Voucher giảm 20% cho suất chiếu tới..."
+                  value={updateCompNote}
+                  onChange={(e) => setUpdateCompNote(e.target.value)}
+                  className="bg-[#1E293B] text-white border border-gray-700 rounded-xl p-2.5 text-xs font-medium focus:outline-none focus:border-amber-400 transition-all placeholder:text-gray-600"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-gray-400">
+                  Ưu tiên Nâng hạng ghế miễn phí (Seat Upgrade):
+                </label>
+                <select
+                  value={updateTargetSeatType}
+                  onChange={(e) => setUpdateTargetSeatType(e.target.value)}
+                  className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
+                >
+                  <option value="">-- Giữ nguyên hạng ghế tương đương --</option>
+                  <option value="VIP">Nâng lên Ghế VIP (Hàng ghế trung tâm)</option>
+                  <option value="COUPLE">Nâng lên Ghế Đôi / Sweetbox</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Notice */}
+            <div className="bg-amber-950/30 border border-amber-500/20 rounded-lg p-2.5 text-[11px] text-amber-200/90 leading-relaxed text-left">
+              Hệ thống sẽ tự động chuyển các suất chiếu này sang trạng thái chờ xử lý (`ProcessingUnstable`), đính kèm Voucher đền bù và gửi Email AI song ngữ hướng dẫn xác nhận cho khách hàng.
             </div>
 
             {/* Action buttons */}
@@ -1125,6 +1886,18 @@ export default function ManageShowtime() {
                 className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black rounded-xl shadow-lg shadow-amber-900/20 transition-all text-xs active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 Xác nhận hủy &amp; lưu
+                disabled={actionLoading}
+                onClick={() => setUpdateCompModal(null)}
+                className="px-4 py-2.5 bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold rounded-xl border border-gray-700/60 transition-all text-xs cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                disabled={actionLoading}
+                onClick={() => void executeSaveChanges(updateVoucherCode, updateCompNote, updateTargetSeatType)}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-xl shadow-lg shadow-amber-900/30 transition-all text-xs cursor-pointer disabled:opacity-50"
+              >
+                {actionLoading ? "Đang lưu..." : "Xác nhận Lưu & Gửi Mail"}
               </button>
             </div>
           </div>

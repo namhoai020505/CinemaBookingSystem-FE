@@ -462,9 +462,9 @@ const RevenuePieChart = ({
         : '#1e293b';
 
   return (
-    <div className="grid gap-6 p-5 md:grid-cols-[190px_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[190px_minmax(0,1fr)]">
+    <div className="grid min-w-0 gap-5 overflow-hidden p-5 md:grid-cols-[minmax(0,190px)_minmax(0,1fr)] xl:grid-cols-1">
       <div
-        className="mx-auto grid h-44 w-44 place-items-center rounded-full shadow-xl"
+        className="mx-auto grid h-40 w-40 max-w-full place-items-center rounded-full shadow-xl sm:h-44 sm:w-44"
         style={{ background }}
         role="img"
         aria-label={`Doanh thu vé ${formatPercent(ticketPercent)}, doanh thu F&B ${formatPercent(fbPercent)}`}
@@ -481,7 +481,7 @@ const RevenuePieChart = ({
         </div>
       </div>
 
-      <div className="grid content-center gap-4">
+      <div className="grid min-w-0 content-center gap-3">
         {[
           {
             label: 'Doanh thu vé',
@@ -496,17 +496,22 @@ const RevenuePieChart = ({
             dotClass: 'bg-amber-500',
           },
         ].map((item) => (
-          <div key={item.label} className="grid gap-2">
-            <div className="flex items-center justify-between gap-3">
+          <div
+            key={item.label}
+            className={`grid min-w-0 gap-2 rounded-lg border p-3 ${
+              isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'
+            }`}
+          >
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
               <span className={`flex min-w-0 items-center gap-2 text-sm font-bold ${isLightMode ? 'text-slate-700' : 'text-slate-200'}`}>
                 <span className={`h-3 w-3 shrink-0 rounded-full ${item.dotClass}`} />
                 <span className="truncate">{item.label}</span>
               </span>
-              <span className={`text-sm font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>
+              <span className={`whitespace-nowrap text-right text-sm font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>
                 {formatPercent(item.percent)}
               </span>
             </div>
-            <p className={`text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+            <p className={`break-words text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
               {formatCurrency(item.value)}
             </p>
           </div>

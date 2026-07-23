@@ -1,7 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
-import { getPostLoginRedirect, getRoleFromAccessToken } from '../../lib/auth';
+import {
+  getPostLoginRedirect,
+  getRoleFromAccessToken,
+  setAuthSession,
+} from '../../lib/auth';
 import type { AuthMode, AuthResponseData, PasswordResetStep, RegisterResponseData, RegisterStep } from './authTypes';
 import {
   createCaptcha,
@@ -167,13 +171,11 @@ export const useLoginController = () => {
         return;
       }
 
-      localStorage.setItem('accessToken', token);
-      localStorage.removeItem('role');
-      localStorage.setItem('fullName', authData?.fullName || 'Người dùng');
-
-      if (authData?.refreshToken) {
-        localStorage.setItem('refreshToken', authData.refreshToken);
-      }
+      setAuthSession({
+        accessToken: token,
+        refreshToken: authData?.refreshToken || null,
+        fullName: authData?.fullName || 'Người dùng',
+      });
 
       navigate(getPostLoginRedirect(getRoleFromAccessToken(token)));
     } catch (err: unknown) {
@@ -210,13 +212,11 @@ export const useLoginController = () => {
         return;
       }
 
-      localStorage.setItem('accessToken', token);
-      localStorage.removeItem('role');
-      localStorage.setItem('fullName', authData?.fullName || 'Người dùng');
-
-      if (authData?.refreshToken) {
-        localStorage.setItem('refreshToken', authData.refreshToken);
-      }
+      setAuthSession({
+        accessToken: token,
+        refreshToken: authData?.refreshToken || null,
+        fullName: authData?.fullName || 'Người dùng',
+      });
 
       navigate(getPostLoginRedirect(getRoleFromAccessToken(token)));
     } catch (err: unknown) {

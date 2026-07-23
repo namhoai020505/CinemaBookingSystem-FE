@@ -32,6 +32,26 @@ const getHttpStatus = (error: unknown) =>
     ? error.response.status
     : undefined;
 
+const readAisleColumns = (roomId: string) => {
+  if (!roomId) {
+    return [];
+  }
+
+  const saved = localStorage.getItem(`aisles-${roomId}`);
+  if (!saved) {
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(saved);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is number => typeof value === "number")
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 type RouteState = {
   movie?: {
     movieId?: string;
@@ -418,23 +438,7 @@ export default function SeatSelection() {
   const [displayDetails, setDisplayDetails] =
     useState<ShowtimeDisplayDetails | null>(null);
   const [roomId, setRoomId] = useState<string>("");
-  const [aisleCols, setAisleCols] = useState<number[]>([]);
-
-  // Tải cấu hình lối đi khi roomId thay đổi
-  useEffect(() => {
-    if (roomId) {
-      const saved = localStorage.getItem(`aisles-${roomId}`);
-      if (saved) {
-        try {
-          setAisleCols(JSON.parse(saved));
-        } catch (e) {
-          setAisleCols([]);
-        }
-      } else {
-        setAisleCols([]);
-      }
-    }
-  }, [roomId]);
+  const aisleCols = useMemo(() => readAisleColumns(roomId), [roomId]);
 
   const persistSelectedLockedSeats = useCallback(
     (nextSelectedSeats: SeatItem[]) => {
@@ -539,7 +543,7 @@ export default function SeatSelection() {
 
     const token = getAccessToken();
     if (!token) {
-      setSeatMapError("Vui long dang nhap lai de tai so do ghe.");
+      setSeatMapError("Vui lòng đăng nhập lại để tải sơ đồ ghế.");
       setSeatMap(null);
       setLoading(false);
       return;
@@ -641,7 +645,7 @@ export default function SeatSelection() {
       });
     } catch (error) {
       if (getHttpStatus(error) === 401) {
-        setSeatMapError("Phien dang nhap khong con hop le. Vui long dang nhap lai roi thu lai.");
+        setSeatMapError("Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại rồi thử lại.");
         setSeatMap(null);
         return;
       }
@@ -658,8 +662,6 @@ export default function SeatSelection() {
     routeStartTime,
     showtimeId,
     userKey,
-    navigate,
-    location.pathname,
   ]);
 
   useEffect(() => {
