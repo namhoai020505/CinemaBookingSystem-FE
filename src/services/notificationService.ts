@@ -78,7 +78,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
 const isNotificationItem = (value: unknown): value is NotificationItem =>
-  isRecord(value) && (typeof value.notificationId === 'string' || typeof value.userId === 'string');
+  isRecord(value) && (typeof value.notificationId === 'string' || typeof value.userId === 'string' || typeof value.title === 'string');
 
 const readNotificationArray = (source: unknown, keys: string[]) => {
   if (!isRecord(source)) {

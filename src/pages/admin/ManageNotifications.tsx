@@ -20,6 +20,7 @@ import {
   notificationService,
   type FeedItem,
   type NotificationItem,
+  type NotificationPage,
   type SendNotificationRequest,
 } from '../../services/notificationService';
 
@@ -141,12 +142,9 @@ export default function ManageNotifications() {
         pageSize,
       });
 
-      if (res && res.data) {
-        const items = extractNotificationItems(res.data);
-        setNotifications(items);
-      } else {
-        setNotifications([]);
-      }
+      const rawPayload = (res as Record<string, unknown>)?.data ?? res;
+      const items = extractNotificationItems(rawPayload as NotificationPage);
+      setNotifications(items);
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Không thể tải danh sách thông báo.'));
     } finally {
@@ -158,9 +156,13 @@ export default function ManageNotifications() {
     try {
       setLoadingFeeds(true);
       const res = await notificationService.getInternalFeed();
-      if (res && res.data) {
-        setInternalFeed(Array.isArray(res.data) ? res.data : [res.data]);
-      }
+      const rawPayload = (res as Record<string, unknown>)?.data ?? res;
+      const list = Array.isArray(rawPayload)
+        ? rawPayload
+        : Array.isArray((rawPayload as Record<string, unknown>)?.items)
+        ? ((rawPayload as Record<string, unknown>).items as FeedItem[])
+        : [];
+      setInternalFeed(list as FeedItem[]);
     } catch {
       // Ignore background feed fetch error quietly
     } finally {
