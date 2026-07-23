@@ -14,7 +14,6 @@ import {
   FaPlusCircle,
   FaSearch,
   FaSyncAlt,
-  FaTv,
   FaUserCheck,
   FaUsers,
 } from 'react-icons/fa';
@@ -111,9 +110,8 @@ export default function ManageNotifications() {
   const [multipleUserIdsInput, setMultipleUserIdsInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Internal & Signage Feeds State
+  // Internal Operational Feed State
   const [internalFeed, setInternalFeed] = useState<FeedItem[]>([]);
-  const [signageFeed, setSignageFeed] = useState<FeedItem[]>([]);
   const [loadingFeeds, setLoadingFeeds] = useState(false);
 
   // Load Data
@@ -149,20 +147,9 @@ export default function ManageNotifications() {
   const fetchFeeds = async () => {
     try {
       setLoadingFeeds(true);
-      const [intRes, sigRes] = await Promise.allSettled([
-        notificationService.getInternalFeed(),
-        notificationService.getSignageFeed(),
-      ]);
-
-      if (intRes.status === 'fulfilled' && intRes.value.data) {
-        setInternalFeed(
-          Array.isArray(intRes.value.data) ? intRes.value.data : [intRes.value.data],
-        );
-      }
-      if (sigRes.status === 'fulfilled' && sigRes.value.data) {
-        setSignageFeed(
-          Array.isArray(sigRes.value.data) ? sigRes.value.data : [sigRes.value.data],
-        );
+      const res = await notificationService.getInternalFeed();
+      if (res && res.data) {
+        setInternalFeed(Array.isArray(res.data) ? res.data : [res.data]);
       }
     } catch {
       // Ignore background feed fetch error quietly
@@ -319,7 +306,7 @@ export default function ManageNotifications() {
                   isLightMode ? 'text-slate-500' : 'text-slate-400'
                 }`}
               >
-                Gửi thông báo toàn hệ thống, quản lý tin nhắn nội bộ và tin thông tin kênh Digital Signage
+                Gửi thông báo hệ thống, quản lý tin nhắn nội bộ và theo dõi nguồn tin vận hành rạp
               </p>
             </div>
           </div>
@@ -352,7 +339,7 @@ export default function ManageNotifications() {
       </div>
 
       {/* Overview Stats Cards */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div
           className={`rounded-2xl border p-5 transition-all ${
             isLightMode
@@ -441,37 +428,6 @@ export default function ManageNotifications() {
             Internal Operational Feed
           </div>
         </div>
-
-        <div
-          className={`rounded-2xl border p-5 transition-all ${
-            isLightMode
-              ? 'border-slate-200 bg-white shadow-sm'
-              : 'border-white/10 bg-[#0B1528]'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span
-              className={`text-xs font-bold uppercase tracking-wider ${
-                isLightMode ? 'text-slate-500' : 'text-slate-400'
-              }`}
-            >
-              Digital Signage Feed
-            </span>
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-purple-500/10 text-purple-400">
-              <FaTv />
-            </div>
-          </div>
-          <div className="mt-3 text-2xl font-black text-purple-400">
-            {signageFeed.length}
-          </div>
-          <div
-            className={`mt-1 text-xs ${
-              isLightMode ? 'text-slate-500' : 'text-slate-400'
-            }`}
-          >
-            Public Display Feed
-          </div>
-        </div>
       </div>
 
       {/* Navigation Tabs */}
@@ -520,7 +476,7 @@ export default function ManageNotifications() {
           }`}
         >
           <FaBroadcastTower />
-          <span>Nguồn Tin Nội Bộ & Signage</span>
+          <span>Nguồn Tin Vận Hành Nội Bộ</span>
         </button>
       </div>
 
@@ -676,7 +632,6 @@ export default function ManageNotifications() {
                     <option value="App">App Notification</option>
                     <option value="Email">Email Service</option>
                     <option value="SMS">SMS Message</option>
-                    <option value="Signage">Digital Signage Screen</option>
                     <option value="Internal">Internal Staff Feed</option>
                   </select>
                 </div>
@@ -834,12 +789,6 @@ export default function ManageNotifications() {
                   <FaEnvelope className="mt-0.5 shrink-0 text-blue-400" />
                   <span>
                     <strong>Email Service</strong>: Gửi thư điện tử chính thức từ hệ thống.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <FaTv className="mt-0.5 shrink-0 text-purple-400" />
-                  <span>
-                    <strong>Digital Signage</strong>: Đẩy tin lên màn hình hiển thị tại sảnh rạp.
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
@@ -1071,9 +1020,9 @@ export default function ManageNotifications() {
         </div>
       )}
 
-      {/* TAB 3: INTERNAL FEED & SIGNAGE */}
+      {/* TAB 3: INTERNAL OPERATIONAL FEED */}
       {activeTab === 'feeds' && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="w-full">
           {/* Internal Feed Card */}
           <div
             className={`rounded-2xl border p-6 ${
@@ -1085,7 +1034,7 @@ export default function ManageNotifications() {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FaBroadcastTower className="text-emerald-400 text-lg" />
-                <h3 className="text-base font-black">Nguồn Tin Vận Hành Nội Bộ</h3>
+                <h3 className="text-base font-black">Nguồn Tin Vận Hành Nội Bộ (Internal Operational Feed)</h3>
               </div>
               <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] font-bold text-emerald-400 border border-emerald-500/20">
                 Staff & Manager Feed
@@ -1115,54 +1064,6 @@ export default function ManageNotifications() {
                       {item.createdAt || item.timestamp
                         ? new Date(item.createdAt || item.timestamp!).toLocaleString('vi-VN')
                         : 'Vừa xong'}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Digital Signage Feed Card */}
-          <div
-            className={`rounded-2xl border p-6 ${
-              isLightMode
-                ? 'border-slate-200 bg-white shadow-sm'
-                : 'border-white/10 bg-[#0B1528]'
-            }`}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FaTv className="text-purple-400 text-lg" />
-                <h3 className="text-base font-black">Nguồn Kênh Digital Signage</h3>
-              </div>
-              <span className="rounded-full bg-purple-500/10 px-3 py-1 text-[11px] font-bold text-purple-400 border border-purple-500/20">
-                Public Display Screen
-              </span>
-            </div>
-
-            {loadingFeeds ? (
-              <div className="py-8 text-center text-xs text-slate-400">Đang tải...</div>
-            ) : signageFeed.length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400">
-                Chưa có thông điệp hiển thị trên màn hình sảnh.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {signageFeed.map((item, idx) => (
-                  <div
-                    key={item.id || idx}
-                    className="rounded-xl border border-purple-500/20 bg-purple-500/10 p-4 text-xs font-medium"
-                  >
-                    <div className="font-bold text-sm text-purple-300">
-                      {item.title || 'Màn hình sảnh rạp CinemaSystem'}
-                    </div>
-                    <div className="mt-1 text-purple-100 opacity-90">
-                      {item.message || item.content}
-                    </div>
-                    <div className="mt-2 text-[10px] text-purple-300/70">
-                      {item.createdAt || item.timestamp
-                        ? new Date(item.createdAt || item.timestamp!).toLocaleString('vi-VN')
-                        : 'Đang phát trực tiếp'}
                     </div>
                   </div>
                 ))}
