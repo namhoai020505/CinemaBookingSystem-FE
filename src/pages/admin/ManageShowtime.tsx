@@ -222,7 +222,6 @@ export default function ManageShowtime() {
   const [selectedTargetRoomId, setSelectedTargetRoomId] = useState<string>('');
   const [compensationVoucherCode, setCompensationVoucherCode] = useState<string>('');
   const [compensationNote, setCompensationNote] = useState<string>('');
-  const [targetSeatType, setTargetSeatType] = useState<string>('');
   const [changeRoomLoading, setChangeRoomLoading] = useState<boolean>(false);
 
   // ---------- State: Update Showtime with Bookings Compensation Modal ----------
@@ -232,7 +231,6 @@ export default function ManageShowtime() {
   } | null>(null);
   const [updateVoucherCode, setUpdateVoucherCode] = useState<string>('');
   const [updateCompNote, setUpdateCompNote] = useState<string>('');
-  const [updateTargetSeatType, setUpdateTargetSeatType] = useState<string>('');
 
   // ---------- State: UX Edit Tracking & Batch Save ----------
   const [isDirty, setIsDirty] = useState(false);
@@ -626,7 +624,6 @@ export default function ManageShowtime() {
         newRoomId: selectedTargetRoomId,
         compensationVoucherCode: compensationVoucherCode.trim() || undefined,
         compensationNote: compensationNote.trim() || undefined,
-        targetSeatType: targetSeatType.trim() || undefined,
       });
       toast.success("Đổi phòng chiếu chuyên dụng thành công! Đã tự động cập nhật sơ đồ ghế và gửi email cho khách.");
       setChangeRoomModal(null);
@@ -814,7 +811,7 @@ export default function ManageShowtime() {
     return drafts;
   };
 
-  const executeSaveChanges = async (voucherCode?: string, note?: string, seatType?: string) => {
+  const executeSaveChanges = async (voucherCode?: string, note?: string) => {
     setActionLoading(true);
 
     try {
@@ -931,7 +928,6 @@ export default function ManageShowtime() {
           status: targetStatus,
           compensationVoucherCode: slot.hasBookings ? (voucherCode?.trim() || undefined) : undefined,
           compensationNote: slot.hasBookings ? (note?.trim() || undefined) : undefined,
-          targetSeatType: slot.hasBookings ? (seatType?.trim() || undefined) : undefined,
         });
         updatedCount++;
       }
@@ -1026,7 +1022,6 @@ export default function ManageShowtime() {
     if (slotsWithBookings.length > 0) {
       setUpdateVoucherCode("");
       setUpdateCompNote("");
-      setUpdateTargetSeatType("");
       setUpdateCompModal({
         slotsWithBookingsCount: slotsWithBookings.length,
         affectedMovieNames: Array.from(new Set(slotsWithBookings)),
@@ -1718,21 +1713,6 @@ export default function ManageShowtime() {
                     className="bg-[#1E293B] text-white border border-gray-700 rounded-xl p-2 text-xs font-medium focus:outline-none focus:border-cyan-400 transition-all placeholder:text-gray-600"
                   />
                 </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-semibold text-gray-400">
-                    Ưu tiên Nâng hạng ghế miễn phí (Seat Upgrade):
-                  </label>
-                  <select
-                    value={targetSeatType}
-                    onChange={(e) => setTargetSeatType(e.target.value)}
-                    className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
-                  >
-                    <option value="">-- Giữ nguyên hạng ghế tương đương --</option>
-                    <option value="VIP">Nâng lên Ghế VIP (Hàng ghế trung tâm)</option>
-                    <option value="COUPLE">Nâng lên Ghế Đôi / Sweetbox</option>
-                  </select>
-                </div>
               </div>
 
               {/* Notice */}
@@ -1830,20 +1810,6 @@ export default function ManageShowtime() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-semibold text-gray-400">
-                  Ưu tiên Nâng hạng ghế miễn phí (Seat Upgrade):
-                </label>
-                <select
-                  value={updateTargetSeatType}
-                  onChange={(e) => setUpdateTargetSeatType(e.target.value)}
-                  className="bg-[#1E293B] text-amber-300 border border-amber-500/30 rounded-xl p-2.5 text-xs font-semibold focus:outline-none focus:border-amber-400 transition-all"
-                >
-                  <option value="">-- Giữ nguyên hạng ghế tương đương --</option>
-                  <option value="VIP">Nâng lên Ghế VIP (Hàng ghế trung tâm)</option>
-                  <option value="COUPLE">Nâng lên Ghế Đôi / Sweetbox</option>
-                </select>
-              </div>
             </div>
 
             {/* Notice */}
@@ -1864,7 +1830,7 @@ export default function ManageShowtime() {
               <button
                 type="button"
                 disabled={actionLoading}
-                onClick={() => void executeSaveChanges(updateVoucherCode, updateCompNote, updateTargetSeatType)}
+                onClick={() => void executeSaveChanges(updateVoucherCode, updateCompNote)}
                 className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-xl shadow-lg shadow-amber-900/30 transition-all text-xs cursor-pointer disabled:opacity-50"
               >
                 {actionLoading ? "Đang lưu..." : "Xác nhận Lưu & Gửi Mail"}
