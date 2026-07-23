@@ -161,7 +161,7 @@ export default function Header() {
       onClick={handleToggleTheme}
       aria-label={isLightMode ? 'Chuyển sang dark mode' : 'Chuyển sang light mode'}
       title={isLightMode ? 'Dark mode' : 'Light mode'}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-black transition ${
+      className={`g2c-topbar-control inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-black transition ${
         isLightMode
           ? 'border-[#FFD166] bg-[#FFD166] text-[#1E293B] hover:brightness-105'
           : 'border-white/25 bg-white/10 text-[#FFD166] hover:bg-white/15'
@@ -175,13 +175,11 @@ export default function Header() {
   return (
     <header className="fixed left-0 top-0 z-50 w-full shadow-lg">
       <div
-        className={`g2c-topbar hidden py-1.5 transition-colors md:block ${
-          isLightMode ? 'bg-[#E2E8F0] text-[#1E293B]' : 'bg-[#0F172A] text-gray-300'
-        }`}
+        className="g2c-topbar g2c-metallic-topbar hidden py-1.5 text-[#1A1305] md:block"
       >
         <div className="container mx-auto flex justify-end px-4 text-[13px]">
           {hasValidToken ? (
-            <div className="flex items-center gap-3">
+            <div className="g2c-topbar-actions flex items-center gap-3">
               <Link to="/profile" className={`transition ${linkHoverClass}`}>
                 Chào, {fullName || 'Thành viên'}
               </Link>
@@ -210,7 +208,7 @@ export default function Header() {
               <span className={dividerClass}>|</span>
               <NotificationCenter
                 isLightMode={isLightMode}
-                buttonClassName={`grid h-8 w-8 place-items-center rounded-full border text-[12px] transition ${
+                buttonClassName={`g2c-topbar-control grid h-8 w-8 place-items-center rounded-full border text-[12px] transition ${
                   isLightMode
                     ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#B45309]'
                     : 'border-white/15 bg-white/10 text-white hover:bg-white/15'
@@ -219,7 +217,7 @@ export default function Header() {
               {themeToggle}
             </div>
           ) : (
-            <div className="flex items-center gap-3 font-medium">
+            <div className="g2c-topbar-actions flex items-center gap-3 font-medium">
               <Link to="/login" state={{ mode: 'login' }} className={`transition ${linkHoverClass}`}>
                 Đăng nhập
               </Link>
@@ -265,8 +263,8 @@ export default function Header() {
                       ? 'border-slate-200 bg-white/95 text-[#0F172A] shadow-slate-900/10 hover:bg-white focus-visible:ring-offset-white'
                       : 'border-[#CBD5E1] bg-white text-[#0F172A] shadow-slate-900/5 hover:border-[#FFD166] hover:bg-[#F8FAFC] focus-visible:ring-offset-white'
                     : isCinemaDropdownOpen
-                      ? 'border-[#474747] bg-[#1E293B] text-white shadow-black/30 hover:bg-[#1E293B] focus-visible:ring-offset-[#1E293B]'
-                      : 'border-white/60 bg-white/[0.03] text-white shadow-black/20 hover:border-[#FFD166] hover:bg-white/10 focus-visible:ring-offset-[#1E293B]'
+                      ? 'border-[#252C38] bg-black text-white shadow-black/30 hover:bg-black focus-visible:ring-offset-black'
+                      : 'border-[#252C38] bg-black text-white shadow-black/20 hover:border-[#FFD166] hover:bg-black focus-visible:ring-offset-black'
                 }`}
               >
                 <span
@@ -304,7 +302,7 @@ export default function Header() {
                   className={`absolute left-0 top-full z-50 -mt-px w-full overflow-hidden rounded-b-2xl rounded-t-none border border-t-0 p-2 shadow-2xl backdrop-blur-xl ${
                     isLightMode
                       ? 'border-slate-200 bg-white/95 text-slate-900 shadow-slate-900/15'
-                      : 'border-[#474747] bg-[#1E293B] text-white shadow-black/45'
+                      : 'border-[#252C38] bg-black text-white shadow-black/45'
                   }`}
                 >
                   <div

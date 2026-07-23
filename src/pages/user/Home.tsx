@@ -753,8 +753,8 @@ export default function Home() {
   };
 
   return (
-    <div className="bg-slate-50 dark:bg-[#182437] text-slate-900 dark:text-white transition-colors duration-300">
-      <section className="bg-white px-4 pb-8 pt-4 text-slate-950 dark:bg-[#182437] dark:text-white md:hidden">
+    <div className="text-slate-900 dark:text-white transition-colors duration-300">
+      <section className="bg-white px-4 pb-8 pt-4 text-slate-950 dark:bg-black dark:text-white md:hidden">
         <div className="mb-6 rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-[0_16px_35px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#0F172A] dark:to-[#1E293B]">
           <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#E11D48] dark:text-[#FFD166]">
             G2Cinema
@@ -1251,7 +1251,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="movies-section" className="hidden bg-slate-50 px-4 pb-12 pt-8 transition-colors duration-300 dark:bg-[#182437] sm:px-6 sm:pb-16 sm:pt-10 md:block">
+      <section id="movies-section" className="hidden bg-white px-4 pb-12 pt-8 transition-colors duration-300 dark:bg-black sm:px-6 sm:pb-16 sm:pt-10 md:block">
         <div className="mx-auto max-w-[1360px] w-full">
           <div className="mb-8 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-base font-extrabold uppercase text-slate-800 dark:text-white sm:text-xl">
             <button

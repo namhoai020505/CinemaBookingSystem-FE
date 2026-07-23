@@ -9,7 +9,8 @@ html, body {
 }
 
 :root {
-  --g2c-light-bg: #F8FAFC;
+  --g2c-light-bg: #FFFFFF;
+  --g2c-dark-bg: #000000;
   --g2c-light-navbar: #F1F5F9;
   --g2c-light-card: #FFFFFF;
   --g2c-light-border: #E2E8F0;
@@ -29,6 +30,11 @@ body.g2c-light-mode,
 body.g2c-light-mode #root {
   background: var(--g2c-light-bg);
   color: var(--g2c-light-text);
+}
+
+body:not(.g2c-light-mode),
+body:not(.g2c-light-mode) #root {
+  background: var(--g2c-dark-bg);
 }
 
 body.g2c-light-mode .bg-\[\#182437\],
@@ -598,7 +604,7 @@ body:not(.g2c-light-mode) {
   .bg-\[\#070B14\],
   .bg-\[\#07111E\],
   .bg-\[\#1E293B\] {
-    background-color: #070B14 !important;
+    background-color: var(--g2c-dark-bg) !important;
   }
 
   /* Elevate cards/sidebar/sections for modern contrast and depth */
@@ -620,6 +626,114 @@ body:not(.g2c-light-mode) {
     background-color: #090E1A !important;
     border-color: rgba(255, 255, 255, 0.08) !important;
   }
+}
+
+body .g2c-topbar.g2c-metallic-topbar {
+  position: relative;
+  overflow: visible;
+  border-bottom: 1px solid rgba(104, 65, 4, 0.72);
+  background:
+    linear-gradient(
+      108deg,
+      #7A4B06 0%,
+      #C98B12 17%,
+      #F4D36B 34%,
+      #FFF2A6 47%,
+      #D29A23 62%,
+      #F0CC5B 80%,
+      #8A5709 100%
+    ) !important;
+  color: #1A1305 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 250, 211, 0.8),
+    inset 0 -1px 0 rgba(91, 53, 0, 0.5);
+}
+
+body .g2c-topbar.g2c-metallic-topbar::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.38) 47%,
+    rgba(255, 255, 255, 0.08) 58%,
+    transparent 72%
+  );
+}
+
+body .g2c-topbar.g2c-metallic-topbar > * {
+  position: relative;
+  z-index: 1;
+}
+
+body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-actions > a,
+body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-actions > button,
+body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-actions > span {
+  color: inherit !important;
+}
+
+body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-actions > a:hover,
+body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-actions > button:hover {
+  color: #000000 !important;
+}
+
+body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-control {
+  border-color: rgba(45, 29, 3, 0.3) !important;
+  background-color: rgba(255, 255, 255, 0.22) !important;
+  color: #171005 !important;
+}
+
+body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-control:hover {
+  background-color: rgba(255, 255, 255, 0.36) !important;
+}
+
+body .g2c-footer {
+  background-color: #000000 !important;
+  color: #CBD5E1 !important;
+}
+
+body.g2c-light-mode .g2c-footer {
+  border-color: #E2E8F0 !important;
+  background-color: #FFFFFF !important;
+  color: #334155 !important;
+}
+
+body.g2c-light-mode .g2c-footer .text-white {
+  color: #0F172A !important;
+}
+
+body.g2c-light-mode .g2c-footer .text-slate-300 {
+  color: #334155 !important;
+}
+
+body.g2c-light-mode .g2c-footer .text-slate-400 {
+  color: #475569 !important;
+}
+
+body.g2c-light-mode .g2c-footer .text-slate-500 {
+  color: #64748B !important;
+}
+
+body.g2c-light-mode .g2c-footer .border-white\/10 {
+  border-color: #E2E8F0 !important;
+}
+
+body.g2c-light-mode .g2c-footer .bg-\[\#FFD166\]\/10 {
+  background-color: rgba(212, 175, 55, 0.12) !important;
+}
+
+body.g2c-light-mode .g2c-footer .bg-white\/\[0\.04\] {
+  background-color: #F8FAFC !important;
+}
+
+body.g2c-light-mode .g2c-footer .text-\[\#FFD166\] {
+  color: #D4AF37 !important;
+}
+
+body.g2c-light-mode .g2c-footer .hover\:text-white:hover {
+  color: #0F172A !important;
 }
 
 /* Override existing inline font-['Urbanist'] references to use Plus Jakarta Sans for proper Vietnamese support */
