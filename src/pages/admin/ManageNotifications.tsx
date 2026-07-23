@@ -5,11 +5,9 @@ import {
   FaBell,
   FaBroadcastTower,
   FaCheckDouble,
-  FaEnvelope,
   FaFilter,
   FaHistory,
   FaInfoCircle,
-  FaMobileAlt,
   FaPaperPlane,
   FaSearch,
   FaSlidersH,
@@ -38,45 +36,7 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   return apiError.response?.data?.message || fallback;
 };
 
-// Preset message templates for quick selection
-const PRESET_TEMPLATES = [
-  {
-    label: 'Bảo trì hệ thống',
-    targetGroup: 'ALL',
-    channel: 'App',
-    type: 'Internal',
-    title: 'Thông báo bảo trì hệ thống định kỳ',
-    message:
-      'Hệ thống Cinema System sẽ tiến hành bảo trì hạ tầng vào lúc 02:00 - 04:00 ngày mai. Rất mong Quý khách và nhân viên thông cảm cho sự bất tiện này.',
-  },
-  {
-    label: 'Tặng Voucher Ưu đãi đặc biệt',
-    targetGroup: 'CUSTOMERS',
-    channel: 'Email',
-    type: 'Promotional',
-    title: 'Bạn nhận được Voucher ưu đãi đặc biệt từ CinemaSystem!',
-    message:
-      'Chúc mừng bạn đã nhận được Voucher giảm giá đặc biệt. Hãy kiểm tra mục Ví Voucher của bạn trong ứng dụng để sử dụng ngay hôm nay!',
-  },
-  {
-    label: 'Cập nhật Suất chiếu khẩn cấp',
-    targetGroup: 'CUSTOMERS',
-    channel: 'App',
-    type: 'Transactional',
-    title: 'Cập nhật quan trọng về Suất chiếu của bạn',
-    message:
-      'Suất chiếu phim bạn đã đặt vừa có điều chỉnh lịch chiếu. Vui lòng kiểm tra email hoặc vé xem phim của bạn để xem chi tiết hỗ trợ đền bù.',
-  },
-  {
-    label: 'Cảnh báo vận hành phòng chiếu',
-    targetGroup: 'STAFF',
-    channel: 'Internal',
-    type: 'Internal',
-    title: 'Cảnh báo vận hành phòng chiếu khẩn cấp',
-    message:
-      'Yêu cầu đội ngũ Kỹ thuật và Nhân viên rạp kiểm tra lại hệ thống chiếu phim và ghế ngồi tại các phòng chiếu trước giờ mở cửa.',
-  },
-];
+
 
 export default function ManageNotifications() {
   const context = useOutletContext<{ isLightMode?: boolean }>() || {};
@@ -185,20 +145,6 @@ export default function ManageNotifications() {
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  // Apply Preset Template
-  const handleApplyTemplate = (template: typeof PRESET_TEMPLATES[0]) => {
-    setTargetType('GROUP');
-    setFormData((prev) => ({
-      ...prev,
-      targetGroup: template.targetGroup,
-      channel: template.channel,
-      type: template.type,
-      title: template.title,
-      message: template.message,
-    }));
-    toast.info(`Đã áp dụng mẫu: ${template.label}`);
   };
 
   // Send Notification Submit
@@ -483,10 +429,10 @@ export default function ManageNotifications() {
 
       {/* TAB 1: SEND NOTIFICATION FORM */}
       {activeTab === 'send' && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="w-full">
           {/* Main Form */}
           <div
-            className={`lg:col-span-2 rounded-2xl border p-6 ${
+            className={`w-full rounded-2xl border p-6 ${
               isLightMode
                 ? 'border-slate-200 bg-white shadow-sm'
                 : 'border-white/10 bg-[#0B1528]'
@@ -791,75 +737,6 @@ export default function ManageNotifications() {
                 </button>
               </div>
             </form>
-          </div>
-
-          {/* Quick Preset Templates Column */}
-          <div className="space-y-4">
-            <div
-              className={`rounded-2xl border p-5 ${
-                isLightMode
-                  ? 'border-slate-200 bg-white shadow-sm'
-                  : 'border-white/10 bg-[#0B1528]'
-              }`}
-            >
-              <h3 className="mb-3 text-sm font-black uppercase tracking-wider text-cyan-500">
-                Quick Templates (Mẫu nhanh)
-              </h3>
-              <p className="mb-4 text-xs text-slate-400">
-                Nhấp vào các mẫu thông báo sẵn có dưới đây để điền nhanh nội dung:
-              </p>
-
-              <div className="space-y-2.5">
-                {PRESET_TEMPLATES.map((tmpl, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleApplyTemplate(tmpl)}
-                    className={`w-full text-left rounded-xl border p-3 text-xs font-bold transition-all ${
-                      isLightMode
-                        ? 'border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-slate-800'
-                        : 'border-white/10 bg-white/5 hover:bg-blue-500/10 hover:border-blue-500/40 text-slate-200'
-                    }`}
-                  >
-                    <div className="font-bold text-blue-400">{tmpl.label}</div>
-                    <div className="mt-1 line-clamp-2 text-[11px] font-normal opacity-80">
-                      {tmpl.message}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick Channel Info Box */}
-            <div
-              className={`rounded-2xl border p-5 ${
-                isLightMode
-                  ? 'border-slate-200 bg-white shadow-sm'
-                  : 'border-white/10 bg-[#0B1528]'
-              }`}
-            >
-              <h3 className="mb-2 text-sm font-black text-slate-300">Hướng dẫn gửi tin</h3>
-              <ul className="space-y-2 text-xs text-slate-400">
-                <li className="flex items-start gap-2">
-                  <FaMobileAlt className="mt-0.5 shrink-0 text-cyan-400" />
-                  <span>
-                    <strong>App Notification</strong>: Gửi tới ứng dụng khách hàng/nhân viên.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <FaEnvelope className="mt-0.5 shrink-0 text-blue-400" />
-                  <span>
-                    <strong>Email Service</strong>: Gửi thư điện tử chính thức từ hệ thống.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <FaBroadcastTower className="mt-0.5 shrink-0 text-emerald-400" />
-                  <span>
-                    <strong>Internal Feed</strong>: Tin tức vận hành dành cho Nhân viên & Quản lý.
-                  </span>
-                </li>
-              </ul>
-            </div>
           </div>
         </div>
       )}
