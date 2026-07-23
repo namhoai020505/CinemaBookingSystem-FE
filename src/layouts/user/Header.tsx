@@ -1,5 +1,12 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { FiCheck, FiChevronDown, FiMapPin, FiMoon, FiSun } from 'react-icons/fi';
+import {
+  FiCheck,
+  FiChevronDown,
+  FiGift,
+  FiMapPin,
+  FiMoon,
+  FiSun,
+} from 'react-icons/fi';
 import { Link, useNavigate } from 'react-router-dom';
 import NotificationCenter from '../../components/NotificationCenter';
 import logo from '../../assets/logo.png';
@@ -195,7 +202,7 @@ export default function Header() {
                 to="/my-vouchers"
                 className={`font-medium transition ${linkHoverClass}`}
               >
-                Ưu đãi của tôi
+                Voucher của tôi
               </Link>
               <span className={dividerClass}>|</span>
               <button
@@ -410,6 +417,31 @@ export default function Header() {
               THÀNH VIÊN
             </Link>
           </nav>
+
+          {hasValidToken ? (
+            <div className="ml-2 flex shrink-0 items-center gap-1.5 md:hidden">
+              <Link
+                to="/my-vouchers"
+                title="Voucher của tôi"
+                aria-label="Mở voucher của tôi"
+                className={`grid h-9 w-9 place-items-center rounded-full border text-sm transition ${
+                  isLightMode
+                    ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#B45309]'
+                    : 'border-white/15 bg-white/10 text-[#FFD166] hover:bg-white/15'
+                }`}
+              >
+                <FiGift aria-hidden="true" />
+              </Link>
+              <NotificationCenter
+                isLightMode={isLightMode}
+                buttonClassName={`grid h-9 w-9 place-items-center rounded-full border text-sm transition ${
+                  isLightMode
+                    ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#B45309]'
+                    : 'border-white/15 bg-white/10 text-white hover:bg-white/15'
+                }`}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </header>

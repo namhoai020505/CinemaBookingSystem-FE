@@ -291,6 +291,10 @@ export const bookingService = {
   ): Promise<ApiResponse<boolean>> => {
     const response = await axiosInstance.get(`/api/bookings/${bookingId}/confirm-time-change`, {
       params: { accept, token },
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      }
     }) as unknown as ApiResponse<boolean>;
     return response;
   }

@@ -105,6 +105,7 @@ type MovieDetailResponse = {
   title: string;
   durationMinutes?: number;
   genre?: string | null;
+  genres?: string[] | null;
   ageRating?: string | null;
   posterUrl?: string | null;
 };
@@ -510,7 +511,7 @@ export default function SeatSelection() {
         setDisplayDetails({
           movieId: showtime.movieId,
           title: movie?.title || showtime.movieTitle,
-          genre: movie?.genre || undefined,
+          genre: movie?.genres?.join(", ") || movie?.genre || undefined,
           duration: movie?.durationMinutes
             ? `${movie.durationMinutes} phút`
             : undefined,
@@ -936,7 +937,14 @@ export default function SeatSelection() {
           selectedSeats: nextSelectedSeats,
           totalAmount,
           seatMap,
-          freshCheckout: true,
+          movie: routeState?.movie || (displayDetails ? {
+            movieId: displayDetails.movieId,
+            title: displayDetails.title,
+            genre: displayDetails.genre,
+            duration: displayDetails.duration,
+            posterUrl: displayDetails.posterUrl,
+            ageRating: displayDetails.ageRating,
+          } : undefined),
         },
       });
     } catch (error) {

@@ -11,8 +11,10 @@ import {
   FaTicketAlt,
   FaTimesCircle,
   FaWallet,
+  FaUniversity,
 } from "react-icons/fa";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { getCurrentUserProfile } from "../../lib/auth";
 import {
@@ -20,6 +22,7 @@ import {
   shouldHideBookingFromHistory,
   type BookingSummary,
 } from "../../services/bookingService";
+import { compensationService, type Compensation } from "../../services/compensationService";
 import { removeCheckoutAttempt } from "../../services/checkoutAttempt";
 
 type BookingFilter = "ALL" | "PENDING_PAYMENT" | "PAID";
@@ -85,33 +88,56 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-const formatShortDate = (value?: string | null) => {
-  if (!value) return "--/--";
-  const clean = normalizeBackendDate(value);
-  const [datePart] = clean.split("T");
-  const [, month, date] = datePart ? datePart.split("-") : [];
-  if (date && month) return `${date}/${month}`;
-  return "--/--";
+const stripTimezone = (value?: string | null) => {
+  if (!value) return "";
+  return value.replace(/(?:Z|[+-]\d{2}:\d{2})$/i, "");
 };
 
-const formatWeekday = (value?: string | null) => {
-  if (!value) return "Ngày chiếu";
-  const clean = normalizeBackendDate(value);
-  const [datePart] = clean.split("T");
-  const [year, month, date] = datePart ? datePart.split("-").map(Number) : [];
-  if (year && month && date) {
-    const d = new Date(year, month - 1, date);
-    return d.toLocaleDateString("vi-VN", { weekday: "short" });
+const formatShowtimeDateTime = (value?: string | null) => {
+  const localValue = stripTimezone(value);
+  const timestamp = localValue ? Date.parse(localValue) : 0;
+  if (!timestamp || Number.isNaN(timestamp)) {
+    return "Đang cập nhật";
   }
-  return "Ngày chiếu";
+  return new Date(timestamp).toLocaleString("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 };
 
-const formatShortTime = (value?: string | null) => {
-  if (!value) return "--:--";
-  const clean = normalizeBackendDate(value);
-  const [, timePart = ""] = clean.split("T");
-  if (timePart) return timePart.substring(0, 5);
-  return "--:--";
+const formatShowtimeShortDate = (value?: string | null) => {
+  const localValue = stripTimezone(value);
+  const timestamp = localValue ? Date.parse(localValue) : 0;
+  if (!timestamp || Number.isNaN(timestamp)) {
+    return "--/--";
+  }
+  return new Date(timestamp).toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+};
+
+const formatShowtimeWeekday = (value?: string | null) => {
+  const localValue = stripTimezone(value);
+  const timestamp = localValue ? Date.parse(localValue) : 0;
+  if (!timestamp || Number.isNaN(timestamp)) {
+    return "Ngày chiếu";
+  }
+  return new Date(timestamp).toLocaleDateString("vi-VN", {
+    weekday: "short",
+  });
+};
+
+const formatShowtimeShortTime = (value?: string | null) => {
+  const localValue = stripTimezone(value);
+  const timestamp = localValue ? Date.parse(localValue) : 0;
+  if (!timestamp || Number.isNaN(timestamp)) {
+    return "--:--";
+  }
+  return new Date(timestamp).toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
 const getShortBookingId = (bookingId: string) => {
@@ -221,6 +247,7 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
 };
 
 export default function MyBookings() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -230,14 +257,36 @@ export default function MyBookings() {
     useState<BookingSummary | null>(null);
 
   useEffect(() => {
+    const success = searchParams.get("success");
+    const message = searchParams.get("message");
+    if (success && message) {
+      if (success === "true") {
+        toast.success(decodeURIComponent(message));
+      } else {
+        toast.error(decodeURIComponent(message));
+      }
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const [compensations, setCompensations] = useState<Compensation[]>([]);
+
+  useEffect(() => {
     const fetchMyBookings = async () => {
       try {
-        const response = await bookingService.getMyBookings();
+        const [response, compResponse] = await Promise.all([
+          bookingService.getMyBookings(),
+          compensationService.getCustomerCompensations().catch(() => ({ success: false, data: [] }))
+        ]);
+
         if (!response.success) {
           throw new Error(response.message || "Không tải được danh sách vé.");
         }
 
         setBookings(response.data || []);
+        if (compResponse.success) {
+          setCompensations(compResponse.data || []);
+        }
       } catch (error) {
         console.error("Lỗi khi lấy danh sách vé:", error);
         setErrorMessage(
@@ -514,13 +563,13 @@ export default function MyBookings() {
                       <div className="flex items-center gap-4 lg:block">
                         <div className="rounded-lg border border-white/10 bg-[#17264a] p-4 text-center">
                           <p className="text-xs font-black uppercase text-slate-400">
-                            {formatWeekday(booking.startTime)}
+                            {formatShowtimeWeekday(booking.startTime)}
                           </p>
                           <p className="mt-2 text-2xl font-black text-white">
-                            {formatShortDate(booking.startTime)}
+                            {formatShowtimeShortDate(booking.startTime)}
                           </p>
                           <p className="mt-1 text-sm font-black text-[#FFD166]">
-                            {formatShortTime(booking.startTime)}
+                            {formatShowtimeShortTime(booking.startTime)}
                           </p>
                         </div>
                         <span
@@ -560,7 +609,7 @@ export default function MyBookings() {
                               Suất chiếu
                             </p>
                             <p className="mt-2 text-sm font-bold">
-                              {formatDateTime(booking.startTime)}
+                              {formatShowtimeDateTime(booking.startTime)}
                             </p>
                           </div>
 
@@ -599,6 +648,23 @@ export default function MyBookings() {
                             </p>
                           </div>
                         </div>
+
+                        {/* Hiển thị bồi hoàn sự cố nếu suất chiếu bị hủy */}
+                        {(() => {
+                          const isCancelled = booking.status.toUpperCase() === "CANCELLED" || booking.status.toUpperCase() === "CANCELED";
+                          if (!isCancelled) return null;
+                          const matchedComp = compensations.find(c => String(c.sourceBookingId) === String(booking.bookingId));
+                          if (!matchedComp) return null;
+
+                          return (
+                            <div className="mt-4 flex gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
+                              <FaExclamationCircle className="mt-0.5 shrink-0 text-amber-400" size={14} />
+                              <div>
+                                Suất chiếu đã bị hủy bởi rạp. Bạn đã nhận {matchedComp.tickets.length} vé xem phim bất kỳ và {matchedComp.combo ? "1" : "0"} combo bắp nước. Xem tại tab <strong>"Quyền lợi sự cố"</strong> trong ví của bạn.
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       <div className="flex flex-col gap-3 lg:min-w-40 lg:justify-end">
@@ -624,6 +690,15 @@ export default function MyBookings() {
                                 : "Hủy giao dịch"}
                             </button>
                           </>
+                        )}
+                        {(booking.status.toUpperCase() === "CANCELLED" || booking.status.toUpperCase() === "CANCELED") && (
+                          <Link
+                            to={`/refund-claim?bookingId=${booking.bookingId}`}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500/20 border border-amber-500/30 px-5 py-3 text-center text-sm font-black uppercase tracking-wider text-amber-200 transition hover:bg-amber-500/30"
+                          >
+                            <FaUniversity />
+                            Nhận hoàn tiền
+                          </Link>
                         )}
                         <Link
                           to={`/booking/success/${booking.bookingId}`}

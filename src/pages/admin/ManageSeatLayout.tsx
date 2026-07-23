@@ -948,7 +948,7 @@ export default function ManageSeatLayout() {
       }
 
       if (failed.length > 0) {
-        toast.warn(TEXT.SEAT_LAYOUT.MSG_REACTIVATE_WARN.replace('{0}', String(reactivated)).replace('{1}', String(inactiveSeatsToReactivate.length)).replace('{2}', failed.slice(0, 6).join(', ')).replace('{3}', failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''), { autoClose: 8000 });
+        toast.warn(TEXT.SEAT_LAYOUT.MSG_REACTIVATE_WARN.replace('{0}', String(reactivated)).replace('{1}', String(inactiveSeatsToReactivate.length)).replace('{2}', failed.slice(0, 6).join(', ')).replace('{3}', failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''), { autoClose: 300 });
       } else {
         toast.success(TEXT.SEAT_LAYOUT.MSG_REACTIVATE_SUCCESS.replace('{0}', String(reactivated)));
       }
@@ -1060,7 +1060,7 @@ export default function ManageSeatLayout() {
         toast.error(
           `Các ghế sau không liền kề nhau nên không thể ghép thành Sweetbox: ${invalidPairs.join(', ')}. ` +
           'Hãy chọn các cặp ghế nằm sát nhau cùng hàng.',
-          { autoClose: 8000 }
+          { autoClose: 300 }
         );
         return;
       }
@@ -1176,7 +1176,7 @@ export default function ManageSeatLayout() {
         toast.warn(
           `Đổi loại được ${changed}/${selectedSeatIds.size - consumedSeatIds.size} ghế. ` +
           `Thất bại: ${failed.slice(0, 6).join(', ')}${failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''}.`,
-          { autoClose: 8000 }
+          { autoClose: 300 }
         );
       } else if (batchType === 'SEAT_TYPE_SWEETBOX') {
         toast.success(`Đã chuyển thành công ${changed} ghế Sweetbox!`);
@@ -1221,7 +1221,7 @@ export default function ManageSeatLayout() {
       }
 
       if (failed.length > 0) {
-        toast.warn(TEXT.SEAT_LAYOUT.MSG_DEACTIVATE_WARN.replace('{0}', String(deactivated)).replace('{1}', String(selectedSeatIds.size)).replace('{2}', String(failed.length)).replace('{3}', failed.slice(0, 6).join(', ')).replace('{4}', failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''), { autoClose: 8000 });
+        toast.warn(TEXT.SEAT_LAYOUT.MSG_DEACTIVATE_WARN.replace('{0}', String(deactivated)).replace('{1}', String(selectedSeatIds.size)).replace('{2}', String(failed.length)).replace('{3}', failed.slice(0, 6).join(', ')).replace('{4}', failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''), { autoClose: 300 });
       } else {
         toast.success(TEXT.SEAT_LAYOUT.MSG_DEACTIVATE_SUCCESS.replace('{0}', String(deactivated)));
       }
