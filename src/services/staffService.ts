@@ -1,13 +1,35 @@
 import api from '../lib/api';
 
-export type CreateStaffPayload = {
-  email: string;
-  fullName?: string;
+export type AssignableAccountRole = {
+  roleId: string;
+  roleName: string;
+  description?: string | null;
+  profileKind: string;
+  requiresCinema: boolean;
 };
 
-export type StaffInvitationData = {
+export type CinemaOption = {
+  cinemaId: string;
+  cinemaName: string;
+  address: string;
+  city: string;
+  cinemaStatus: string;
+};
+
+export type ProvisionManagedAccountPayload = {
+  email: string;
+  fullName: string;
+  roleId: string;
+  cinemaId?: string;
+};
+
+export type ProvisionedAccountData = {
+  userId?: string;
   email?: string;
-  expiresAt?: string;
+  roleId?: string;
+  roleName?: string;
+  cinemaId?: string | null;
+  invitationExpiresAt?: string;
 };
 
 export type ApiResponse<T = unknown> = {
@@ -19,6 +41,14 @@ export type ApiResponse<T = unknown> = {
 };
 
 export const staffService = {
-  createStaff: async (payload: CreateStaffPayload) =>
-    api.post<unknown, ApiResponse<StaffInvitationData>>('/api/admin/staff', payload),
+  getAssignableRoles: async () =>
+    api.get<unknown, ApiResponse<AssignableAccountRole[]>>(
+      '/api/admin/account-provisioning/roles',
+    ),
+
+  getCinemas: async () =>
+    api.get<unknown, ApiResponse<CinemaOption[]>>('/api/cinemas'),
+
+  provisionAccount: async (payload: ProvisionManagedAccountPayload) =>
+    api.post<unknown, ApiResponse<ProvisionedAccountData>>('/api/admin/users', payload),
 };

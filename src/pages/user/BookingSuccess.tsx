@@ -10,6 +10,8 @@ import {
 } from "../../services/bookingService";
 import { removeCheckoutAttempt } from "../../services/checkoutAttempt";
 
+
+
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
     return "";

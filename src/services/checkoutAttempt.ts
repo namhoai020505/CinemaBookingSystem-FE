@@ -58,6 +58,7 @@ export const isSameCheckoutRequest = (
     showtimeId: String(payload.showtimeId),
     showtimeSeatIds: payload.showtimeSeatIds.map(String).toSorted(),
     voucherCode: payload.voucherCode?.trim() || undefined,
+    compensationTicketCodes: payload.compensationTicketCodes?.map(String).toSorted() || undefined,
     foodItems: payload.foodItems
       ?.map((item) => ({ fbItemId: item.fbItemId, quantity: item.quantity }))
       .toSorted((a, b) => a.fbItemId.localeCompare(b.fbItemId)),

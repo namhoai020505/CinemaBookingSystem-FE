@@ -13,6 +13,7 @@ import UserLayout from './layouts/user/UserLayout';
 import Dashboard from './pages/admin/Dashboard';
 import ManageBanner from './pages/admin/ManageBanner';
 import ManageMovie from './pages/admin/ManageMovie';
+import ManageRefunds from './pages/admin/ManageRefunds';
 import ManageRooms from './pages/admin/ManageRooms';
 import ManageSeatLayout from './pages/admin/ManageSeatLayout';
 import ManageShowtime from './pages/admin/ManageShowtime';
@@ -33,14 +34,17 @@ import BookingSuccess from './pages/user/BookingSuccess';
 import Checkout from './pages/user/Checkout';
 import Cinemas from './pages/user/Cinemas';
 import CinemaSchedule from './pages/user/CinemaSchedule';
+import ConfirmTimeChangePage from './pages/user/ConfirmTimeChangePage';
 import Home from './pages/user/Home';
 import MovieShowtimes from './pages/user/MovieShowtimes';
 import Movies from './pages/user/Movies';
 import MyBookings from './pages/user/MyBookings';
 import MyVouchers from './pages/user/MyVouchers';
 import Profile from './pages/user/Profile';
+import RefundClaimPage from './pages/user/RefundClaimPage';
 import SeatSelection from './pages/user/SeatSelection';
 import TicketPrices from './pages/user/TicketPrices';
+import VnpayReturn from './pages/user/VnpayReturn';
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
@@ -67,15 +71,20 @@ const router = createBrowserRouter([
           { path: '/cinema-schedule', element: <CinemaSchedule /> },
           { path: '/movies', element: <Movies /> },
           { path: '/movie/:movieId/showtimes', element: <MovieShowtimes /> },
+          { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
+          { path: '/booking/confirm-time-change', element: <ConfirmTimeChangePage /> },
           {
             element: <RequireAuth allowedRoles={customerRoles} />,
             children: [
               { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
               { path: '/booking/checkout/:showtimeId', element: <Checkout /> },
+              { path: '/vnpay-return', element: <VnpayReturn /> },
               { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
               { path: '/my-bookings', element: <MyBookings /> },
               { path: '/my-vouchers', element: <MyVouchers /> },
-              { path: '/profile', element: <Profile /> },
+              { path: 'profile', element: <Profile /> },
+              { path: '/refund-claim', element: <RefundClaimPage /> },
+              { path: '/refunds/claim', element: <RefundClaimPage /> },
             ],
           },
         ],
@@ -98,6 +107,7 @@ const router = createBrowserRouter([
               { path: 'vouchers', element: <ManageVouchers /> },
               { path: 'banners', element: <ManageBanner /> },
               { path: 'notifications', element: <ManageNotifications /> },
+              { path: 'refunds', element: <ManageRefunds /> },
             ],
           },
         ],

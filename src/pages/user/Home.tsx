@@ -9,12 +9,6 @@ import {
   FiSearch,
 } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
-import slide1 from "../../assets/slide1.png";
-import slide2 from "../../assets/slide2.png";
-import slide3 from "../../assets/slide3.png";
-import slide4 from "../../assets/slide4.png";
-import slide5 from "../../assets/slide5.png";
-import slide6 from "../../assets/slide6.png";
 import cinemaThumbnail from "../../assets/thumbnail-1-144816-050424-68.jpeg";
 import ShowtimePickerModal from "../../components/user/ShowtimePickerModal";
 import {
@@ -77,20 +71,15 @@ const mobileSearchFilterOptions: Array<{
 const AUTO_PLAY_MS = 4500;
 const SLIDE_TRANSITION_MS = 700;
 const BUY_TICKET_VISIBILITY_REFRESH_MS = 30_000;
-
-const mockHeroSlides: HeroSlide[] = [
-  { id: "slide-1", imageUrl: slide1, alt: "Movie banner slide 1" },
-  { id: "slide-2", imageUrl: slide2, alt: "Movie banner slide 2" },
-  { id: "slide-3", imageUrl: slide3, alt: "Movie banner slide 3" },
-  { id: "slide-4", imageUrl: slide4, alt: "Movie banner slide 4" },
-  { id: "slide-5", imageUrl: slide5, alt: "Movie banner slide 5" },
-  { id: "slide-6", imageUrl: slide6, alt: "Movie banner slide 6" },
-];
-
-
+const INVALID_BANNER_VALUES = new Set(["none", "null", "undefined"]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const hasValidBannerValue = (value?: string | null) => {
+  const trimmed = value?.trim();
+  return !!trimmed && !INVALID_BANNER_VALUES.has(trimmed.toLowerCase());
+};
 
 const normalizeText = (value: string) =>
   value
@@ -239,9 +228,10 @@ const mapApiMovieToCard = (movie: MovieApiItem): Movie => {
   const posterUrl = getMediaUrl(
     getStringValue(movie, ["imagePoster", "posterUrl", "imageUrl", "poster"]),
   );
-  const bannerUrl = getMediaUrl(
-    getStringValue(movie, ["imageBanner", "bannerUrl"]),
-  );
+  const rawBannerUrl = getStringValue(movie, ["imageBanner", "bannerUrl"]);
+  const bannerUrl = hasValidBannerValue(rawBannerUrl)
+    ? getMediaUrl(rawBannerUrl)
+    : "";
   const isHot = movie.isHot === true || movie.highlight === true;
   const avgRating = Number(movie.avgRating ?? movie.rating ?? 0);
   const viewCount = Number(movie.viewCount ?? 0);
@@ -607,16 +597,20 @@ export default function Home() {
 
   const activeHeroSlides = useMemo<HeroSlide[]>(() => {
     // 1. Chuyển đổi các banner sự kiện/bắp nước của rạp từ DB
-    const customSlides: HeroSlide[] = customBanners.map(b => ({
-      id: `custom-slide-${b.bannerId}`,
-      imageUrl: b.imageUrl,
-      alt: b.title,
-      linkUrl: b.linkUrl,
-    }));
+    const customSlides: HeroSlide[] = customBanners
+      .filter((banner) => hasValidBannerValue(banner.imageUrl))
+      .map((banner) => ({
+        id: `custom-slide-${banner.bannerId}`,
+        imageUrl: banner.imageUrl.trim(),
+        alt: banner.title,
+        linkUrl: banner.linkUrl,
+      }));
 
     // 2. Chuyển đổi các banner phim tự động đang chiếu
     const nowShowingWithBanner = movies.filter(
-      (m) => m.movieStatus === "NOW_SHOWING" && m.bannerUrl && m.bannerUrl !== "none"
+      (movie) =>
+        movie.movieStatus === "NOW_SHOWING" &&
+        hasValidBannerValue(movie.bannerUrl)
     );
     const movieSlides: HeroSlide[] = nowShowingWithBanner.map((m) => ({
       id: `slide-${m.movieId}`,
@@ -626,14 +620,7 @@ export default function Home() {
     }));
 
     // 3. Gộp cả hai loại banner
-    const combined = [...customSlides, ...movieSlides];
-
-    if (combined.length > 0) {
-      return combined;
-    }
-
-    // Nếu không có bất cứ banner nào, fallback về mockHeroSlides cũ
-    return mockHeroSlides;
+    return [...customSlides, ...movieSlides];
   }, [movies, customBanners]);
 
   const lastRealSlideIndex = activeHeroSlides.length;
@@ -1154,11 +1141,12 @@ export default function Home() {
         </section>
       </section>
 
-      <section
-        className="relative hidden overflow-hidden bg-black md:block"
-        aria-label="Movie banners"
-      >
-        <div className="relative h-[220px] sm:h-[330px] lg:h-[520px] xl:h-[620px]">
+      {activeHeroSlides.length > 0 ? (
+        <section
+          className="relative hidden overflow-hidden bg-black md:block"
+          aria-label="Movie banners"
+        >
+          <div className="relative h-[220px] sm:h-[330px] lg:h-[520px] xl:h-[620px]">
           <div
             className="flex h-full"
             onTransitionEnd={handleSlideTransitionEnd}
@@ -1248,8 +1236,9 @@ export default function Home() {
               />
             ))}
           </div>
-        </div>
-      </section>
+          </div>
+        </section>
+      ) : null}
 
       <section id="movies-section" className="hidden bg-white px-4 pb-12 pt-8 transition-colors duration-300 dark:bg-black sm:px-6 sm:pb-16 sm:pt-10 md:block">
         <div className="mx-auto max-w-[1360px] w-full">

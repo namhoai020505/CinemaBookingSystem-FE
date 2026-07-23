@@ -98,9 +98,55 @@ export interface ApiResponse<T = unknown> {
   errors?: Record<string, string[]> | null;
 }
 
+export const VOUCHER_WALLET_UPDATED_EVENT = 'g2c-voucher-wallet-updated';
+
 const isActiveCompensationVoucher = (voucher: Voucher) =>
   voucher.voucherStatus === 'ACTIVE' &&
   (voucher.category || '').toUpperCase() === 'COMPENSATION';
+
+const getApiStatus = (error: unknown) => {
+  if (typeof error === 'object' && error && 'response' in error) {
+    return (error as { response?: { status?: number } }).response?.status;
+  }
+
+  return undefined;
+};
+
+export const isPrivateOrCustomerScopedVoucher = (voucher: Voucher) =>
+  voucher.isPrivate ||
+  (voucher.targetType || '').toUpperCase() === 'SPECIFIC_CUSTOMERS' ||
+  Boolean(voucher.targetCustomerIds?.trim());
+
+export const isPublicVoucher = (voucher: Voucher) =>
+  !voucher.isPrivate &&
+  (voucher.targetType || 'ALL_CUSTOMERS').toUpperCase() !== 'SPECIFIC_CUSTOMERS' &&
+  !voucher.targetCustomerIds?.trim();
+
+export const isVoucherCurrentlyAvailable = (voucher: Voucher) => {
+  const now = Date.now();
+  const startTime = new Date(voucher.startDate).getTime();
+  const endTime = new Date(voucher.endDate).getTime();
+  const usedCount = voucher.usedCount ?? 0;
+
+  return (
+    voucher.voucherStatus === 'ACTIVE' &&
+    (Number.isNaN(startTime) || startTime <= now) &&
+    (Number.isNaN(endTime) || endTime >= now) &&
+    usedCount < voucher.usageLimit
+  );
+};
+
+export const mergeVoucherLists = (...voucherLists: Voucher[][]) => {
+  const voucherMap = new Map<string, Voucher>();
+
+  voucherLists.flat().forEach((voucher) => {
+    if (!voucherMap.has(voucher.voucherId)) {
+      voucherMap.set(voucher.voucherId, voucher);
+    }
+  });
+
+  return Array.from(voucherMap.values());
+};
 
 export const voucherService = {
   // Admin APIs
@@ -128,6 +174,20 @@ export const voucherService = {
   getMyVouchers: async () =>
     api.get<unknown, ApiResponse<Voucher[]>>('/api/vouchers/my-wallet'),
 
+  getClaimableVouchers: async () => {
+    try {
+      return await api.get<unknown, ApiResponse<Voucher[]>>('/api/vouchers/claimable');
+    } catch (error) {
+      const status = getApiStatus(error);
+
+      if (status === 404 || status === 405) {
+        return voucherService.getActiveVouchers();
+      }
+
+      throw error;
+    }
+  },
+
   claimVoucher: async (voucherId: string) =>
     api.post<unknown, ApiResponse<boolean>>(`/api/vouchers/${voucherId}/claim`),
 
@@ -140,4 +200,7 @@ export const voucherService = {
     api.get<unknown, ApiResponse<ValidateVoucherResponse>>(`/api/vouchers/validate`, {
       params: { code, bookingAmount },
     }),
+
+  getMyWallet: async () =>
+    api.get<unknown, ApiResponse<Voucher[]>>('/api/vouchers/my-wallet'),
 };

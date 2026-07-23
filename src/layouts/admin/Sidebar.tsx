@@ -5,6 +5,7 @@ import {
   FaChartLine,
   FaComments,
   FaFilm,
+  FaMoneyBillWave,
   FaRegBuilding,
   FaShieldAlt,
   FaTicketAlt,
@@ -52,6 +53,12 @@ const navItems = [
     label: 'Vouchers',
     description: 'Quản lý mã giảm giá',
     icon: <FaTicketAlt />,
+  },
+  {
+    to: '/admin/refunds',
+    label: 'Hoàn Tiền',
+    description: 'Xử lý manual refund',
+    icon: <FaMoneyBillWave />,
   },
   {
     to: '/admin/banners',
