@@ -14,14 +14,16 @@ createRoot(document.getElementById('root')!).render(
       <App />
       <ToastContainer
         theme="dark"
-        position="top-right"
-        autoClose={4600}
+        position="top-center"
+        autoClose={300}
+        closeButton={false}
+        hideProgressBar
         newestOnTop
         closeOnClick
-        pauseOnFocusLoss
-        pauseOnHover
-        draggable
-        limit={4}
+        pauseOnFocusLoss={false}
+        pauseOnHover={false}
+        draggable={false}
+        limit={1}
         toastClassName="g2c-toast"
         progressClassName="g2c-toast-progress"
       />

@@ -47,6 +47,15 @@ import {
 } from "../../services/fbItemService";
 import { voucherService, type Voucher } from "../../services/voucherService";
 import { compensationService } from "../../services/compensationService";
+import {
+  VOUCHER_WALLET_UPDATED_EVENT,
+  isPrivateOrCustomerScopedVoucher,
+  isPublicVoucher,
+  isVoucherCurrentlyAvailable,
+  mergeVoucherLists,
+  voucherService,
+  type Voucher,
+} from "../../services/voucherService";
 
 const PAYMENT_PROVIDER_ID = "PP_SEPAY";
 const PAYMENT_WINDOW_SECONDS = 600;
@@ -163,6 +172,24 @@ type PaymentSession = {
 };
 
 type AppliedVoucher = Pick<Voucher, "voucherCode">;
+
+const getCheckoutVoucherList = (
+  walletVouchers: Voucher[],
+  activeVouchers: Voucher[],
+  claimableVouchers: Voucher[],
+) =>
+  mergeVoucherLists(
+    walletVouchers.filter(isVoucherCurrentlyAvailable),
+    activeVouchers.filter(
+      (voucher) =>
+        isPublicVoucher(voucher) && isVoucherCurrentlyAvailable(voucher),
+    ),
+    claimableVouchers.filter(
+      (voucher) =>
+        isPrivateOrCustomerScopedVoucher(voucher) &&
+        isVoucherCurrentlyAvailable(voucher),
+    ),
+  );
 
 const normalizeBackendDate = (value?: string | null) => {
   if (!value) {
@@ -658,7 +685,7 @@ export default function Checkout() {
     };
   }, []);
 
-  // Fetch active vouchers
+  // Fetch vouchers that can be used at checkout: owned wallet vouchers + public vouchers + claimable private vouchers.
   useEffect(() => {
     let isMounted = true;
     const loadVoucherAndCompensations = async () => {
@@ -685,8 +712,60 @@ export default function Checkout() {
       }
     };
     loadVoucherAndCompensations();
+
+    const fetchCheckoutVouchers = async () => {
+      try {
+        const [walletResult, activeResult, claimableResult] = await Promise.allSettled([
+          voucherService.getMyVouchers(),
+          voucherService.getActiveVouchers(),
+          voucherService.getClaimableVouchers(),
+        ]);
+
+        const walletData =
+          walletResult.status === "fulfilled"
+            ? walletResult.value.data || []
+            : [];
+        const activeData =
+          activeResult.status === "fulfilled"
+            ? activeResult.value.data || []
+            : [];
+        const claimableData =
+          claimableResult.status === "fulfilled"
+            ? claimableResult.value.data || []
+            : [];
+
+        if (isMounted) {
+          setActiveVouchers(
+            getCheckoutVoucherList(walletData, activeData, claimableData),
+          );
+        }
+
+        if (
+          walletResult.status === "rejected" &&
+          activeResult.status === "rejected" &&
+          claimableResult.status === "rejected"
+        ) {
+          console.error("Lỗi khi tải voucher checkout:", {
+            walletError: walletResult.reason,
+            activeError: activeResult.reason,
+            claimableError: claimableResult.reason,
+          });
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải voucher checkout:", err);
+      }
+    };
+
+    const handleWalletUpdated = () => {
+      void fetchCheckoutVouchers();
+    };
+
+    void fetchCheckoutVouchers();
+    window.addEventListener(VOUCHER_WALLET_UPDATED_EVENT, handleWalletUpdated);
+
     return () => {
       isMounted = false;
+      window.removeEventListener(VOUCHER_WALLET_UPDATED_EVENT, handleWalletUpdated);
     };
   }, []);
 
