@@ -121,7 +121,7 @@ export default function ManageNotifications() {
   const [internalFeed, setInternalFeed] = useState<FeedItem[]>([]);
   const [loadingFeeds, setLoadingFeeds] = useState(false);
 
-  // Filter Modal State
+  // Filter Modal State & User Matches
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [tempFilters, setTempFilters] = useState({
     isFlagged: false,
@@ -130,6 +130,10 @@ export default function ManageNotifications() {
     showtimeId: '',
     movieId: '',
   });
+  const [matchedUsers, setMatchedUsers] = useState<
+    { userId: string; fullName: string; email: string; role?: string }[]
+  >([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
 
   // Load Data
   useEffect(() => {
@@ -1239,39 +1243,133 @@ export default function ManageNotifications() {
                   />
                 </div>
               </div>
+
+              {/* Matched Users Preview */}
+              {matchedUsers.length > 0 && (
+                <div className="mt-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs">
+                  <div className="font-bold text-cyan-400 mb-1">
+                    Kết quả tra cứu ({matchedUsers.length} người dùng phù hợp):
+                  </div>
+                  <div className="max-h-24 overflow-y-auto space-y-1">
+                    {matchedUsers.slice(0, 5).map((u) => (
+                      <div key={u.userId} className="flex items-center justify-between text-[11px]">
+                        <span className="font-mono text-cyan-300">{u.userId}</span>
+                        <span className="truncate max-w-[180px] font-semibold">{u.fullName || u.email}</span>
+                      </div>
+                    ))}
+                    {matchedUsers.length > 5 && (
+                      <div className="text-[10px] text-slate-400 italic">
+                        ...và {matchedUsers.length - 5} người dùng khác
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3 border-t pt-4 border-slate-200 dark:border-white/10">
+            <div className="mt-6 flex items-center justify-between border-t pt-4 border-slate-200 dark:border-white/10">
               <button
                 type="button"
-                onClick={() => setIsFilterModalOpen(false)}
-                className={`rounded-xl border px-4 py-2 text-xs font-bold transition-all ${
+                disabled={isSearchingUsers}
+                onClick={async () => {
+                  try {
+                    setIsSearchingUsers(true);
+                    const res = await notificationService.getFilteredUsers({
+                      isFlagged: tempFilters.isFlagged,
+                      hasBooked: tempFilters.hasBooked,
+                      roomId: tempFilters.roomId?.trim() || undefined,
+                      showtimeId: tempFilters.showtimeId?.trim() || undefined,
+                      movieId: tempFilters.movieId?.trim() || undefined,
+                      targetGroup: formData.targetGroup || undefined,
+                    });
+                    if (res && res.data) {
+                      setMatchedUsers(res.data);
+                      if (res.data.length === 0) {
+                        toast.warning('Không tìm thấy người dùng nào thỏa mãn tất cả điều kiện.');
+                      } else {
+                        toast.info(`Tìm thấy ${res.data.length} người dùng thỏa điều kiện.`);
+                      }
+                    }
+                  } catch {
+                    toast.error('Không thể kiểm tra danh sách người dùng.');
+                  } finally {
+                    setIsSearchingUsers(false);
+                  }
+                }}
+                className={`rounded-xl border px-3.5 py-2 text-xs font-bold transition-all ${
                   isLightMode
-                    ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
-                    : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                    ? 'border-cyan-300 bg-cyan-50 text-cyan-700 hover:bg-cyan-100'
+                    : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20'
                 }`}
               >
-                Hủy
+                {isSearchingUsers ? 'Đang tra cứu...' : 'Tra cứu trước'}
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    isFlagged: tempFilters.isFlagged,
-                    hasBooked: tempFilters.hasBooked,
-                    roomId: tempFilters.roomId,
-                    showtimeId: tempFilters.showtimeId,
-                    movieId: tempFilters.movieId,
-                  }));
-                  setIsFilterModalOpen(false);
-                  toast.info('Đã áp dụng bộ lọc điều kiện cho người nhận.');
-                }}
-                className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-5 py-2 text-xs font-black text-white shadow-md hover:brightness-110"
-              >
-                Áp dụng bộ lọc
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsFilterModalOpen(false)}
+                  className={`rounded-xl border px-4 py-2 text-xs font-bold transition-all ${
+                    isLightMode
+                      ? 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
+                      : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  Hủy
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSearchingUsers}
+                  onClick={async () => {
+                    try {
+                      setIsSearchingUsers(true);
+                      const res = await notificationService.getFilteredUsers({
+                        isFlagged: tempFilters.isFlagged,
+                        hasBooked: tempFilters.hasBooked,
+                        roomId: tempFilters.roomId?.trim() || undefined,
+                        showtimeId: tempFilters.showtimeId?.trim() || undefined,
+                        movieId: tempFilters.movieId?.trim() || undefined,
+                        targetGroup: formData.targetGroup || undefined,
+                      });
+
+                      const users = res?.data || [];
+
+                      setFormData((prev) => ({
+                        ...prev,
+                        isFlagged: tempFilters.isFlagged,
+                        hasBooked: tempFilters.hasBooked,
+                        roomId: tempFilters.roomId,
+                        showtimeId: tempFilters.showtimeId,
+                        movieId: tempFilters.movieId,
+                      }));
+
+                      if (users.length === 0) {
+                        toast.warning('Không tìm thấy người dùng nào thỏa mãn tất cả điều kiện trên.');
+                      } else if (users.length === 1) {
+                        const singleId = users[0].userId || '';
+                        setFormData((prev) => ({ ...prev, userId: singleId }));
+                        setTargetType('SINGLE');
+                        toast.success(`Đã tự động điền User ID: ${singleId}`);
+                      } else {
+                        const ids = users.map((u) => u.userId).filter(Boolean).join(', ');
+                        setMultipleUserIdsInput(ids);
+                        setTargetType('MULTIPLE');
+                        toast.success(`Đã tự động điền ${users.length} User ID vào danh sách người nhận!`);
+                      }
+
+                      setIsFilterModalOpen(false);
+                    } catch {
+                      toast.error('Có lỗi xảy ra khi tự động điền.');
+                    } finally {
+                      setIsSearchingUsers(false);
+                    }
+                  }}
+                  className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-5 py-2 text-xs font-black text-white shadow-md hover:brightness-110 disabled:opacity-50"
+                >
+                  {isSearchingUsers ? 'Đang xử lý...' : 'Tự động điền (Auto-fill)'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

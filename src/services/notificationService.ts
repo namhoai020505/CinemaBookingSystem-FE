@@ -153,4 +153,17 @@ export const notificationService = {
 
   getInternalFeed: async () =>
     api.get<unknown, ApiResponse<FeedItem[]>>('/api/notifications/internal-feed'),
+
+  getFilteredUsers: async (params: {
+    isFlagged?: boolean;
+    hasBooked?: boolean;
+    roomId?: string;
+    showtimeId?: string;
+    movieId?: string;
+    targetGroup?: string;
+  }) =>
+    api.get<unknown, ApiResponse<{ userId: string; fullName: string; email: string; role: string }[]>>(
+      '/api/notifications/filter-users',
+      { params },
+    ),
 };
