@@ -876,6 +876,9 @@ export default function ManageShowtime() {
         await showtimeService.deleteShowtime(id);
       }
 
+      const newSlotsToCreate: ShowtimeSlot[] = [];
+      const updatedSlots: Array<{ slot: ShowtimeSlot; original: ShowtimeResponse }> = [];
+
       for (const roomId in schedule) {
         const slots = schedule[roomId] || [];
         for (const slot of slots) {
@@ -893,16 +896,6 @@ export default function ManageShowtime() {
           }
         }
       }
-
-      let successMsg = `💾 Đã lưu lịch chiếu thành công! (Tạo: ${createdCount}, Cập nhật: ${updatedCount}`;
-      if (showtimesToDelete.length > 0) {
-        successMsg += `, Xóa sạch: ${showtimesToDelete.length}`;
-      }
-      if (showtimesToCancel.length > 0) {
-        successMsg += `, Hủy bồi hoàn: ${showtimesToCancel.length} suất (Đền bù: ${totalPaidCompensated} bookings, phát ${totalTicketsIssued} vé & ${totalCombosIssued} combo)`;
-      }
-      successMsg += ")";
-      toast.success(successMsg);
       // Sắp xếp các slot cập nhật theo thứ tự thông minh (Topological Order)
       const recurringDrafts = buildRecurringDraftsForNewSlots(newSlotsToCreate);
 
@@ -1862,6 +1855,61 @@ export default function ManageShowtime() {
             <div className="flex gap-3 justify-end mt-1">
               <button
                 type="button"
+                disabled={actionLoading}
+                onClick={() => setUpdateCompModal(null)}
+                className="px-4 py-2.5 bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold rounded-xl border border-gray-700/60 transition-all text-xs cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => void executeSaveChanges(updateVoucherCode, updateCompNote, updateTargetSeatType)}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-xl shadow-lg shadow-amber-900/30 transition-all text-xs cursor-pointer disabled:opacity-50"
+              >
+                {actionLoading ? "Đang lưu..." : "Xác nhận Lưu & Gửi Mail"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelConfirmShowtimes.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-lg rounded-2xl border border-amber-500/30 bg-[#0F172A] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 border-b border-gray-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">Xác nhận Hủy Suất Chiếu có Khách Đã Đặt</h3>
+                <p className="text-xs text-gray-400">Yêu cầu nhập lý do để thông báo & đền bù cho khách hàng</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+              <p className="text-xs font-semibold text-gray-300">
+                Phát hiện {cancelConfirmShowtimes.length} suất chiếu có vé đã thanh toán/giữ chỗ sẽ bị hủy:
+              </p>
+              {cancelConfirmShowtimes.map((st) => (
+                <div key={st.id} className="rounded-lg bg-gray-900/60 p-2.5 text-xs text-gray-300 border border-gray-800">
+                  <span className="font-bold text-amber-400">{st.movieName}</span> - {st.roomName} ({st.startTimeStr})
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-300">
+                Lý do hủy suất chiếu <span className="text-red-400">*</span>:
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="VD: Thay đổi lịch bảo trì phòng chiếu, sự cố kỹ thuật rạp..."
+                className="w-full h-20 rounded-xl border border-gray-700 bg-gray-900 p-3 text-xs text-white placeholder-gray-500 focus:border-amber-400 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
                 onClick={() => {
                   setCancelConfirmShowtimes([]);
                   if (savePromiseResolve) {
@@ -1869,7 +1917,7 @@ export default function ManageShowtime() {
                     setSavePromiseResolve(null);
                   }
                 }}
-                className="px-5 py-2.5 bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold rounded-xl border border-gray-700/60 transition-all text-xs active:scale-95 cursor-pointer"
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-xl text-xs"
               >
                 Hủy thay đổi
               </button>
@@ -1883,21 +1931,9 @@ export default function ManageShowtime() {
                     setSavePromiseResolve(null);
                   }
                 }}
-                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black rounded-xl shadow-lg shadow-amber-900/20 transition-all text-xs active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="px-5 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black font-bold rounded-xl text-xs"
               >
-                Xác nhận hủy &amp; lưu
-                disabled={actionLoading}
-                onClick={() => setUpdateCompModal(null)}
-                className="px-4 py-2.5 bg-gray-800/60 hover:bg-gray-800 text-gray-300 hover:text-white font-semibold rounded-xl border border-gray-700/60 transition-all text-xs cursor-pointer disabled:opacity-50"
-              >
-                Hủy
-              </button>
-              <button
-                disabled={actionLoading}
-                onClick={() => void executeSaveChanges(updateVoucherCode, updateCompNote, updateTargetSeatType)}
-                className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-xl shadow-lg shadow-amber-900/30 transition-all text-xs cursor-pointer disabled:opacity-50"
-              >
-                {actionLoading ? "Đang lưu..." : "Xác nhận Lưu & Gửi Mail"}
+                Xác nhận Hủy & Lưu
               </button>
             </div>
           </div>

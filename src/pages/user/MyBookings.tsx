@@ -15,7 +15,6 @@ import {
 } from "react-icons/fa";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { Link } from "react-router-dom";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { getCurrentUserProfile } from "../../lib/auth";
 import {
@@ -23,7 +22,7 @@ import {
   shouldHideBookingFromHistory,
   type BookingSummary,
 } from "../../services/bookingService";
-import { compensationService } from "../../services/compensationService";
+import { compensationService, type Compensation } from "../../services/compensationService";
 import { removeCheckoutAttempt } from "../../services/checkoutAttempt";
 
 type BookingFilter = "ALL" | "PENDING_PAYMENT" | "PAID";
@@ -139,33 +138,6 @@ const formatShowtimeShortTime = (value?: string | null) => {
     hour: "2-digit",
     minute: "2-digit",
   });
-const formatShortDate = (value?: string | null) => {
-  if (!value) return "--/--";
-  const clean = normalizeBackendDate(value);
-  const [datePart] = clean.split("T");
-  const [, month, date] = datePart ? datePart.split("-") : [];
-  if (date && month) return `${date}/${month}`;
-  return "--/--";
-};
-
-const formatWeekday = (value?: string | null) => {
-  if (!value) return "Ngày chiếu";
-  const clean = normalizeBackendDate(value);
-  const [datePart] = clean.split("T");
-  const [year, month, date] = datePart ? datePart.split("-").map(Number) : [];
-  if (year && month && date) {
-    const d = new Date(year, month - 1, date);
-    return d.toLocaleDateString("vi-VN", { weekday: "short" });
-  }
-  return "Ngày chiếu";
-};
-
-const formatShortTime = (value?: string | null) => {
-  if (!value) return "--:--";
-  const clean = normalizeBackendDate(value);
-  const [, timePart = ""] = clean.split("T");
-  if (timePart) return timePart.substring(0, 5);
-  return "--:--";
 };
 
 const getShortBookingId = (bookingId: string) => {
@@ -297,7 +269,7 @@ export default function MyBookings() {
     }
   }, [searchParams, setSearchParams]);
 
-  const [compensations, setCompensations] = useState<any[]>([]);
+  const [compensations, setCompensations] = useState<Compensation[]>([]);
 
   useEffect(() => {
     const fetchMyBookings = async () => {

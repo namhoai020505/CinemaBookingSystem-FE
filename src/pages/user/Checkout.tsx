@@ -95,6 +95,7 @@ type CheckoutSeatMap = {
 };
 
 type CheckoutRouteState = {
+  freshCheckout?: boolean;
   selectedSeats?: CheckoutSeat[];
   totalAmount?: number;
   seatMap?: CheckoutSeatMap;
@@ -221,23 +222,10 @@ const formatDateTime = (value?: string | null) => {
     return "Đang cập nhật";
   }
 
-  const [datePart, timePart = ""] = value.includes("T")
-    ? value.split("T")
-    : value.split(" ");
-  const [year, month, date] = datePart.split("-");
-  const shortTime = timePart.substring(0, 5);
-
-  if (year && month && date && shortTime) {
-    return `${shortTime} ${date}/${month}/${year}`;
-  }
-
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp)
-    ? "Đang cập nhật"
-    : new Date(timestamp).toLocaleString("vi-VN", {
-      dateStyle: "short",
-      timeStyle: "short",
-    });
+  return new Date(timestamp).toLocaleString("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 };
 
 // Lấy định danh user hiện tại để tách session theo tài khoản.
@@ -1671,6 +1659,9 @@ export default function Checkout() {
                   className="rounded-md border border-white/10 bg-slate-800 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-white transition hover:bg-slate-700"
                 >
                   Thay đổi phương thức
+                </button>
+                <button
+                  type="button"
                   onClick={() => setCancelDialogOpen(true)}
                   disabled={cancellingBooking || checkingPayment}
                   className="flex items-center justify-center gap-2 rounded-md border border-rose-400/40 bg-rose-500/10 px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"

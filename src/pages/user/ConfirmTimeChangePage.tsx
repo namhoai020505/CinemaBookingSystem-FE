@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { FaSpinner, FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
 import { bookingService } from '../../services/bookingService';

@@ -61,23 +61,10 @@ const formatDateTime = (value?: string | null) => {
     return "Đang cập nhật";
   }
 
-  const [datePart, timePart = ""] = value.includes("T")
-    ? value.split("T")
-    : value.split(" ");
-  const [year, month, date] = datePart.split("-");
-  const shortTime = timePart.substring(0, 5);
-
-  if (year && month && date && shortTime) {
-    return `${shortTime} ${date}/${month}/${year}`;
-  }
-
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp)
-    ? "Đang cập nhật"
-    : new Date(timestamp).toLocaleString("vi-VN", {
-      dateStyle: "short",
-      timeStyle: "short",
-    });
+  return new Date(timestamp).toLocaleString("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 };
 
 const getTicketQrImage = (qrCode?: string | null) => {

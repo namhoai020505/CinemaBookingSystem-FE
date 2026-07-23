@@ -58,6 +58,8 @@ const navItems = [
     label: 'Hoàn Tiền',
     description: 'Xử lý manual refund',
     icon: <FaMoneyBillWave />,
+  },
+  {
     to: '/admin/banners',
     label: 'Banners',
     description: 'Quản lý ảnh banner Carousel',
