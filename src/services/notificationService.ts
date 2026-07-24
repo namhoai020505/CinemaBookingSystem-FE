@@ -22,6 +22,8 @@ export type NotificationItem = {
   channel: string;
   type: string;
   status: string;
+  cinemaId?: number | null;
+  cinemaName?: string | null;
 };
 
 export type SendNotificationRequest = {
@@ -50,6 +52,8 @@ export type TriggerSystemNotificationRequest = {
 export type FeedItem = {
   id?: string;
   notificationId?: string;
+  userId?: string;
+  isRead?: boolean;
   title?: string;
   message?: string;
   content?: string;
@@ -57,6 +61,8 @@ export type FeedItem = {
   channel?: string;
   createdAt?: string;
   timestamp?: string;
+  cinemaId?: number | null;
+  cinemaName?: string | null;
 };
 
 export type PagedList<T> = {
@@ -177,4 +183,10 @@ export const notificationService = {
       '/api/notifications/filter-users',
       { params },
     ),
+
+  deleteNotifications: async (notificationIds: string[]) =>
+    api.post<unknown, ApiResponse<boolean>>('/api/notifications/delete', { notificationIds }),
+
+  updateNotification: async (notificationId: string, title: string, message: string) =>
+    api.put<unknown, ApiResponse<boolean>>(`/api/notifications/${notificationId}`, { title, message }),
 };

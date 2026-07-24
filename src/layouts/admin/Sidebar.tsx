@@ -27,55 +27,55 @@ const navItems = [
   {
     to: '/admin/movies',
     label: 'Phim',
-    description: 'Catalog & trailer',
+    description: 'Danh mục phim & trailer',
     icon: <FaFilm />,
   },
   {
     to: '/admin/rooms',
     label: 'Phòng chiếu',
-    description: 'Room & seat map',
+    description: 'Sơ đồ phòng & ghế',
     icon: <FaRegBuilding />,
   },
   {
     to: '/admin/showtime',
     label: 'Lịch chiếu',
-    description: 'Timeline scheduling',
+    description: 'Suất chiếu & khung giờ',
     icon: <FaTicketAlt />,
   },
   {
     to: '/admin/review',
-    label: 'Review',
-    description: 'Kiểm duyệt nội dung',
+    label: 'Đánh giá',
+    description: 'Kiểm duyệt bình luận',
     icon: <FaComments />,
   },
   {
     to: '/admin/vouchers',
-    label: 'Vouchers',
-    description: 'Quản lý mã giảm giá',
+    label: 'Voucher',
+    description: 'Mã giảm giá & ưu đãi',
     icon: <FaTicketAlt />,
   },
   {
     to: '/admin/refunds',
-    label: 'Hoàn Tiền',
-    description: 'Xử lý manual refund',
+    label: 'Hoàn tiền',
+    description: 'Xử lý yêu cầu hoàn tiền',
     icon: <FaMoneyBillWave />,
   },
   {
     to: '/admin/banners',
-    label: 'Banners',
-    description: 'Quản lý ảnh banner Carousel',
+    label: 'Banner',
+    description: 'Quản lý ảnh quảng cáo',
     icon: <FaFilm />,
   },
   {
     to: '/admin/notifications',
     label: 'Thông báo',
-    description: 'Gửi & quản lý thông báo',
+    description: 'Gửi & phát thông báo',
     icon: <FaBell />,
   },
   {
     to: '/admin/staff',
-    label: 'Staff',
-    description: 'Tài khoản nội bộ',
+    label: 'Nhân viên',
+    description: 'Tài khoản & phân quyền',
     icon: <FaUsersCog />,
   },
 ] as const;
@@ -98,7 +98,7 @@ const Sidebar = ({ collapsed, isLightMode }: SidebarProps) => {
       <div className={`flex min-h-[72px] items-center gap-3 border-b px-5 ${
         isLightMode ? 'border-slate-200' : 'border-white/10'
       }`}>
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-cyan-400 via-blue-600 to-slate-950 text-white shadow-lg shadow-blue-900/30">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-blue-600 via-indigo-600 to-teal-500 text-white shadow-lg shadow-blue-900/30">
           <FaShieldAlt />
         </div>
 
@@ -107,12 +107,12 @@ const Sidebar = ({ collapsed, isLightMode }: SidebarProps) => {
             <div className={`truncate text-[15px] font-black leading-tight ${
               isLightMode ? 'text-slate-900' : 'text-white'
             }`}>
-              Cinema Console
+              Admin Console
             </div>
             <div className={`mt-1 text-[10px] font-black uppercase tracking-[0.16em] ${
-              isLightMode ? 'text-slate-500' : 'text-slate-400'
+              isLightMode ? 'text-slate-500' : 'text-blue-200/70'
             }`}>
-              Control System
+              Quản trị hệ thống
             </div>
           </div>
         )}

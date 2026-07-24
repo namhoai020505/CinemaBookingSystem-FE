@@ -1,8 +1,9 @@
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FaBars, FaMoon, FaPowerOff, FaSun, FaUserShield } from 'react-icons/fa';
-import NotificationCenter from '../../components/NotificationCenter';
+import { FaBars, FaBuilding, FaMoon, FaPowerOff, FaSun } from 'react-icons/fa';
 import { getCurrentUserProfile } from '../../lib/auth';
 import { logout } from '../../services/authService';
+import { managerService } from '../../services/managerService';
 
 type ManagerTopbarProps = {
   sidebarCollapsed: boolean;
@@ -13,23 +14,39 @@ type ManagerTopbarProps = {
 
 const routeTitles: Record<string, { title: string; subtitle: string }> = {
   '/manager/dashboard': {
-    title: 'Manager Dashboard',
+    title: 'Dashboard Quản Lý Rạp',
     subtitle: 'Doanh thu, vé bán và hiệu suất rạp đang phụ trách.',
   },
   '/manager/showtimes': {
-    title: 'Showtimes',
+    title: 'Lịch Chiếu & Suất Chiếu',
     subtitle: 'Theo dõi suất chiếu, trạng thái và xử lý hủy suất.',
   },
   '/manager/refunds': {
-    title: 'Refunds',
+    title: 'Quản Lý Hoàn Tiền',
     subtitle: 'Theo dõi hoàn tiền phát sinh từ nghiệp vụ rạp.',
   },
   '/manager/ticket-scanner': {
-    title: 'Ticket Scanner',
+    title: 'Soát Vé Điện Tử',
     subtitle: 'Soát vé bằng QR hoặc nhập mã thủ công tại rạp.',
   },
+  '/manager/vouchers': {
+    title: 'Voucher & Mã Giảm Giá',
+    subtitle: 'Quản lý mã giảm giá và chương trình khuyến mãi rạp.',
+  },
+  '/manager/notifications': {
+    title: 'Thông Báo Vận Hành',
+    subtitle: 'Gửi và theo dõi thông báo nội bộ rạp chiếu.',
+  },
+  '/manager/staff': {
+    title: 'Phân Công Ca Trực Nhân Viên',
+    subtitle: 'Quản lý danh sách và phân ca làm việc cho staff.',
+  },
+  '/manager/staff-shifts': {
+    title: 'Phân Công Ca Trực Nhân Viên',
+    subtitle: 'Quản lý danh sách và phân ca làm việc cho staff.',
+  },
   '/manager/my-cinema': {
-    title: 'My Cinema',
+    title: 'Rạp & Phòng Chiếu',
     subtitle: 'Thông tin rạp và các phòng đang thuộc phạm vi quản lý.',
   },
 };
@@ -44,6 +61,22 @@ const ManagerTopbar = ({
   const location = useLocation();
   const profile = getCurrentUserProfile();
   const page = routeTitles[location.pathname] ?? routeTitles['/manager/dashboard'];
+  const [cinemaBranchName, setCinemaBranchName] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    managerService
+      .getRooms()
+      .then((rooms) => {
+        if (isMounted && rooms && rooms.length > 0 && rooms[0].cinemaName) {
+          setCinemaBranchName(rooms[0].cinemaName);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -95,11 +128,9 @@ const ManagerTopbar = ({
               : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200',
           ].join(' ')}
         >
-          <FaUserShield />
-          Rạp của tôi
+          <FaBuilding />
+          {cinemaBranchName || 'Chi nhánh rạp'}
         </div>
-
-        <NotificationCenter isLightMode={isLightMode} buttonClassName={iconButtonClass} />
 
         <button
           type="button"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { FaBarcode, FaBars, FaCashRegister, FaDoorOpen, FaMoon, FaPowerOff, FaShieldAlt, FaSun } from 'react-icons/fa';
+import { FaBarcode, FaBars, FaCalendarAlt, FaCashRegister, FaDoorOpen, FaMoon, FaPowerOff, FaShieldAlt, FaSun } from 'react-icons/fa';
 import NotificationCenter from '../../components/NotificationCenter';
 import { getCurrentUserProfile } from '../../lib/auth';
 import { logout } from '../../services/authService';
@@ -11,12 +11,16 @@ const THEME_STORAGE_KEY = 'g2c-staff-theme';
 
 const staffRouteMeta: Record<string, { title: string; subtitle: string }> = {
   '/staff/ticket-scanner': {
-    title: 'Ticket Scanner',
-    subtitle: 'Scan QR tickets or enter ticket codes manually.',
+    title: 'Soát Vé Điện Tử',
+    subtitle: 'Quét mã QR vé hoặc nhập mã vé thủ công để kiểm tra tại rạp.',
   },
   '/staff/fb-counter': {
-    title: 'Counter F&B',
-    subtitle: 'Sell popcorn and drinks directly at the cinema counter.',
+    title: 'Bán Bắp Nước (F&B)',
+    subtitle: 'Bán bắp nước và combo trực tiếp tại quầy rạp chiếu phim.',
+  },
+  '/staff/schedule': {
+    title: 'Lịch Trực Cá Nhân',
+    subtitle: 'Xem ca trực & lịch làm việc tuần này của riêng bạn.',
   },
 };
 
@@ -84,7 +88,7 @@ const StaffLayout = () => {
               <div className={`mt-1 text-[10px] font-black uppercase tracking-[0.16em] ${
                 isLightMode ? 'text-slate-500' : 'text-cyan-200/70'
               }`}>
-                Ticket gate
+                Quầy vé & F&B
               </div>
             </div>
           )}
@@ -95,13 +99,13 @@ const StaffLayout = () => {
             <div className={`px-2 pb-3 text-[10px] font-black uppercase tracking-[0.16em] ${
               isLightMode ? 'text-slate-400' : 'text-slate-500'
             }`}>
-              Operations
+              Vận hành
             </div>
           )}
 
           <NavLink
             to="/staff/ticket-scanner"
-            title={sidebarCollapsed ? 'Ticket Scanner' : 'Scan tickets at the gate'}
+            title={sidebarCollapsed ? 'Soát vé' : 'Soát vé tại quầy'}
             className={({ isActive }) =>
               [
                 'mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-bold no-underline transition-all duration-150',
@@ -119,12 +123,12 @@ const StaffLayout = () => {
             <span className="inline-flex shrink-0 text-base">
               <FaBarcode />
             </span>
-            {!sidebarCollapsed && <span className="block truncate">Ticket Scanner</span>}
+            {!sidebarCollapsed && <span className="block truncate">Soát vé</span>}
           </NavLink>
 
           <NavLink
             to="/staff/fb-counter"
-            title={sidebarCollapsed ? 'Counter F&B' : 'Sell F&B at the counter'}
+            title={sidebarCollapsed ? 'Bắp nước' : 'Bán bắp nước tại quầy'}
             className={({ isActive }) =>
               [
                 'mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-bold no-underline transition-all duration-150',
@@ -138,7 +142,30 @@ const StaffLayout = () => {
             <span className="inline-flex shrink-0 text-base">
               <FaCashRegister />
             </span>
-            {!sidebarCollapsed && <span className="block truncate">Bán F&B</span>}
+            {!sidebarCollapsed && <span className="block truncate">Bắp nước</span>}
+          </NavLink>
+
+          <NavLink
+            to="/staff/schedule"
+            title={sidebarCollapsed ? 'Lịch trực' : 'Lịch ca trực cá nhân'}
+            className={({ isActive }) =>
+              [
+                'mb-1 flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-bold no-underline transition-all duration-150',
+                sidebarCollapsed ? 'justify-center' : 'justify-start',
+                isActive
+                  ? isLightMode
+                    ? 'bg-emerald-50 text-emerald-600 shadow-[inset_3px_0_0_#10b981]'
+                    : 'bg-gradient-to-r from-emerald-500/25 to-cyan-500/10 text-white shadow-[inset_3px_0_0_#34d399]'
+                  : isLightMode
+                    ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white',
+              ].join(' ')
+            }
+          >
+            <span className="inline-flex shrink-0 text-base">
+              <FaCalendarAlt />
+            </span>
+            {!sidebarCollapsed && <span className="block truncate">Lịch ca trực</span>}
           </NavLink>
         </nav>
 
@@ -155,11 +182,11 @@ const StaffLayout = () => {
               <div className="min-w-0">
                 <div className={`truncate text-sm font-black ${
                   isLightMode ? 'text-slate-900' : 'text-white'
-                }`}>Staff</div>
+                }`}>Nhân Viên Rạp</div>
                 <div className={`mt-0.5 text-[11px] font-bold ${
                   isLightMode ? 'text-slate-500' : 'text-slate-400'
                 }`}>
-                  Ticket operations
+                  Vận hành quầy & vé
                 </div>
               </div>
             )}
