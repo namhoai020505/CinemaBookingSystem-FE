@@ -179,10 +179,13 @@ export const notificationService = {
     movieId?: string;
     targetGroup?: string;
   }) =>
-    api.get<unknown, ApiResponse<{ userId: string; fullName: string; email: string; role: string }[]>>(
+    api.get<unknown, ApiResponse<{ userId: string; fullName: string; email: string; role: string; isOnline?: boolean }[]>>(
       '/api/notifications/filter-users',
       { params },
     ),
+
+  sendHeartbeat: async () =>
+    api.post<unknown, ApiResponse<{ isOnline: boolean }>>('/api/notifications/heartbeat'),
 
   deleteNotifications: async (notificationIds: string[]) =>
     api.post<unknown, ApiResponse<boolean>>('/api/notifications/delete', { notificationIds }),

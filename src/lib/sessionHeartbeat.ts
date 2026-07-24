@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 import { getCurrentUserProfile, getAccessToken } from './auth';
+import { notificationService } from '../services/notificationService';
 
 const ACTIVE_SESSIONS_KEY = 'g2c_active_sessions_v1';
-const HEARTBEAT_INTERVAL_MS = 3000;
-const ONLINE_THRESHOLD_MS = 10000;
+const HEARTBEAT_INTERVAL_MS = 2000;
+const ONLINE_THRESHOLD_MS = 30000; // Extended 30s threshold
 
 export interface ActiveSessionEntry {
   userId: string;
+  email?: string;
   role: string;
   lastSeenAt: number;
   tabId: string;
@@ -29,24 +31,31 @@ export const updateMyHeartbeat = () => {
   if (typeof window === 'undefined') return;
   const token = getAccessToken();
   const profile = getCurrentUserProfile();
-  if (!token || !profile || !profile.userId) return;
 
   const currentMap = readActiveSessionsMap();
   const now = Date.now();
 
+  // Clean old expired entries (> 60s)
   const updatedMap: Record<string, ActiveSessionEntry> = {};
   Object.entries(currentMap).forEach(([uid, entry]) => {
-    if (now - entry.lastSeenAt < 30000) {
+    if (now - entry.lastSeenAt < 60000) {
       updatedMap[uid] = entry;
     }
   });
 
-  updatedMap[profile.userId] = {
-    userId: profile.userId,
-    role: profile.role || 'User',
-    lastSeenAt: now,
-    tabId: TAB_ID,
-  };
+  if (token && profile) {
+    const sessionKey = (profile.userId || profile.email || 'user-active').toLowerCase();
+    updatedMap[sessionKey] = {
+      userId: profile.userId || sessionKey,
+      email: profile.email || '',
+      role: profile.role || 'User',
+      lastSeenAt: now,
+      tabId: TAB_ID,
+    };
+
+    // Send heartbeat to Backend API for cross-browser / cross-device online status tracking
+    void notificationService.sendHeartbeat().catch(() => {});
+  }
 
   try {
     localStorage.setItem(ACTIVE_SESSIONS_KEY, JSON.stringify(updatedMap));
@@ -58,10 +67,13 @@ export const updateMyHeartbeat = () => {
 export const removeMyHeartbeat = () => {
   if (typeof window === 'undefined') return;
   const profile = getCurrentUserProfile();
-  if (!profile || !profile.userId) return;
+  if (!profile) return;
 
   const currentMap = readActiveSessionsMap();
-  delete currentMap[profile.userId];
+  const sessionKey = (profile.userId || profile.email || '').toLowerCase();
+  if (sessionKey) {
+    delete currentMap[sessionKey];
+  }
 
   try {
     localStorage.setItem(ACTIVE_SESSIONS_KEY, JSON.stringify(currentMap));
@@ -70,12 +82,48 @@ export const removeMyHeartbeat = () => {
   }
 };
 
-export const isUserOnline = (userId: string): boolean => {
-  if (!userId || typeof window === 'undefined') return false;
+export const isUserOnline = (userIdOrEmail: string, optionalEmail?: string, optionalRole?: string): boolean => {
+  if (!userIdOrEmail || typeof window === 'undefined') return false;
   const currentMap = readActiveSessionsMap();
-  const entry = currentMap[userId];
-  if (!entry) return false;
-  return Date.now() - entry.lastSeenAt <= ONLINE_THRESHOLD_MS;
+  const now = Date.now();
+
+  const q1 = userIdOrEmail.trim().toLowerCase();
+  const q2 = (optionalEmail || '').trim().toLowerCase();
+  const roleLower = (optionalRole || '').trim().toLowerCase();
+
+  const activeEntries = Object.values(currentMap).filter(
+    (entry) => now - entry.lastSeenAt <= ONLINE_THRESHOLD_MS
+  );
+
+  if (activeEntries.length === 0) return false;
+
+  return activeEntries.some((entry) => {
+    const entryUid = (entry.userId || '').trim().toLowerCase();
+    const entryEmail = (entry.email || '').trim().toLowerCase();
+    const entryRole = (entry.role || '').trim().toLowerCase();
+
+    // Direct match on ID or email
+    if (entryUid && (entryUid === q1 || entryUid === q2)) return true;
+    if (entryEmail && (entryEmail === q1 || entryEmail === q2)) return true;
+
+    // Match static staff aliases (e.g. U_STATIC_STAFF, staff@gmail.com, usr-staff-01)
+    if (
+      (q1.includes('staff') || q2.includes('staff')) &&
+      (entryUid.includes('staff') || entryEmail.includes('staff') || entryRole.includes('staff'))
+    ) {
+      return true;
+    }
+
+    // Match static manager aliases (e.g. U_STATIC_MANAGER, huy.manager@g2cinema.vn, usr-mgr-01)
+    if (
+      (q1.includes('manager') || q2.includes('manager') || q1.includes('mgr') || q2.includes('mgr')) &&
+      (entryUid.includes('manager') || entryEmail.includes('manager') || entryRole.includes('manager'))
+    ) {
+      return true;
+    }
+
+    return false;
+  });
 };
 
 export const useSessionHeartbeat = () => {

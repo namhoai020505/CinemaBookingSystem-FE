@@ -103,6 +103,7 @@ export interface UserDirectoryItem {
   cinemaName: string;
   status: 'Active' | 'Blocked';
   createdAt: string;
+  isOnlineFromBe?: boolean;
 }
 
 const INITIAL_DIRECTORY_USERS: UserDirectoryItem[] = [
@@ -174,39 +175,52 @@ export default function ManageStaff() {
 
     void loadFormOptions();
 
-    // Also fetch live users from API
-    notificationService
-      .getFilteredUsers({})
-      .then((res) => {
-        if (res.success && res.data && res.data.length > 0) {
-          const apiUsers: UserDirectoryItem[] = res.data.map((u) => {
-            let role: 'Staff' | 'Manager' | 'Customer' | 'Admin' = 'Customer';
-            const rUpper = (u.role || '').toUpperCase();
-            if (rUpper.includes('MANAGER')) role = 'Manager';
-            else if (rUpper.includes('STAFF')) role = 'Staff';
-            else if (rUpper.includes('ADMIN')) role = 'Admin';
+    const fetchLiveUsers = () => {
+      notificationService
+        .getFilteredUsers({})
+        .then((res) => {
+          if (!isCurrent) return;
+          if (res.success && res.data && res.data.length > 0) {
+            const apiUsers: UserDirectoryItem[] = res.data.map((u) => {
+              let role: 'Staff' | 'Manager' | 'Customer' | 'Admin' = 'Customer';
+              const rUpper = (u.role || '').toUpperCase();
+              if (rUpper.includes('MANAGER')) role = 'Manager';
+              else if (rUpper.includes('STAFF')) role = 'Staff';
+              else if (rUpper.includes('ADMIN')) role = 'Admin';
 
-            return {
-              userId: u.userId,
-              fullName: u.fullName || u.userId,
-              email: u.email || 'Không có',
-              phone: 'Không có',
-              role,
-              cinemaName: role === 'Customer' ? 'ALL' : 'CINEMA',
-              status: isUserOnline(u.userId) ? 'Active' : 'Blocked',
-              createdAt: '—',
-            };
-          });
+              return {
+                userId: u.userId,
+                fullName: u.fullName || u.userId,
+                email: u.email || 'Không có',
+                phone: 'Không có',
+                role,
+                cinemaName: role === 'Customer' ? 'ALL' : 'CINEMA',
+                status: 'Active',
+                createdAt: '—',
+                isOnlineFromBe: u.isOnline,
+              };
+            });
 
-          // Merge live users with initial list
-          setDirectoryUsers((prev) => {
-            const existingIds = new Set(prev.map((p) => p.userId));
-            const newItems = apiUsers.filter((a) => !existingIds.has(a.userId));
-            return [...prev, ...newItems];
-          });
-        }
-      })
-      .catch(() => {});
+            setDirectoryUsers((prev) => {
+              const apiMap = new Map(apiUsers.map((a) => [a.userId, a]));
+              const updated = prev.map((p) => {
+                const match = apiMap.get(p.userId) || apiUsers.find((a) => a.email && a.email.toLowerCase() === p.email.toLowerCase());
+                if (match) {
+                  return { ...p, isOnlineFromBe: match.isOnlineFromBe };
+                }
+                return p;
+              });
+
+              const existingIds = new Set(updated.map((p) => p.userId));
+              const newItems = apiUsers.filter((a) => !existingIds.has(a.userId));
+              return [...updated, ...newItems];
+            });
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchLiveUsers();
 
     return () => {
       isCurrent = false;
@@ -218,6 +232,23 @@ export default function ManageStaff() {
   useEffect(() => {
     const timer = setInterval(() => {
       setHeartbeatTick((t) => t + 1);
+      notificationService
+        .getFilteredUsers({})
+        .then((res) => {
+          if (res.success && res.data && res.data.length > 0) {
+            const apiMap = new Map(res.data.map((u) => [u.userId, u]));
+            setDirectoryUsers((prev) =>
+              prev.map((p) => {
+                const match = apiMap.get(p.userId) || res.data?.find((a) => a.email && a.email.toLowerCase() === p.email.toLowerCase());
+                if (match) {
+                  return { ...p, isOnlineFromBe: match.isOnline };
+                }
+                return p;
+              })
+            );
+          }
+        })
+        .catch(() => {});
     }, 3000);
     return () => clearInterval(timer);
   }, []);
@@ -756,7 +787,7 @@ export default function ManageStaff() {
                         {user.cinemaName || '—'}
                       </td>
                       <td className="py-2.5 px-3">
-                        {isUserOnline(user.userId) ? (
+                        {user.isOnlineFromBe || isUserOnline(user.userId, user.email, user.role) ? (
                           <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
                             Online
                           </span>
