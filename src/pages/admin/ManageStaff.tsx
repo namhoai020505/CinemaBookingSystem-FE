@@ -107,13 +107,13 @@ export interface UserDirectoryItem {
 }
 
 const INITIAL_DIRECTORY_USERS: UserDirectoryItem[] = [
-  { userId: 'usr-mgr-01', fullName: 'Đặng Quốc Huy', email: 'huy.manager@g2cinema.vn', phone: '0988123456', role: 'Manager', cinemaName: 'G2Cinema Thái Nguyên', status: 'Blocked', createdAt: '2026-01-15 09:30' },
-  { userId: 'usr-staff-01', fullName: 'Nguyễn Văn An', email: 'an.nguyen@g2cinema.vn', phone: '0912345678', role: 'Staff', cinemaName: 'G2Cinema Thái Nguyên', status: 'Blocked', createdAt: '2026-02-01 10:15' },
-  { userId: 'usr-staff-02', fullName: 'Trần Thị Bình', email: 'binh.tran@g2cinema.vn', phone: '0923456789', role: 'Staff', cinemaName: 'G2Cinema Thái Nguyên', status: 'Blocked', createdAt: '2026-02-05 14:20' },
-  { userId: 'usr-staff-03', fullName: 'Lê Văn Cường', email: 'cuong.le@g2cinema.vn', phone: '0934567890', role: 'Staff', cinemaName: 'G2Cinema Thái Nguyên', status: 'Blocked', createdAt: '2026-02-10 11:00' },
-  { userId: 'usr-cus-101', fullName: 'Phạm Thu Trang', email: 'trang.pham@gmail.com', phone: '0977112233', role: 'Customer', cinemaName: 'Hệ thống toàn quốc', status: 'Blocked', createdAt: '2026-03-12 16:45' },
-  { userId: 'usr-cus-102', fullName: 'Vũ Đức Minh', email: 'minh.vu@yahoo.com', phone: '0966554433', role: 'Customer', cinemaName: 'Hệ thống toàn quốc', status: 'Blocked', createdAt: '2026-03-20 08:10' },
-  { userId: 'usr-mgr-02', fullName: 'Hoàng Thị Yến', email: 'yen.hoang@g2cinema.vn', phone: '0911223344', role: 'Manager', cinemaName: 'G2Cinema Hà Nội', status: 'Blocked', createdAt: '2026-01-20 13:00' },
+  { userId: 'usr-mgr-01', fullName: 'Đặng Quốc Huy', email: 'huy.manager@g2cinema.vn', phone: '0988123456', role: 'Manager', cinemaName: 'G2Cinema Thái Nguyên', status: 'Active', createdAt: '2026-01-15 09:30' },
+  { userId: 'usr-staff-01', fullName: 'Nguyễn Văn An', email: 'an.nguyen@g2cinema.vn', phone: '0912345678', role: 'Staff', cinemaName: 'G2Cinema Thái Nguyên', status: 'Active', createdAt: '2026-02-01 10:15' },
+  { userId: 'usr-staff-02', fullName: 'Trần Thị Bình', email: 'binh.tran@g2cinema.vn', phone: '0923456789', role: 'Staff', cinemaName: 'G2Cinema Thái Nguyên', status: 'Active', createdAt: '2026-02-05 14:20' },
+  { userId: 'usr-staff-03', fullName: 'Lê Văn Cường', email: 'cuong.le@g2cinema.vn', phone: '0934567890', role: 'Staff', cinemaName: 'G2Cinema Thái Nguyên', status: 'Active', createdAt: '2026-02-10 11:00' },
+  { userId: 'usr-cus-101', fullName: 'Phạm Thu Trang', email: 'trang.pham@gmail.com', phone: '0977112233', role: 'Customer', cinemaName: 'Hệ thống toàn quốc', status: 'Active', createdAt: '2026-03-12 16:45' },
+  { userId: 'usr-cus-102', fullName: 'Vũ Đức Minh', email: 'minh.vu@yahoo.com', phone: '0966554433', role: 'Customer', cinemaName: 'Hệ thống toàn quốc', status: 'Active', createdAt: '2026-03-20 08:10' },
+  { userId: 'usr-mgr-02', fullName: 'Hoàng Thị Yến', email: 'yen.hoang@g2cinema.vn', phone: '0911223344', role: 'Manager', cinemaName: 'G2Cinema Hà Nội', status: 'Active', createdAt: '2026-01-20 13:00' },
 ];
 
 export default function ManageStaff() {
@@ -654,16 +654,6 @@ export default function ManageStaff() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             {/* Quick Filter Pills (Text-only, NO ICONS) */}
             <div className="flex flex-wrap gap-2 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setUserRoleFilter('ALL')}
-                className={`rounded-lg px-3 py-1.5 transition ${
-                  userRoleFilter === 'ALL'
-                    ? 'bg-[#4318FF] text-white'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                }`}
-              > Tất cả · {directoryUsers.length}
-                </button>
               <button
                 type="button"
                 onClick={() => setUserRoleFilter('ALL')}
