@@ -346,7 +346,6 @@ export const TEXT = {
     ERR_UNKNOWN_OBJ: "Đã xảy ra lỗi không xác định.",
     ERR_CONNECTION: "Không thể kết nối backend. Hãy kiểm tra API đã chạy chưa.",
     ERR_UNKNOWN: "Đã xảy ra lỗi không xác định.",
-    ERR_SUBMIT_FAILED: "Tạo tài khoản thất bại. Vui lòng thử lại.",
 
     SUCCESS_INVITE: "Đã tạo tài khoản và gửi email mời.",
 
@@ -360,11 +359,9 @@ export const TEXT = {
     PLACEHOLDER_NAME: "Nhập họ và tên",
     LABEL_ROLE: "Chức Vụ",
     PLACEHOLDER_ROLE: "-- Chọn Staff hoặc Manager --",
-    SELECT_ROLE: "-- Chọn chức vụ --",
     LOADING_ROLES: "Đang tải chức vụ...",
     LABEL_CINEMA: "Chi Nhánh",
     PLACEHOLDER_CINEMA: "Gõ tên, thành phố hoặc địa chỉ chi nhánh...",
-    CINEMA_NOT_REQUIRED: "Chức vụ này không yêu cầu gán chi nhánh",
     HINT_SELECT_ROLE_FIRST: "Chọn chức vụ trước",
     HINT_CINEMA_SEARCH: "Kết quả ưu tiên tên chi nhánh bắt đầu bằng ký tự bạn gõ.",
     NO_CINEMAS_MATCH: "Không tìm thấy chi nhánh phù hợp.",

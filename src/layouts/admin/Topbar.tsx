@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FaBars, FaMoon, FaPowerOff, FaSun } from 'react-icons/fa';
+import NotificationCenter from '../../components/NotificationCenter';
 import { logout } from '../../services/authService';
 
 interface TopbarProps {
@@ -11,62 +12,42 @@ interface TopbarProps {
 
 const routeTitles: Record<string, { title: string; subtitle: string }> = {
   '/admin/dashboard': {
-    title: 'Dashboard Quản Lý Hệ Thống',
-    subtitle: 'Theo dõi nhanh tình trạng vận hành và doanh thu hệ thống rạp.',
+    title: 'Dashboard',
+    subtitle: 'Theo dõi nhanh tình trạng vận hành hệ thống rạp.',
   },
   '/admin/movies': {
-    title: 'Quản Lý Danh Mục Phim',
-    subtitle: 'Điều phối danh mục phim, trailer, thể loại và thời lượng chiếu.',
+    title: 'Quản lý phim',
+    subtitle: 'Điều phối catalog phim, trailer và thời lượng chiếu.',
   },
   '/admin/rooms': {
-    title: 'Quản Lý Phòng Chiếu & Rạp',
-    subtitle: 'Kiểm soát danh sách phòng, sức chứa và sơ đồ ghế.',
+    title: 'Quản lý phòng chiếu',
+    subtitle: 'Kiểm soát phòng, sức chứa và sơ đồ ghế.',
   },
   '/admin/showtime': {
-    title: 'Quản Lý Lịch Chiếu & Suất Chiếu',
-    subtitle: 'Sắp xếp suất chiếu theo rạp, phòng chiếu và khung giờ.',
-  },
-  '/admin/review': {
-    title: 'Kiểm Duyệt Bình Luận & Đánh Giá',
-    subtitle: 'Xử lý đánh giá đang chờ và duyệt bình luận phim.',
+    title: 'Quản lý lịch chiếu',
+    subtitle: 'Sắp xếp suất chiếu theo rạp, phòng và khung giờ.',
   },
   '/admin/reviews': {
-    title: 'Kiểm Duyệt Bình Luận & Đánh Giá',
-    subtitle: 'Xử lý đánh giá đang chờ và duyệt bình luận phim.',
-  },
-  '/admin/vouchers': {
-    title: 'Voucher & Mã Giảm Giá',
-    subtitle: 'Quản lý mã giảm giá và chương trình khuyến mãi toàn hệ thống.',
-  },
-  '/admin/refunds': {
-    title: 'Quản Lý Hoàn Tiền (Refunds)',
-    subtitle: 'Theo dõi và xử lý yêu cầu hoàn tiền thủ công.',
-  },
-  '/admin/banners': {
-    title: 'Quản Lý Banner Quảng Cáo',
-    subtitle: 'Cấu hình banner trình chiếu và hình ảnh trang chủ.',
-  },
-  '/admin/notifications': {
-    title: 'Quản Lý Thông Báo Hệ Thống',
-    subtitle: 'Phát và quản lý thông báo tới toàn bộ đối tượng người dùng.',
+    title: 'Kiểm duyệt review',
+    subtitle: 'Xử lý đánh giá đang chờ và nội dung cần chú ý.',
   },
   '/admin/staff': {
-    title: 'Quản Lý Nhân Viên',
-    subtitle: 'Tạo lời mời và quản trị tài khoản nhân viên nội bộ.',
+    title: 'Quản lý staff',
+    subtitle: 'Tạo lời mời và quản trị tài khoản nội bộ.',
   },
 };
 
 const getRouteTitle = (pathname: string) => {
   if (pathname.includes('/rooms/') && pathname.includes('/seats')) {
     return {
-      title: 'Sơ Đồ Ghế & Cấu Hình Phòng',
-      subtitle: 'Cấu hình sơ đồ ghế, loại ghế và trạng thái sử dụng.',
+      title: 'Sơ đồ ghế',
+      subtitle: 'Cấu hình seat map, loại ghế và trạng thái sử dụng.',
     };
   }
 
   return routeTitles[pathname] ?? {
-    title: 'Hệ Thống Quản Trị Admin',
-    subtitle: 'Trung tâm điều hành Cinema Booking System.',
+    title: 'Admin console',
+    subtitle: 'Cinema Booking System operations.',
   };
 };
 
@@ -123,6 +104,8 @@ const Topbar = ({
       </div>
 
       <div className="ml-auto flex items-center gap-3">
+        <NotificationCenter isLightMode={isLightMode} buttonClassName={iconButtonClass} />
+
         <button
           type="button"
           onClick={onToggleTheme}

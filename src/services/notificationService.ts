@@ -22,48 +22,6 @@ export type NotificationItem = {
   channel: string;
   type: string;
   status: string;
-  cinemaId?: number | null;
-  cinemaName?: string | null;
-  targetGroup?: string | null;
-};
-
-export type SendNotificationRequest = {
-  userId?: string | null;
-  userIds?: string[] | null;
-  targetGroup?: string | null; // ALL, CUSTOMERS, STAFF, MANAGERS, ADMINS
-  bookingId?: string | null;
-  isFlagged?: boolean | null;
-  hasBooked?: boolean | null;
-  roomId?: string | null;
-  showtimeId?: string | null;
-  movieId?: string | null;
-  title: string;
-  message: string;
-  channel?: string; // App, Email, SMS, Internal
-  type?: string; // Transactional, Loyalty, Promotional, Internal
-};
-
-export type TriggerSystemNotificationRequest = {
-  eventType: string;
-  referenceId?: string | null;
-  payloadJson?: string | null;
-  targetUserId?: string | null;
-};
-
-export type FeedItem = {
-  id?: string;
-  notificationId?: string;
-  userId?: string;
-  isRead?: boolean;
-  title?: string;
-  message?: string;
-  content?: string;
-  type?: string;
-  channel?: string;
-  createdAt?: string;
-  timestamp?: string;
-  cinemaId?: number | null;
-  cinemaName?: string | null;
 };
 
 export type PagedList<T> = {
@@ -96,7 +54,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
 const isNotificationItem = (value: unknown): value is NotificationItem =>
-  isRecord(value) && (typeof value.notificationId === 'string' || typeof value.userId === 'string' || typeof value.title === 'string');
+  isRecord(value) && typeof value.notificationId === 'string';
 
 const readNotificationArray = (source: unknown, keys: string[]) => {
   if (!isRecord(source)) {
@@ -162,36 +120,4 @@ export const notificationService = {
 
   markAllAsRead: async () =>
     api.put<unknown, ApiResponse<boolean>>('/api/notifications/read-all'),
-
-  sendNotification: async (request: SendNotificationRequest) =>
-    api.post<unknown, ApiResponse<boolean>>('/api/notifications/send', request),
-
-  triggerSystemNotification: async (request: TriggerSystemNotificationRequest) =>
-    api.post<unknown, ApiResponse<boolean>>('/api/notifications/trigger-system', request),
-
-  getInternalFeed: async () =>
-    api.get<unknown, ApiResponse<FeedItem[]>>('/api/notifications/internal-feed'),
-
-  getFilteredUsers: async (params: {
-    isFlagged?: boolean;
-    hasBooked?: boolean;
-    roomId?: string;
-    showtimeId?: string;
-    movieId?: string;
-    targetGroup?: string;
-    role?: string;
-  }) =>
-    api.get<unknown, ApiResponse<{ userId: string; fullName: string; email: string; role: string; isOnline?: boolean }[]>>(
-      '/api/notifications/filter-users',
-      { params },
-    ),
-
-  sendHeartbeat: async () =>
-    api.post<unknown, ApiResponse<{ isOnline: boolean }>>('/api/notifications/heartbeat'),
-
-  deleteNotifications: async (notificationIds: string[]) =>
-    api.post<unknown, ApiResponse<boolean>>('/api/notifications/delete', { notificationIds }),
-
-  updateNotification: async (notificationId: string, title: string, message: string) =>
-    api.put<unknown, ApiResponse<boolean>>(`/api/notifications/${notificationId}`, { title, message }),
 };

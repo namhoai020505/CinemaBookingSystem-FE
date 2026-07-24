@@ -1,7 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
   FaBarcode,
-  FaBell,
   FaBuilding,
   FaCalendarAlt,
   FaChartLine,
@@ -9,7 +8,6 @@ import {
   FaMoneyCheckAlt,
   FaShieldAlt,
   FaTicketAlt,
-  FaUsersCog,
 } from 'react-icons/fa';
 
 type ManagerSidebarProps = {
@@ -21,49 +19,43 @@ const navItems = [
   {
     to: '/manager/dashboard',
     label: 'Dashboard',
-    description: 'Doanh thu & vé rạp',
+    description: 'Doanh thu và vé trong rạp',
     icon: <FaChartLine />,
   },
   {
     to: '/manager/showtimes',
-    label: 'Suất chiếu',
-    description: 'Lịch chiếu & hủy suất',
+    label: 'Showtimes',
+    description: 'Suất chiếu và hủy suất',
     icon: <FaCalendarAlt />,
   },
   {
     to: '/manager/refunds',
-    label: 'Hoàn tiền',
+    label: 'Refunds',
     description: 'Theo dõi hoàn tiền',
     icon: <FaMoneyCheckAlt />,
   },
   {
     to: '/manager/ticket-scanner',
-    label: 'Soát vé',
+    label: 'Ticket Scanner',
     description: 'Soát vé tại rạp',
     icon: <FaBarcode />,
   },
   {
     to: '/manager/vouchers',
-    label: 'Voucher',
-    description: 'Mã giảm giá rạp',
+    label: 'Vouchers',
+    description: 'Quản lý mã giảm giá của rạp',
     icon: <FaTicketAlt />,
   },
   {
-    to: '/manager/notifications',
-    label: 'Thông báo',
-    description: 'Thông báo nội bộ rạp',
-    icon: <FaBell />,
-  },
-  {
-    to: '/manager/staff-shifts',
-    label: 'Lịch trực',
-    description: 'Phân ca cho staff',
-    icon: <FaUsersCog />,
+    to: '/manager/banners',
+    label: 'Banners',
+    description: 'Quản lý banner Carousel của rạp',
+    icon: <FaDoorOpen />,
   },
   {
     to: '/manager/my-cinema',
-    label: 'Rạp của tôi',
-    description: 'Rạp & phòng chiếu',
+    label: 'My Cinema',
+    description: 'Rạp và phòng của tôi',
     icon: <FaBuilding />,
   },
 ] as const;
@@ -92,7 +84,7 @@ const ManagerSidebar = ({ collapsed, isLightMode }: ManagerSidebarProps) => {
             <div className={`truncate text-[15px] font-black leading-tight ${
               isLightMode ? 'text-slate-900' : 'text-white'
             }`}>
-              Bảng Quản Lý Rạp
+              Manager Console
             </div>
             <div className={`mt-1 text-[10px] font-black uppercase tracking-[0.16em] ${
               isLightMode ? 'text-slate-500' : 'text-cyan-200/70'

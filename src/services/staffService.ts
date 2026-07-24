@@ -18,7 +18,7 @@ export type CinemaOption = {
 
 export type ProvisionManagedAccountPayload = {
   email: string;
-  fullName?: string;
+  fullName: string;
   roleId: string;
   cinemaId?: string;
 };
