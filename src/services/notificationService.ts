@@ -24,6 +24,7 @@ export type NotificationItem = {
   status: string;
   cinemaId?: number | null;
   cinemaName?: string | null;
+  targetGroup?: string | null;
 };
 
 export type SendNotificationRequest = {
@@ -178,6 +179,7 @@ export const notificationService = {
     showtimeId?: string;
     movieId?: string;
     targetGroup?: string;
+    role?: string;
   }) =>
     api.get<unknown, ApiResponse<{ userId: string; fullName: string; email: string; role: string; isOnline?: boolean }[]>>(
       '/api/notifications/filter-users',

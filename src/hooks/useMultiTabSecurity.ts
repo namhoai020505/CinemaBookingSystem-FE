@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { getAccessToken } from '../lib/auth';
 
 const BROADCAST_CHANNEL_NAME = 'g2c_security_channel';
 

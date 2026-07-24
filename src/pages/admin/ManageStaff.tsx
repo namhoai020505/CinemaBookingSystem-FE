@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'react-toastify';
 import {
   staffService,
-  type ApiResponse,
   type AssignableAccountRole,
   type CinemaOption,
   type ProvisionedAccountData,
@@ -339,7 +338,7 @@ export default function ManageStaff() {
       setIsSubmitting(true);
       const response = await staffService.provisionAccount({
         email: email.trim().toLowerCase(),
-        fullName: safeFullName.trim() || undefined,
+        fullName: fullName.trim() || undefined,
         roleId: selectedRole.roleId,
         cinemaId: selectedCinemaId || undefined,
       });

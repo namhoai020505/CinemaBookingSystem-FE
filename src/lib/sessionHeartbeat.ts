@@ -82,14 +82,13 @@ export const removeMyHeartbeat = () => {
   }
 };
 
-export const isUserOnline = (userIdOrEmail: string, optionalEmail?: string, optionalRole?: string): boolean => {
+export const isUserOnline = (userIdOrEmail: string, optionalEmail?: string, _optionalRole?: string): boolean => {
   if (!userIdOrEmail || typeof window === 'undefined') return false;
   const currentMap = readActiveSessionsMap();
   const now = Date.now();
 
   const q1 = userIdOrEmail.trim().toLowerCase();
   const q2 = (optionalEmail || '').trim().toLowerCase();
-  const roleLower = (optionalRole || '').trim().toLowerCase();
 
   const activeEntries = Object.values(currentMap).filter(
     (entry) => now - entry.lastSeenAt <= ONLINE_THRESHOLD_MS

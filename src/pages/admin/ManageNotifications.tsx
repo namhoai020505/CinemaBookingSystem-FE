@@ -1033,7 +1033,7 @@ export default function ManageNotifications() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                void handleDeleteSelected([item.notificationId]);
+                                void handleDeleteNotifications([item.notificationId]);
                               }}
                               className="text-[11px] font-bold text-rose-500 hover:underline"
                             >

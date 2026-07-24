@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { getCurrentUserProfile } from '../../lib/auth';
 
