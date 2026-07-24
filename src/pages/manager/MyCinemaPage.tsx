@@ -5,6 +5,7 @@ import type { ManagerOutletContext } from '../../layouts/manager/ManagerLayout';
 import { managerService } from '../../services/managerService';
 import { notificationService } from '../../services/notificationService';
 import type { CinemaResponse, RoomResponse } from '../../services/roomService';
+import { isUserOnline } from '../../lib/sessionHeartbeat';
 import {
   formatNumber,
   getApiErrorMessage,
@@ -19,6 +20,7 @@ type StaffUser = {
   fullName: string;
   email: string;
   role: string;
+  isOnline?: boolean;
 };
 
 const MyCinemaPage = () => {
@@ -64,8 +66,23 @@ const MyCinemaPage = () => {
 
     void loadData();
 
+    // Live status polling every 3 seconds
+    const statusInterval = setInterval(() => {
+      notificationService
+        .getFilteredUsers({ targetGroup: 'STAFF' })
+        .then((res) => {
+          if (!isMounted) return;
+          const freshStaffs = (res as { data?: StaffUser[] })?.data ?? (Array.isArray(res) ? res : []);
+          if (Array.isArray(freshStaffs) && freshStaffs.length > 0) {
+            setStaffs(freshStaffs);
+          }
+        })
+        .catch(() => {});
+    }, 3000);
+
     return () => {
       isMounted = false;
+      clearInterval(statusInterval);
     };
   }, []);
 
@@ -229,6 +246,7 @@ const MyCinemaPage = () => {
                         <th className="py-3 px-4">Họ & Tên</th>
                         <th className="py-3 px-4">Email Liên Hệ</th>
                         <th className="py-3 px-4">Vai Trò</th>
+                        <th className="py-3 px-4">Trạng Thái</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${isLightMode ? 'divide-slate-200' : 'divide-white/10'}`}>
@@ -247,6 +265,17 @@ const MyCinemaPage = () => {
                             <span className="rounded-md bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-400 border border-emerald-500/30">
                               {staff.role || 'Staff'}
                             </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {staff.isOnline || isUserOnline(staff.userId, staff.email, staff.role) ? (
+                              <span className="rounded-md bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
+                                Online
+                              </span>
+                            ) : (
+                              <span className="rounded-md bg-slate-500/15 px-2.5 py-0.5 text-[10px] font-bold text-slate-400 border border-slate-500/30">
+                                Offline
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))}
