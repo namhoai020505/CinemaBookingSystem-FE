@@ -8,6 +8,7 @@ import {
   getCurrentUserProfile,
 } from "../../lib/auth";
 import { getMediaUrl } from "../../lib/media";
+import AlertDialog from "../../components/AlertDialog";
 
 const MAX_SEATS_ALLOWED = 6;
 const DEFAULT_LOCK_SECONDS = 600;
@@ -430,6 +431,8 @@ export default function SeatSelection() {
 
   const [seatMap, setSeatMap] = useState<SeatMapState | null>(null);
   const [selectedSeats, setSelectedSeats] = useState<SeatItem[]>([]);
+  const [alertMessage, setAlertMessage] = useState("");
+  const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(DEFAULT_LOCK_SECONDS);
   const [loading, setLoading] = useState(true);
   const [seatMapError, setSeatMapError] = useState("");
@@ -814,7 +817,8 @@ export default function SeatSelection() {
       );
     } catch (error) {
       console.error("Lỗi bỏ giữ ghế:", error);
-      alert("Không thể bỏ giữ ghế này. Vui lòng tải lại sơ đồ ghế và thử lại.");
+      setAlertMessage("Không thể bỏ giữ ghế này. Vui lòng tải lại sơ đồ ghế và thử lại.");
+      setIsAlertOpen(true);
       await refreshSeatMap();
     } finally {
       setUnlockingSeatId(null);
@@ -838,7 +842,8 @@ export default function SeatSelection() {
       : [...selectedSeats, seat];
 
     if (!exists && selectedSeats.length >= MAX_SEATS_ALLOWED) {
-      alert(`Hệ thống chỉ cho phép chọn tối đa ${MAX_SEATS_ALLOWED} ghế trong một giao dịch!`);
+      setAlertMessage(`Hệ thống chỉ cho phép chọn tối đa ${MAX_SEATS_ALLOWED} ghế trong một giao dịch!`);
+      setIsAlertOpen(true);
       return;
     }
 
@@ -851,12 +856,14 @@ export default function SeatSelection() {
 
   const handleProceed = async () => {
     if (selectedSeats.length === 0) {
-      alert("Vui lòng chọn ít nhất một ghế.");
+      setAlertMessage("Vui lòng chọn ít nhất một ghế.");
+      setIsAlertOpen(true);
       return;
     }
 
     if (!validateSeatGaps(selectedSeats)) {
-      alert("Không thể đặt ghế vì thao tác đang để lại một ghế trống duy nhất kẹt ở giữa. Vui lòng chọn các ghế nằm sát nhau.");
+      setAlertMessage("Không thể đặt ghế vì thao tác đang để lại một ghế trống duy nhất kẹt ở giữa. Vui lòng chọn các ghế nằm sát nhau.");
+      setIsAlertOpen(true);
       return;
     }
 
@@ -881,7 +888,8 @@ export default function SeatSelection() {
 
       const failedResponse = lockResponses.find(({ response }) => !response.success);
       if (failedResponse) {
-        alert(failedResponse.response.message || "Một trong số các ghế bạn chọn vừa có người giữ trước. Vui lòng tải lại trang.");
+        setAlertMessage(failedResponse.response.message || "Một trong số các ghế bạn chọn vừa có người giữ trước. Vui lòng tải lại trang.");
+        setIsAlertOpen(true);
         await refreshSeatMap();
         return;
       }
@@ -949,7 +957,8 @@ export default function SeatSelection() {
       });
     } catch (error) {
       console.error("Lỗi khi gọi API khóa giữ ghế:", error);
-      alert("Không thể kết nối hệ thống giữ ghế. Vui lòng thử lại!");
+      setAlertMessage("Không thể kết nối hệ thống giữ ghế. Vui lòng thử lại!");
+      setIsAlertOpen(true);
     } finally {
       setSubmitting(false);
     }
@@ -1356,6 +1365,11 @@ export default function SeatSelection() {
           </aside>
         </div>
       </div>
+      <AlertDialog
+        open={isAlertOpen}
+        message={alertMessage}
+        onClose={() => setIsAlertOpen(false)}
+      />
     </div>
   );
 }
