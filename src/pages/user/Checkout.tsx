@@ -3,6 +3,7 @@ import {
   FaCheck,
   FaClock,
   FaCopy,
+  FaCreditCard,
   FaGift,
   FaMapMarkerAlt,
   FaMinus,
@@ -35,8 +36,13 @@ import {
   type CheckoutAttempt,
 } from "../../services/checkoutAttempt";
 import {
+  getValidVnpayCheckoutUrl,
+  getVnpayCheckoutUrl,
+  PAYMENT_PROVIDER_IDS,
   paymentService,
   type CreatePaymentResponse,
+  type CreateVnpayUrlResponse,
+  type PaymentProviderId,
 } from "../../services/paymentService";
 import {
   fbItemService,
@@ -44,7 +50,6 @@ import {
 } from "../../services/fbItemService";
 import { voucherService, type Voucher } from "../../services/voucherService";
 
-const PAYMENT_PROVIDER_ID = "PP_SEPAY";
 const PAYMENT_WINDOW_SECONDS = 600;
 const DEFAULT_LOCK_SECONDS = 600;
 const PAYMENT_STATUS_POLL_MS = 5000;
@@ -143,6 +148,7 @@ type SeatLockSession = {
 type PaymentSession = {
   showtimeId: string;
   userKey: string;
+  paymentProviderId?: PaymentProviderId;
   booking: BookingSummary;
   payment: CreatePaymentResponse;
   expiresAt: string;
@@ -391,6 +397,35 @@ const getSepayQrUrl = (payment: CreatePaymentResponse | null) => {
   return `https://qr.sepay.vn/img?${query.toString()}`;
 };
 
+const toVnpayPaymentResponse = (
+  booking: BookingSummary,
+  data: CreateVnpayUrlResponse,
+): CreatePaymentResponse => {
+  const checkoutUrl = getVnpayCheckoutUrl(data);
+
+  if (!checkoutUrl) {
+    throw new Error(
+      "API tạo URL VNPAY không trả về paymentUrl/checkoutUrl hợp lệ.",
+    );
+  }
+
+  const transactionCode =
+    data.transactionCode?.trim() ||
+    new URL(checkoutUrl).searchParams.get("vnp_TxnRef") ||
+    "";
+
+  return {
+    paymentId: data.paymentId?.trim() || `VNPAY_${booking.bookingId}`,
+    amount: data.amount ?? booking.totalAmount,
+    transactionCode,
+    bankName: "",
+    bankAccount: "",
+    checkoutUrl,
+    paymentProviderName: "VNPAY",
+    expiresAt: data.expiresAt || booking.expiredAt || null,
+  };
+};
+
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   if (typeof error === "object" && error && "response" in error) {
     const response = (error as { response?: { data?: { message?: string } } })
@@ -489,6 +524,7 @@ export default function Checkout() {
   const [cancellingBooking, setCancellingBooking] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [paymentConfigRefreshTried, setPaymentConfigRefreshTried] = useState(false);
+  const [initializingPayment, setInitializingPayment] = useState(false);
   const [paymentExpiredDialogOpen, setPaymentExpiredDialogOpen] =
     useState(false);
   const [copiedField, setCopiedField] = useState("");
@@ -500,6 +536,16 @@ export default function Checkout() {
   const [paymentStatusMessage, setPaymentStatusMessage] = useState("");
   const [displayDetails, setDisplayDetails] =
     useState<CheckoutDisplayDetails | null>(null);
+  const [selectedPaymentProviderId, setSelectedPaymentProviderId] =
+    useState<PaymentProviderId>(() => {
+      const storedProviderId =
+        storedPaymentSession?.paymentProviderId ||
+        checkoutAttempt?.paymentProviderId;
+
+      return storedProviderId === PAYMENT_PROVIDER_IDS.VNPAY
+        ? PAYMENT_PROVIDER_IDS.VNPAY
+        : PAYMENT_PROVIDER_IDS.SEPAY;
+    });
 
   const seatsTotalAmount = useMemo(
     () =>
@@ -647,6 +693,10 @@ export default function Checkout() {
     estimatedTotalAmount - voucherDiscount - pointDiscount,
   );
   const paymentQrUrl = getSepayQrUrl(payment);
+  const isVnpayPayment =
+    selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY ||
+    payment?.paymentProviderName?.toUpperCase() === "VNPAY" ||
+    Boolean(payment?.checkoutUrl);
   const isPaymentExpired = step === "payment" && paymentSeconds <= 0;
   const displayMovieTitle =
     booking?.movieTitle ||
@@ -672,6 +722,105 @@ export default function Checkout() {
   const selectedSeatLabels = selectedSeats.map(
     (seat) => seat.seatCode || `${seat.row}${seat.column}`,
   );
+  const activatePaymentSession = useCallback(
+    (
+      nextBooking: BookingSummary,
+      nextPayment: CreatePaymentResponse,
+      paymentProviderId: PaymentProviderId,
+    ) => {
+      const checkoutUrl =
+        paymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY
+          ? getValidVnpayCheckoutUrl(nextPayment.checkoutUrl)
+          : null;
+
+      if (
+        paymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY &&
+        !checkoutUrl
+      ) {
+        throw new Error(
+          "VNPAY chưa trả về đường dẫn thanh toán hợp lệ. Vui lòng thử lại.",
+        );
+      }
+
+      const fallbackExpiresAt = new Date(
+        Date.now() + PAYMENT_WINDOW_SECONDS * 1000,
+      ).toISOString();
+      const expiresAt = nextPayment.expiresAt || fallbackExpiresAt;
+      const nextSession: PaymentSession = {
+        showtimeId,
+        userKey,
+        paymentProviderId,
+        booking: nextBooking,
+        payment: nextPayment,
+        expiresAt,
+        createdAt: new Date().toISOString(),
+      };
+
+      writePaymentSession(nextSession);
+      removeSeatLockSession(showtimeId, userKey);
+      setSelectedPaymentProviderId(paymentProviderId);
+      setBooking(nextBooking);
+      setPayment(nextPayment);
+      setPaymentExpiresAt(expiresAt);
+      setPaymentSeconds(getSecondsUntil(expiresAt, PAYMENT_WINDOW_SECONDS));
+      setPaymentStatusMessage("");
+      setStep("payment");
+
+      if (checkoutUrl) {
+        window.location.assign(checkoutUrl);
+        return;
+      }
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [showtimeId, userKey],
+  );
+
+  const initializePaymentForBooking = useCallback(
+    async (
+      nextBooking: BookingSummary,
+      paymentProviderId: PaymentProviderId,
+    ) => {
+      if (paymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY) {
+        const response = await paymentService.createVnpayPaymentUrl({
+          bookingId: nextBooking.bookingId,
+          paymentProviderId: PAYMENT_PROVIDER_IDS.VNPAY,
+        });
+
+        if (!response.success) {
+          throw new Error(
+            response.message || "Không thể tạo đường dẫn thanh toán VNPAY.",
+          );
+        }
+
+        activatePaymentSession(
+          nextBooking,
+          toVnpayPaymentResponse(nextBooking, response.data),
+          PAYMENT_PROVIDER_IDS.VNPAY,
+        );
+        return;
+      }
+
+      const response = await paymentService.createSepayPayment({
+        bookingId: nextBooking.bookingId,
+        paymentProviderId: PAYMENT_PROVIDER_IDS.SEPAY,
+      });
+
+      if (!response.success || !response.data?.paymentId) {
+        throw new Error(
+          response.message || "Không thể khởi tạo thanh toán mã QR.",
+        );
+      }
+
+      activatePaymentSession(
+        nextBooking,
+        response.data,
+        PAYMENT_PROVIDER_IDS.SEPAY,
+      );
+    },
+    [activatePaymentSession],
+  );
+
   const redirectHomeAfterPaymentExpired = useCallback(() => {
     hideExpiredBookingFromHistory(booking?.bookingId);
 
@@ -982,47 +1131,28 @@ export default function Checkout() {
 
     const refreshPaymentConfig = async () => {
       try {
-        const response = await paymentService.createPayment({
-          bookingId: booking.bookingId,
-          paymentProviderId: PAYMENT_PROVIDER_ID,
-        });
+        setInitializingPayment(true);
+        setPaymentStatusMessage("");
+        await initializePaymentForBooking(
+          booking,
+          selectedPaymentProviderId,
+        );
 
         if (cancelled) {
           return;
         }
 
         setPaymentConfigRefreshTried(true);
-
-        if (!response.success || !response.data?.paymentId) {
-          setPaymentStatusMessage(
-            response.message || "Không thể tải lại cấu hình thanh toán.",
-          );
-          return;
-        }
-
-        const refreshedPayment = response.data;
-        const expiresAt =
-          refreshedPayment.expiresAt ||
-          paymentExpiresAt ||
-          new Date(Date.now() + PAYMENT_WINDOW_SECONDS * 1000).toISOString();
-
-        setPayment(refreshedPayment);
-        setPaymentExpiresAt(expiresAt);
-        setPaymentSeconds(getSecondsUntil(expiresAt, PAYMENT_WINDOW_SECONDS));
-        writePaymentSession({
-          showtimeId,
-          userKey,
-          booking,
-          payment: refreshedPayment,
-          expiresAt,
-          createdAt: new Date().toISOString(),
-        });
       } catch (error) {
         if (!cancelled) {
           setPaymentConfigRefreshTried(true);
           setPaymentStatusMessage(
             getApiErrorMessage(error, "Không thể tải lại cấu hình thanh toán."),
           );
+        }
+      } finally {
+        if (!cancelled) {
+          setInitializingPayment(false);
         }
       }
     };
@@ -1034,12 +1164,11 @@ export default function Checkout() {
     };
   }, [
     booking,
-    payment,
+    initializePaymentForBooking,
+    payment?.paymentId,
     paymentConfigRefreshTried,
-    paymentExpiresAt,
-    showtimeId,
+    selectedPaymentProviderId,
     step,
-    userKey,
   ]);
 
   useEffect(() => {
@@ -1203,14 +1332,20 @@ export default function Checkout() {
         voucherCode: appliedVoucher?.voucherCode || undefined,
         foodItems: foodItems.length > 0 ? foodItems : undefined,
       };
-      const attempt = checkoutAttempt && isSameCheckoutRequest(checkoutAttempt.request, checkoutPayload)
-        ? checkoutAttempt
-        : {
+      const baseAttempt =
+        checkoutAttempt &&
+        isSameCheckoutRequest(checkoutAttempt.request, checkoutPayload)
+          ? checkoutAttempt
+          : {
           version: 1,
           idempotencyKey: crypto.randomUUID(),
           request: checkoutPayload,
           createdAt: new Date().toISOString(),
         };
+      const attempt: CheckoutAttempt = {
+        ...baseAttempt,
+        paymentProviderId: selectedPaymentProviderId,
+      };
 
       writeCheckoutAttempt(showtimeId, userKey, attempt);
       setCheckoutAttempt(attempt);
@@ -1241,6 +1376,7 @@ export default function Checkout() {
       const bookedAttempt = { ...attempt, bookingId: nextBooking.bookingId };
       writeCheckoutAttempt(showtimeId, userKey, bookedAttempt);
       setCheckoutAttempt(bookedAttempt);
+      activeAttempt = bookedAttempt;
 
       if (checkout.bookingStatus === "PAID" || checkout.totalAmount === 0) {
         removePaymentSession(String(showtimeId), userKey);
@@ -1249,39 +1385,10 @@ export default function Checkout() {
         return;
       }
 
-      const paymentResponse = await paymentService.createPayment({
-        bookingId: nextBooking.bookingId,
-        paymentProviderId: PAYMENT_PROVIDER_ID,
-      });
-
-      if (!paymentResponse.success || !paymentResponse.data?.paymentId) {
-        throw new Error(
-          paymentResponse.message || "Không thể khởi tạo thanh toán.",
-        );
-      }
-
-      const fallbackExpiresAt = new Date(
-        Date.now() + PAYMENT_WINDOW_SECONDS * 1000,
-      ).toISOString();
-      const expiresAt = paymentResponse.data.expiresAt || fallbackExpiresAt;
-
-      const nextSession: PaymentSession = {
-        showtimeId,
-        userKey,
-        booking: nextBooking,
-        payment: paymentResponse.data,
-        expiresAt,
-        createdAt: new Date().toISOString(),
-      };
-
-      writePaymentSession(nextSession);
-      removeSeatLockSession(showtimeId, userKey);
-      setBooking(nextBooking);
-      setPayment(paymentResponse.data);
-      setPaymentExpiresAt(expiresAt);
-      setPaymentSeconds(getSecondsUntil(expiresAt, PAYMENT_WINDOW_SECONDS));
-      setStep("payment");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      await initializePaymentForBooking(
+        nextBooking,
+        selectedPaymentProviderId,
+      );
     } catch (error) {
       if (isNetworkInterruption(error) && activeAttempt) {
         const recovered = await recoverCheckoutAttempt(activeAttempt);
@@ -1289,6 +1396,21 @@ export default function Checkout() {
           setErrorMessage(
             "Kết nối bị gián đoạn. Checkout đã được lưu; hệ thống sẽ đồng bộ lại khi có mạng hoặc khi bạn bấm tiếp tục.",
           );
+        }
+        return;
+      }
+      if (activeAttempt?.bookingId) {
+        setPaymentConfigRefreshTried(true);
+        const recovered = await recoverCheckoutAttempt(activeAttempt);
+        const paymentError = getApiErrorMessage(
+          error,
+          "Không thể khởi tạo phương thức thanh toán.",
+        );
+
+        if (recovered) {
+          setPaymentStatusMessage(paymentError);
+        } else {
+          setErrorMessage(paymentError);
         }
         return;
       }
@@ -1300,6 +1422,30 @@ export default function Checkout() {
       setErrorMessage(getApiErrorMessage(error, "Đã có lỗi xảy ra khi tạo thanh toán."));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleContinueVnpay = async () => {
+    if (!booking || initializingPayment) {
+      return;
+    }
+
+    try {
+      setInitializingPayment(true);
+      setPaymentStatusMessage("");
+      await initializePaymentForBooking(
+        booking,
+        PAYMENT_PROVIDER_IDS.VNPAY,
+      );
+    } catch (error) {
+      setPaymentStatusMessage(
+        getApiErrorMessage(
+          error,
+          "Không thể tạo lại đường dẫn thanh toán VNPAY.",
+        ),
+      );
+    } finally {
+      setInitializingPayment(false);
     }
   };
 
@@ -1351,7 +1497,8 @@ export default function Checkout() {
       <div className="min-h-screen bg-[#182437] px-4 py-6 text-white sm:px-6">
         <div className="mx-auto w-full max-w-[1180px]">
           <p className="mb-5 text-xs font-black text-[#FFD166]">
-            Trang chủ &gt; Đặt vé &gt; Thanh toán QR
+            Trang chủ &gt; Đặt vé &gt;{" "}
+            {isVnpayPayment ? "Thanh toán VNPAY" : "Thanh toán QR"}
           </p>
 
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -1359,16 +1506,18 @@ export default function Checkout() {
               <div className="flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-start md:justify-between">
                 <div>
                   <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#FFD166]">
-                    <FaQrcode />
-                    Thanh toán bằng mã QR
+                    {isVnpayPayment ? <FaCreditCard /> : <FaQrcode />}
+                    {isVnpayPayment
+                      ? "Thanh toán qua VNPAY"
+                      : "Thanh toán bằng mã QR"}
                   </div>
                   <h1 className="mt-2 text-2xl font-black">
                     Cảm ơn bạn đã đặt vé
                   </h1>
                   <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">
-                    Đơn hàng của bạn đã được tạo. Quét mã QR bên dưới bằng ứng dụng
-                    ngân hàng và giữ nguyên nội dung chuyển khoản để hệ thống tự
-                    xác nhận vé.
+                    {isVnpayPayment
+                      ? "Đơn hàng đã được tạo. Bạn sẽ được chuyển sang cổng VNPAY để chọn ngân hàng và hoàn tất thanh toán an toàn."
+                      : "Đơn hàng của bạn đã được tạo. Quét mã QR bên dưới bằng ứng dụng ngân hàng và giữ nguyên nội dung chuyển khoản để hệ thống tự xác nhận vé."}
                   </p>
                 </div>
                 <div className="rounded-md border border-[#FFD166]/30 bg-[#FFD166]/10 px-5 py-3 text-center">
@@ -1383,25 +1532,39 @@ export default function Checkout() {
 
               <div className="mt-7 grid gap-6 xl:grid-cols-[310px_minmax(0,1fr)]">
                 <div className="rounded-lg border border-white/10 bg-[#0D1637] p-4">
-                  <div className="flex aspect-square items-center justify-center rounded-md bg-white p-4">
-                    {paymentQrUrl ? (
-                      <img
-                        src={paymentQrUrl}
-                        alt="QR thanh toán SePay"
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <div className="text-center text-sm font-bold text-slate-700">
-                        QR sẽ hiển thị khi BE có cấu hình ngân hàng.
+                  {isVnpayPayment ? (
+                    <div className="flex aspect-square flex-col items-center justify-center rounded-md border border-blue-300/20 bg-blue-500/10 p-6 text-center">
+                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-blue-400/15 text-4xl text-blue-200">
+                        <FaCreditCard />
                       </div>
-                    )}
-                  </div>
+                      <p className="mt-5 text-lg font-black">Cổng thanh toán VNPAY</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">
+                        Thanh toán bằng thẻ ATM, tài khoản ngân hàng hoặc ứng dụng
+                        hỗ trợ VNPAY.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex aspect-square items-center justify-center rounded-md bg-white p-4">
+                      {paymentQrUrl ? (
+                        <img
+                          src={paymentQrUrl}
+                          alt="QR thanh toán SePay"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <div className="text-center text-sm font-bold text-slate-700">
+                          QR sẽ hiển thị khi BE có cấu hình ngân hàng.
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="mt-4 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-4 py-3">
                     <div className="flex items-start gap-3">
                       <FaRegCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
                       <p className="text-sm font-semibold leading-5 text-emerald-50">
-                        Sau khi thanh toán, vé sẽ được xác nhận tự động. Bạn cũng có
-                        thể bấm kiểm tra nếu ngân hàng đã trừ tiền.
+                        {isVnpayPayment
+                          ? "Sau khi hoàn tất, VNPAY sẽ đưa bạn trở lại G2Cinema để xác nhận và mở vé."
+                          : "Sau khi thanh toán, vé sẽ được xác nhận tự động. Bạn cũng có thể bấm kiểm tra nếu ngân hàng đã trừ tiền."}
                       </p>
                     </div>
                   </div>
@@ -1427,71 +1590,88 @@ export default function Checkout() {
                     </div>
                   </div>
 
-                  <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      Ngân hàng nhận
-                    </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <p className="text-xs text-slate-400">Ngân hàng</p>
-                        <p className="mt-1 font-bold">
-                          {payment?.bankName || "Đang cấu hình"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-400">Chủ tài khoản</p>
-                        <p className="mt-1 font-bold">
-                          {payment?.accountName || "G2Cinema"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      Số tài khoản
-                    </p>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <p className="break-all font-mono text-lg font-black">
-                        {payment?.bankAccount || "Đang cấu hình"}
+                  {isVnpayPayment ? (
+                    <div className="rounded-md border border-blue-400/30 bg-blue-950/30 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">
+                        Phương thức
                       </p>
-                      {payment?.bankAccount && (
-                        <button
-                          type="button"
-                          title="Sao chép số tài khoản"
-                          onClick={() =>
-                            void handleCopy(payment.bankAccount, "account")
-                          }
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white transition hover:border-[#FFD166] hover:text-[#FFD166]"
-                        >
-                          {copiedField === "account" ? <FaCheck /> : <FaCopy />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-md border border-blue-400/30 bg-blue-950/30 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">
-                      Nội dung chuyển khoản
-                    </p>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <p className="break-all font-mono text-xl font-black text-blue-50">
-                        {payment?.transactionCode || "Đang tạo mã giao dịch..."}
+                      <p className="mt-2 text-lg font-black text-blue-50">
+                        VNPAY
                       </p>
-                      {payment?.transactionCode && (
-                        <button
-                          type="button"
-                          title="Sao chép nội dung chuyển khoản"
-                          onClick={() =>
-                            void handleCopy(payment.transactionCode, "content")
-                          }
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-blue-300/40 bg-blue-400/10 text-blue-50 transition hover:bg-blue-400/20"
-                        >
-                          {copiedField === "content" ? <FaCheck /> : <FaCopy />}
-                        </button>
-                      )}
+                      <p className="mt-2 text-sm leading-6 text-slate-300">
+                        G2Cinema không yêu cầu bạn nhập thông tin thẻ trực tiếp
+                        trên trang này.
+                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          Ngân hàng nhận
+                        </p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <p className="text-xs text-slate-400">Ngân hàng</p>
+                            <p className="mt-1 font-bold">
+                              {payment?.bankName || "Đang cấu hình"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400">Chủ tài khoản</p>
+                            <p className="mt-1 font-bold">
+                              {payment?.accountName || "G2Cinema"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border border-white/10 bg-[#0D1637] p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          Số tài khoản
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <p className="break-all font-mono text-lg font-black">
+                            {payment?.bankAccount || "Đang cấu hình"}
+                          </p>
+                          {payment?.bankAccount && (
+                            <button
+                              type="button"
+                              title="Sao chép số tài khoản"
+                              onClick={() =>
+                                void handleCopy(payment.bankAccount, "account")
+                              }
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white transition hover:border-[#FFD166] hover:text-[#FFD166]"
+                            >
+                              {copiedField === "account" ? <FaCheck /> : <FaCopy />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border border-blue-400/30 bg-blue-950/30 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">
+                          Nội dung chuyển khoản
+                        </p>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <p className="break-all font-mono text-xl font-black text-blue-50">
+                            {payment?.transactionCode || "Đang tạo mã giao dịch..."}
+                          </p>
+                          {payment?.transactionCode && (
+                            <button
+                              type="button"
+                              title="Sao chép nội dung chuyển khoản"
+                              onClick={() =>
+                                void handleCopy(payment.transactionCode, "content")
+                              }
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-blue-300/40 bg-blue-400/10 text-blue-50 transition hover:bg-blue-400/20"
+                            >
+                              {copiedField === "content" ? <FaCheck /> : <FaCopy />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {paymentStatusMessage && (
                     <p className="rounded-md border border-amber-500/30 bg-amber-950/40 px-4 py-3 text-sm font-bold text-amber-100">
@@ -1507,15 +1687,33 @@ export default function Checkout() {
               </div>
 
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => void handleCheckPaymentStatus()}
-                  disabled={checkingPayment || cancellingBooking}
-                  className="flex items-center justify-center gap-2 rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  <FaSyncAlt className={checkingPayment ? "animate-spin" : ""} />
-                  {checkingPayment ? "Đang kiểm tra..." : "Tôi đã thanh toán"}
-                </button>
+                {isVnpayPayment ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleContinueVnpay()}
+                    disabled={initializingPayment || cancellingBooking}
+                    className="flex items-center justify-center gap-2 rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {initializingPayment ? (
+                      <FaSyncAlt className="animate-spin" />
+                    ) : (
+                      <FaCreditCard />
+                    )}
+                    {initializingPayment
+                      ? "Đang tạo liên kết..."
+                      : "Tiếp tục đến VNPAY"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleCheckPaymentStatus()}
+                    disabled={checkingPayment || cancellingBooking}
+                    className="flex items-center justify-center gap-2 rounded-md bg-gradient-to-r from-[#FFD166] to-[#FFE7A3] px-5 py-3 text-center text-xs font-black uppercase tracking-wider text-black transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    <FaSyncAlt className={checkingPayment ? "animate-spin" : ""} />
+                    {checkingPayment ? "Đang kiểm tra..." : "Tôi đã thanh toán"}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setCancelDialogOpen(true)}
@@ -1871,14 +2069,84 @@ export default function Checkout() {
                 Phương thức thanh toán
               </div>
               <p className="mb-3 text-xs font-bold text-slate-300">
-                Chọn thẻ thanh toán
+                Chọn phương thức phù hợp với bạn
               </p>
-              <div className="flex w-fit items-center gap-3 rounded-md border border-blue-400 bg-blue-500/10 px-4 py-3">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full border border-blue-300">
-                  <span className="h-2 w-2 rounded-full bg-blue-400" />
-                </span>
-                <FaQrcode className="h-7 w-7 text-white" />
-                <span className="text-sm font-black">Mã QR</span>
+              <div
+                role="radiogroup"
+                aria-label="Phương thức thanh toán"
+                className="grid max-w-xl gap-3 sm:grid-cols-2"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={
+                    selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.SEPAY
+                  }
+                  onClick={() => {
+                    setSelectedPaymentProviderId(PAYMENT_PROVIDER_IDS.SEPAY);
+                    setErrorMessage("");
+                  }}
+                  className={`flex min-h-20 items-center gap-3 rounded-md border px-4 py-3 text-left transition ${
+                    selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.SEPAY
+                      ? "border-blue-300 bg-blue-500/15 shadow-[0_0_0_1px_rgba(147,197,253,0.2)]"
+                      : "border-white/15 bg-white/5 hover:border-white/30 hover:bg-white/10"
+                  }`}
+                >
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.SEPAY
+                        ? "border-blue-300"
+                        : "border-slate-500"
+                    }`}
+                  >
+                    {selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.SEPAY && (
+                      <span className="h-2 w-2 rounded-full bg-blue-400" />
+                    )}
+                  </span>
+                  <FaQrcode className="h-7 w-7 shrink-0 text-white" />
+                  <span>
+                    <span className="block text-sm font-black">Mã QR</span>
+                    <span className="mt-0.5 block text-[11px] text-slate-400">
+                      Quét bằng ứng dụng ngân hàng
+                    </span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={
+                    selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY
+                  }
+                  onClick={() => {
+                    setSelectedPaymentProviderId(PAYMENT_PROVIDER_IDS.VNPAY);
+                    setErrorMessage("");
+                  }}
+                  className={`flex min-h-20 items-center gap-3 rounded-md border px-4 py-3 text-left transition ${
+                    selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY
+                      ? "border-[#FFD166] bg-[#FFD166]/10 shadow-[0_0_0_1px_rgba(255,209,102,0.18)]"
+                      : "border-white/15 bg-white/5 hover:border-white/30 hover:bg-white/10"
+                  }`}
+                >
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY
+                        ? "border-[#FFD166]"
+                        : "border-slate-500"
+                    }`}
+                  >
+                    {selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY && (
+                      <span className="h-2 w-2 rounded-full bg-[#FFD166]" />
+                    )}
+                  </span>
+                  <FaCreditCard className="h-7 w-7 shrink-0 text-white" />
+                  <span>
+                    <span className="block text-sm font-black">VNPAY</span>
+                    <span className="mt-0.5 block text-[11px] text-slate-400">
+                      Thanh toán qua cổng VNPAY
+                    </span>
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -2004,7 +2272,15 @@ export default function Checkout() {
                   : "bg-[#FFD166] text-white hover:bg-[#FFE7A3] hover:text-slate-950"
                   }`}
               >
-                {!freshCheckoutReady ? "Đang chuẩn bị..." : submitting ? "Đang tạo..." : "Tiếp tục"}
+                {!freshCheckoutReady
+                  ? "Đang chuẩn bị..."
+                  : submitting
+                    ? selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY
+                      ? "Đang chuyển..."
+                      : "Đang tạo..."
+                    : selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY
+                      ? "Thanh toán VNPAY"
+                      : "Tiếp tục"}
               </button>
             </div>
           </aside>

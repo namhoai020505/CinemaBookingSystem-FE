@@ -7,6 +7,7 @@ export type CheckoutAttempt = {
   idempotencyKey: string;
   request: CheckoutPayload;
   bookingId?: string;
+  paymentProviderId?: string;
   createdAt: string;
 };
 

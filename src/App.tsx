@@ -77,6 +77,7 @@ const router = createBrowserRouter([
           { path: '/cinema-schedule', element: <CinemaSchedule /> },
           { path: '/movies', element: <Movies /> },
           { path: '/movie/:movieId/showtimes', element: <MovieShowtimes /> },
+          { path: '/vnpay-return', element: <VnpayReturn /> },
           { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
           { path: '/booking/confirm-time-change', element: <ConfirmTimeChangePage /> },
           {
@@ -84,7 +85,6 @@ const router = createBrowserRouter([
             children: [
               { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
               { path: '/booking/checkout/:showtimeId', element: <Checkout /> },
-              { path: '/vnpay-return', element: <VnpayReturn /> },
               { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
               { path: '/my-bookings', element: <MyBookings /> },
               { path: '/my-vouchers', element: <MyVouchers /> },

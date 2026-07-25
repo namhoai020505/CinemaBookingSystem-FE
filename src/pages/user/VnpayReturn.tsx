@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaCheckCircle, FaExclamationTriangle, FaSpinner, FaArrowRight } from "react-icons/fa";
 import { paymentService } from "../../services/paymentService";
-import { removeCheckoutAttempt } from "../../services/checkoutAttempt";
 
 // DTO types for payment sessions stored in local storage
 type PaymentSession = {
@@ -21,8 +20,24 @@ type PaymentSession = {
     paymentId: string;
     amount: number;
     transactionCode: string;
+    checkoutUrl?: string | null;
   };
   expiresAt: string;
+};
+
+const getApiErrorMessage = (error: unknown) => {
+  if (typeof error === "object" && error && "response" in error) {
+    const response = (error as { response?: { data?: { message?: string } } })
+      .response;
+
+    if (response?.data?.message) {
+      return response.data.message;
+    }
+  }
+
+  return error instanceof Error
+    ? error.message
+    : "Đã xảy ra lỗi kết nối với máy chủ khi xác thực chữ ký VNPay.";
 };
 
 // Scan local storage to find the payment session matching our transaction code (vnp_TxnRef)
@@ -73,6 +88,7 @@ export default function VnpayReturn() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
+  const [returnBookingId, setReturnBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -86,6 +102,7 @@ export default function VnpayReturn() {
 
       const txnRef = params["vnp_TxnRef"];
       const responseCode = params["vnp_ResponseCode"];
+      const transactionStatus = params["vnp_TransactionStatus"];
 
       if (!txnRef) {
         if (active) {
@@ -104,41 +121,38 @@ export default function VnpayReturn() {
 
         if (!active) return;
 
-        if (result.success && result.data.responseCode === "00") {
+        const verifiedResponseCode = result.data?.responseCode || responseCode;
+        const verifiedTransactionStatus =
+          result.data?.transactionStatus || transactionStatus;
+        const isSuccessful =
+          result.success &&
+          verifiedResponseCode === "00" &&
+          verifiedTransactionStatus === "00";
+
+        if (isSuccessful) {
           // Thanh toán thành công!
           setStatus("success");
+          setReturnBookingId(matched?.session.booking.bookingId || null);
 
-          // Xóa session thanh toán tạm để tránh lặp lại
-          if (matched) {
-            localStorage.removeItem(matched.storageKey);
-            removeCheckoutAttempt(matched.session.showtimeId, matched.session.userKey);
-          }
-
-          // Điều hướng ngay sang màn hình Booking thành công
-          const bookingId = matched?.session.booking.bookingId || result.data.transactionCode;
-          setTimeout(() => {
-            navigate(`/booking/success/${bookingId}`, { replace: true });
-          }, 1500);
+          // BookingSuccess sẽ chỉ xóa session sau khi trạng thái booking là PAID.
+          // Giữ session ở đây để không làm mất khả năng tiếp tục nếu IPN đến chậm.
         } else {
           // Thanh toán thất bại hoặc bị hủy bỏ
           setStatus("error");
-          const code = result.data?.responseCode || responseCode || "UNKNOWN";
-          setErrorMessage(getVnpayErrorDescription(code));
+          const code = verifiedResponseCode || "UNKNOWN";
+          setErrorMessage(
+            code === "00" && verifiedTransactionStatus !== "00"
+              ? "Ngân hàng chưa xác nhận giao dịch thành công."
+              : getVnpayErrorDescription(code),
+          );
 
-          // Xóa session thanh toán vì vé đã bị hủy bên BE (hoặc sẽ bị hủy bởi IPN)
-          if (matched) {
-            localStorage.removeItem(matched.storageKey);
-            removeCheckoutAttempt(matched.session.showtimeId, matched.session.userKey);
-          }
+          // Giữ lại session để người dùng có thể quay lại và thử thanh toán lần nữa.
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (!active) return;
         console.error("Xác minh VNPay thất bại:", error);
         setStatus("error");
-        setErrorMessage(
-          error.response?.data?.message ||
-            "Đã xảy ra lỗi kết nối với máy chủ khi xác thực chữ ký VNPay."
-        );
+        setErrorMessage(getApiErrorMessage(error));
       }
     };
 
@@ -171,8 +185,26 @@ export default function VnpayReturn() {
               Thanh toán thành công!
             </h1>
             <p className="text-xs text-slate-400">
-              Giao dịch đã được xác nhận. Hệ thống đang tạo mã QR vé cho bạn...
+              Giao dịch đã được VNPAY xác nhận. Bạn có thể mở đơn đặt vé để xem
+              trạng thái phát hành vé.
             </p>
+            <div className="mt-4 grid w-full gap-2 border-t border-white/10 pt-4">
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    returnBookingId
+                      ? `/booking/success/${returnBookingId}`
+                      : "/my-bookings",
+                    { replace: true },
+                  )
+                }
+                className="flex items-center justify-center gap-2 rounded-lg bg-[#FFD166] px-5 py-3 text-xs font-black uppercase text-black transition hover:bg-[#FFE7A3]"
+              >
+                {returnBookingId ? "Xem vé của tôi" : "Mở danh sách vé"}
+                <FaArrowRight className="h-3 w-3" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -190,6 +222,13 @@ export default function VnpayReturn() {
               </p>
             </div>
             <div className="mt-4 w-full border-t border-white/10 pt-4 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => navigate("/my-bookings", { replace: true })}
+                className="rounded-lg border border-white/15 bg-white/5 px-5 py-3 text-xs font-black uppercase text-white transition hover:bg-white/10"
+              >
+                Kiểm tra vé của tôi
+              </button>
               <button
                 type="button"
                 onClick={() => navigate("/", { replace: true })}
