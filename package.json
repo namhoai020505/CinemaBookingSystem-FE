@@ -7,10 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@microsoft/signalr": "^10.0.0",
     "@react-oauth/google": "^0.13.5",
     "@tailwindcss/vite": "^4.3.0",
     "@zxing/browser": "^0.2.1",

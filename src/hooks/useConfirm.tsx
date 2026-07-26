@@ -6,7 +6,7 @@ type ConfirmOptions = {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel?: () => void;
 };
 
@@ -24,7 +24,7 @@ export function useConfirm() {
     if (options?.onConfirm) {
       // If the onConfirm function returns a promise, we can show a loading state
       const result = options.onConfirm();
-      if (result instanceof Promise) {
+      if (result && typeof result.then === 'function') {
         setIsLoading(true);
         try {
           await result;

@@ -37,6 +37,7 @@ const StaffLayout = () => {
   const location = useLocation();
   const profile = getCurrentUserProfile();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<StaffThemeMode>(getInitialTheme);
   const isLightMode = themeMode === 'light';
   const currentRouteMeta = staffRouteMeta[location.pathname] ?? staffRouteMeta['/staff/ticket-scanner'];
@@ -50,6 +51,15 @@ const StaffLayout = () => {
     localStorage.setItem(THEME_STORAGE_KEY, themeMode);
   }, [isLightMode, themeMode]);
 
+  const handleSidebarToggle = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setMobileSidebarOpen((current) => !current);
+      return;
+    }
+
+    setSidebarCollapsed((current) => !current);
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate('/');
@@ -61,6 +71,15 @@ const StaffLayout = () => {
         isLightMode ? 'bg-slate-100 text-slate-950' : 'bg-[#07111E] text-white'
       }`}
     >
+      {mobileSidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close staff menu"
+          className="fixed inset-0 z-30 bg-black/55 backdrop-blur-[2px] lg:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       <aside
         className={[
           'fixed inset-y-0 left-0 z-40 flex h-dvh shrink-0 flex-col overflow-hidden border-r transition-all duration-200 lg:relative lg:inset-auto lg:h-screen',
@@ -68,8 +87,9 @@ const StaffLayout = () => {
             ? 'border-slate-200 bg-white shadow-[12px_0_34px_rgba(15,23,42,0.08)]'
             : 'border-white/10 bg-[#07111E] shadow-[12px_0_34px_rgba(0,0,0,0.34)]',
           sidebarCollapsed
-            ? 'w-0 -translate-x-full lg:w-20 lg:translate-x-0'
-            : 'w-72 translate-x-0',
+            ? 'w-72 -translate-x-full lg:w-20 lg:translate-x-0'
+            : 'w-72',
+          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         ].join(' ')}
       >
         <div className={`flex min-h-[72px] items-center gap-3 border-b px-5 ${
@@ -105,6 +125,7 @@ const StaffLayout = () => {
 
           <NavLink
             to="/staff/ticket-scanner"
+            onClick={() => setMobileSidebarOpen(false)}
             title={sidebarCollapsed ? 'Soát vé' : 'Soát vé tại quầy'}
             className={({ isActive }) =>
               [
@@ -128,6 +149,7 @@ const StaffLayout = () => {
 
           <NavLink
             to="/staff/fb-counter"
+            onClick={() => setMobileSidebarOpen(false)}
             title={sidebarCollapsed ? 'Bắp nước' : 'Bán bắp nước tại quầy'}
             className={({ isActive }) =>
               [
@@ -147,6 +169,7 @@ const StaffLayout = () => {
 
           <NavLink
             to="/staff/schedule"
+            onClick={() => setMobileSidebarOpen(false)}
             title={sidebarCollapsed ? 'Lịch trực' : 'Lịch ca trực cá nhân'}
             className={({ isActive }) =>
               [
@@ -205,7 +228,7 @@ const StaffLayout = () => {
         >
           <button
             type="button"
-            onClick={() => setSidebarCollapsed((current) => !current)}
+            onClick={handleSidebarToggle}
             className={[
               'grid h-10 w-10 shrink-0 place-items-center rounded-lg border transition',
               isLightMode
