@@ -1,6 +1,14 @@
 import api from '../lib/api';
 import { roomService, type CinemaResponse, type RoomResponse } from './roomService';
 import type { ShowtimeResponse } from './showtimeService';
+import {
+  parseScanTicketResponse,
+  ticketScanEndpoints,
+  type ConfirmTicketScanRequest,
+  type ScanTicketFoodAndBeverageItem,
+  type ScanTicketRequest,
+  type ScanTicketResponse,
+} from './scanTicketContract';
 
 type ApiEnvelope<T> = {
   success?: boolean;
@@ -54,38 +62,11 @@ export type RefundItem = {
   refundedAt?: string | null;
 };
 
-export type ScanTicketRequest = {
-  qrCode: string;
-  roomId: string;
-};
-
-export type ScanTicketFoodAndBeverageItem = {
-  fbItemId: string;
-  itemName: string;
-  quantity: number;
-  unitPrice: number;
-  subtotal: number;
-};
-
-export type ScanTicketResponse = {
-  ticketId: string;
-  ticketStatus: string;
-  checkInLogId: string;
-  scanTime: string;
-  bookingId: string;
-  customerName: string;
-  customerPhone?: string | null;
-  cinemaId: string;
-  cinemaName: string;
-  roomId: string;
-  roomName: string;
-  showtimeId: string;
-  showtimeStartTime: string;
-  showtimeEndTime: string;
-  movieTitle: string;
-  seatCode: string;
-  seatCodes?: string[];
-  foodAndBeverageItems?: ScanTicketFoodAndBeverageItem[];
+export type {
+  ConfirmTicketScanRequest,
+  ScanTicketFoodAndBeverageItem,
+  ScanTicketRequest,
+  ScanTicketResponse,
 };
 
 const unwrap = <T>(response: ApiEnvelope<T>) => response?.data as T;
@@ -130,8 +111,18 @@ export const managerService = {
     };
   },
 
+  previewTicket: async (payload: ScanTicketRequest): Promise<ScanTicketResponse> => {
+    const response = (await api.post(ticketScanEndpoints.preview, payload)) as unknown as ApiEnvelope<ScanTicketResponse>;
+    return parseScanTicketResponse(unwrap(response));
+  },
+
+  confirmTicket: async (payload: ConfirmTicketScanRequest): Promise<ScanTicketResponse> => {
+    const response = (await api.post(ticketScanEndpoints.confirm, payload)) as unknown as ApiEnvelope<ScanTicketResponse>;
+    return parseScanTicketResponse(unwrap(response));
+  },
+
   scanTicket: async (payload: ScanTicketRequest): Promise<ScanTicketResponse> => {
-    const response = (await api.post('/api/tickets/scan', payload)) as unknown as ApiEnvelope<ScanTicketResponse>;
-    return unwrap(response);
+    const response = (await api.post(ticketScanEndpoints.legacyScan, payload)) as unknown as ApiEnvelope<ScanTicketResponse>;
+    return parseScanTicketResponse(unwrap(response));
   },
 };

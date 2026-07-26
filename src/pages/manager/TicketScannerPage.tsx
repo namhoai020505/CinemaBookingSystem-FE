@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { FaBarcode, FaCamera, FaCheckCircle, FaHistory, FaPrint, FaQrcode, FaStopCircle, FaTimesCircle, FaUtensils, FaUser } from 'react-icons/fa';
+import { FaBarcode, FaCamera, FaCheckCircle, FaHistory, FaPrint, FaQrcode, FaStopCircle, FaTimesCircle, FaUtensils, FaUser, FaWifi } from 'react-icons/fa';
 import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser';
 import type { ManagerOutletContext } from '../../layouts/manager/ManagerLayout';
 import { managerService, type ScanTicketResponse } from '../../services/managerService';
 import { compensationService } from '../../services/compensationService';
 import type { RoomResponse } from '../../services/roomService';
+import { buildConfirmTicketScanRequest } from '../../services/scanTicketContract';
+import { useTicketHub } from '../../hooks/useTicketHub';
 import {
   formatDateTime,
   getApiErrorMessage,
@@ -47,8 +49,23 @@ const TicketScannerPage = () => {
   const [roomError, setRoomError] = useState('');
   const [scanError, setScanError] = useState('');
   const [lastScan, setLastScan] = useState<ScanTicketResponse | null>(null);
-  const [ticketModal, setTicketModal] = useState<ScanTicketResponse | null>(null);
+  const [localTicketModal, setLocalTicketModal] = useState<ScanTicketResponse | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmError, setConfirmError] = useState('');
   const [history, setHistory] = useState<ScanHistoryItem[]>([]);
+
+  // ── SignalR: nhận vé từ Mobile ──────────────────────────────────────────────
+  const { scannedTicket, clearScannedTicket, hubStatus } = useTicketHub();
+  const ticketModal = localTicketModal ?? scannedTicket;
+  const ticketModalConfirmed = ticketModal?.ticketStatus === 'CHECKED_IN';
+
+  // Khi Mobile quét thành công → Backend → SignalR → hook → mở popup tự động
+  const closeTicketModal = useCallback(() => {
+    setLocalTicketModal(null);
+    setConfirmError('');
+    clearScannedTicket();
+  }, [clearScannedTicket]);
+  // ───────────────────────────────────────────────────────────────────────────
 
   const [activeMode, setActiveMode] = useState<'SCAN_TICKET' | 'REDEEM_COMBO'>('SCAN_TICKET');
   const activeModeRef = useRef(activeMode);
@@ -204,16 +221,16 @@ const TicketScannerPage = () => {
 
     try {
       setScanLoading(true);
-      const result = await managerService.scanTicket({
+      const result = await managerService.previewTicket({
         roomId: selectedRoomId,
         qrCode: normalizedQrCode,
       });
       setLastScan(result);
-      setTicketModal(result);
+      setLocalTicketModal(result);
       setQrCode('');
-      addHistory({ success: true, message: 'Vé hợp lệ', result });
+      addHistory({ success: true, message: 'Vé hợp lệ, đang chờ xác nhận', result });
     } catch (error) {
-      const message = getApiErrorMessage(error, 'Không soát được vé. Kiểm tra lại mã hoặc phòng chiếu.');
+      const message = getApiErrorMessage(error, 'Không kiểm tra được vé. Kiểm tra lại mã hoặc phòng chiếu.');
       setQrCode(normalizedQrCode);
       setScanError(message);
       addHistory({ success: false, message });
@@ -221,6 +238,28 @@ const TicketScannerPage = () => {
       setScanLoading(false);
     }
   }
+
+  const confirmTicket = async (ticket: ScanTicketResponse) => {
+    if (confirmLoading || ticketModalConfirmed) {
+      return;
+    }
+
+    try {
+      setConfirmLoading(true);
+      setConfirmError('');
+      const result = await managerService.confirmTicket(buildConfirmTicketScanRequest(ticket));
+      setLastScan(result);
+      setLocalTicketModal(result);
+      clearScannedTicket();
+      addHistory({ success: true, message: 'Vé đã được xác nhận check-in', result });
+    } catch (error) {
+      const message = getApiErrorMessage(error, 'Không xác nhận được vé. Vui lòng kiểm tra lại trạng thái vé.');
+      setConfirmError(message);
+      addHistory({ success: false, message });
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
 
   const redeemComboCode = async (code: string) => {
     if (!code.trim()) {
@@ -264,7 +303,32 @@ const TicketScannerPage = () => {
       title="Soát vé tại rạp"
       description="Chọn đúng phòng chiếu rồi quét QR hoặc nhập mã vé thủ công. Backend sẽ xác thực vé có thuộc phòng, suất chiếu và trạng thái hợp lệ hay không."
       isLightMode={isLightMode}
-      action={selectedRoom ? <StatusBadge status={selectedRoom.roomName} /> : undefined}
+      action={
+        <div className="flex items-center gap-2">
+          {selectedRoom ? <StatusBadge status={selectedRoom.roomName} /> : null}
+          {/* Badge trạng thái kết nối SignalR – nhỏ, không gây mất tập trung */}
+          <span
+            title={`SignalR: ${hubStatus}`}
+            className={[
+              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest transition-colors',
+              hubStatus === 'connected'
+                ? 'bg-emerald-500/15 text-emerald-400'
+                : hubStatus === 'connecting' || hubStatus === 'reconnecting'
+                  ? 'bg-amber-500/15 text-amber-400'
+                  : 'bg-rose-500/15 text-rose-400',
+            ].join(' ')}
+          >
+            <FaWifi className="text-[9px]" />
+            {hubStatus === 'connected'
+              ? 'Live'
+              : hubStatus === 'connecting'
+                ? 'Đang kết nối'
+                : hubStatus === 'reconnecting'
+                  ? 'Reconnecting'
+                  : 'Offline'}
+          </span>
+        </div>
+      }
     >
       {loadingRooms ? (
         <StatePanel type="loading" title="Đang tải phòng chiếu" description="Đang lấy danh sách phòng thuộc phạm vi rạp của bạn." isLightMode={isLightMode} />
@@ -409,7 +473,7 @@ const TicketScannerPage = () => {
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <p><strong>Phim:</strong> {lastScan.movieTitle}</p>
-                    <p><strong>Ghế:</strong> {lastScan.seatCode}</p>
+                    <p><strong>Ghế:</strong> {lastScan.seatCodes.join(', ')}</p>
                     <p><strong>Phòng:</strong> {lastScan.roomName}</p>
                     <p><strong>Giờ chiếu:</strong> {formatDateTime(lastScan.showtimeStartTime)}</p>
                   </div>
@@ -456,7 +520,7 @@ const TicketScannerPage = () => {
                       </span>
                     </div>
                     <p className={`mt-2 text-sm ${isLightMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                      {item.result ? `${item.result.movieTitle} - ghế ${item.result.seatCode}` : item.message}
+                      {item.result ? `${item.result.movieTitle} - ghế ${item.result.seatCodes.join(', ')}` : item.message}
                     </p>
                   </article>
                 ))}
@@ -474,7 +538,9 @@ const TicketScannerPage = () => {
                   <FaCheckCircle />
                 </span>
                 <div>
-                  <p className="text-xs font-black uppercase tracking-wider text-emerald-400">Vé đã xác nhận</p>
+                  <p className="text-xs font-black uppercase tracking-wider text-emerald-400">
+                    {ticketModalConfirmed ? 'Vé đã xác nhận' : 'Vé chờ xác nhận'}
+                  </p>
                   <h2 className="mt-1 text-xl font-black">{ticketModal.movieTitle}</h2>
                   <p className={`mt-1 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                     {formatDateTime(ticketModal.showtimeStartTime)}
@@ -483,7 +549,7 @@ const TicketScannerPage = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setTicketModal(null)}
+                onClick={closeTicketModal}
                 className={`grid h-9 w-9 place-items-center rounded-lg border text-sm font-black transition ${isLightMode ? 'border-slate-200 text-slate-500 hover:bg-slate-100' : 'border-white/10 text-slate-300 hover:bg-white/10'}`}
                 aria-label="Đóng popup"
               >
@@ -497,7 +563,7 @@ const TicketScannerPage = () => {
                   <FaUser />
                   Khách hàng
                 </div>
-                <p className="mt-3 text-lg font-black">{ticketModal.customerName || 'Khách vãng lai'}</p>
+                <p className="mt-3 text-lg font-black">{ticketModal.customerName || 'Chưa có thông tin khách'}</p>
                 <p className={`mt-1 text-sm ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                   {ticketModal.customerPhone || 'Chưa có số điện thoại'}
                 </p>
@@ -512,7 +578,7 @@ const TicketScannerPage = () => {
               <div className={`rounded-lg border p-4 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'}`}>
                 <div className="text-sm font-black uppercase text-cyan-300">Ghế đã đặt</div>
                 <p className="mt-3 text-lg font-black">
-                  {(ticketModal.seatCodes?.length ? ticketModal.seatCodes : [ticketModal.seatCode]).join(', ')}
+                  {ticketModal.seatCodes.join(', ')}
                 </p>
               </div>
 
@@ -526,7 +592,7 @@ const TicketScannerPage = () => {
                   <FaUtensils />
                   F&B của vé
                 </div>
-                {ticketModal.foodAndBeverageItems?.length ? (
+                {ticketModal.foodAndBeverageItems.length ? (
                   <div className={`mt-3 divide-y ${isLightMode ? 'divide-slate-200' : 'divide-white/10'}`}>
                     {ticketModal.foodAndBeverageItems.map((item) => (
                       <div key={item.fbItemId} className="flex items-center justify-between gap-4 py-3 text-sm">
@@ -544,14 +610,31 @@ const TicketScannerPage = () => {
               </div>
             </div>
 
-            <div className={`flex justify-end border-t p-5 ${isLightMode ? 'border-slate-200' : 'border-white/10'}`}>
+            {confirmError ? (
+              <div className={`mx-5 mb-5 flex items-start gap-3 rounded-lg border p-4 text-sm font-bold ${isLightMode ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-rose-400/30 bg-rose-500/10 text-rose-200'}`}>
+                <FaTimesCircle className="mt-0.5 shrink-0" />
+                <span>{confirmError}</span>
+              </div>
+            ) : null}
+
+            <div className={`flex justify-end gap-3 border-t p-5 ${isLightMode ? 'border-slate-200' : 'border-white/10'}`}>
+              {ticketModalConfirmed ? (
+                <button
+                  type="button"
+                  onClick={closeTicketModal}
+                  className={`inline-flex h-11 items-center justify-center rounded-lg border px-5 text-sm font-black transition ${isLightMode ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/10'}`}
+                >
+                  Đóng
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={() => setTicketModal(null)}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-500"
+                onClick={() => void confirmTicket(ticketModal)}
+                disabled={confirmLoading || ticketModalConfirmed}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <FaPrint />
-                In vé
+                {ticketModalConfirmed ? 'Đã xác nhận' : confirmLoading ? 'Đang xác nhận...' : 'In vé / xác nhận'}
               </button>
             </div>
           </section>
