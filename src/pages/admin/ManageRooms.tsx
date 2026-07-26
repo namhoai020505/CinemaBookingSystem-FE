@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { roomService } from '../../services/roomService';
 import type { RoomResponse, CinemaResponse, CreateRoomPayload } from '../../services/roomService';
 import { TEXT } from '../../constants/vi';
+import { confirmWithPopup } from '../../services/confirmDialogService';
 
 const ROOM_STATUS_OPTIONS = [
   { value: 'ACTIVE', label: TEXT.ROOM.STATUS_ACTIVE, color: 'emerald' },
@@ -171,7 +172,12 @@ export default function ManageRooms() {
 
   // Ngừng hoạt động phòng (xóa mềm) thay vì xóa hoàn toàn khỏi DB
   const handleDelete = async (room: RoomResponse) => {
-    const confirmed = window.confirm(TEXT.ROOM.CONFIRM_DEACTIVATE.replace("{0}", room.roomName));
+    const confirmed = await confirmWithPopup({
+      title: "Ngừng hoạt động phòng?",
+      message: TEXT.ROOM.CONFIRM_DEACTIVATE.replace("{0}", room.roomName),
+      confirmLabel: "Ngừng hoạt động",
+      cancelLabel: "Giữ lại",
+    });
     if (!confirmed) return;
 
     try {
@@ -191,7 +197,12 @@ export default function ManageRooms() {
   };
 
   const handleReactivate = async (room: RoomResponse) => {
-    const confirmed = window.confirm(`Bạn có chắc chắn muốn kích hoạt lại phòng "${room.roomName}"?`);
+    const confirmed = await confirmWithPopup({
+      title: "Kích hoạt lại phòng?",
+      message: `Bạn có chắc chắn muốn kích hoạt lại phòng "${room.roomName}"?`,
+      confirmLabel: "Kích hoạt",
+      cancelLabel: "Quay lại",
+    });
     if (!confirmed) return;
 
     try {

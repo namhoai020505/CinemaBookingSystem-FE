@@ -26,6 +26,8 @@ const staffErrorMessages: Record<string, string> = {
   VALIDATION_ERROR: TEXT.STAFF.ERR_VALIDATION,
 };
 
+const DIRECTORY_PAGE_SIZE = 10;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
@@ -137,6 +139,7 @@ export default function ManageStaff() {
   const [directoryUsers, setDirectoryUsers] = useState<UserDirectoryItem[]>(INITIAL_DIRECTORY_USERS);
   const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | 'STAFF' | 'MANAGER' | 'CUSTOMER'>('ALL');
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userPage, setUserPage] = useState(1);
   const [selectedUserDetail, setSelectedUserDetail] = useState<UserDirectoryItem | null>(null);
 
   useEffect(() => {
@@ -320,6 +323,18 @@ export default function ManageStaff() {
     setIsCinemaMenuOpen(false);
   };
 
+  const handleUserRoleFilterChange = (
+    nextFilter: 'ALL' | 'STAFF' | 'MANAGER' | 'CUSTOMER',
+  ) => {
+    setUserRoleFilter(nextFilter);
+    setUserPage(1);
+  };
+
+  const handleUserSearchChange = (value: string) => {
+    setUserSearchQuery(value);
+    setUserPage(1);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
@@ -393,6 +408,27 @@ export default function ManageStaff() {
       );
     });
   }, [directoryUsers, userRoleFilter, userSearchQuery]);
+
+  const totalUserPages = Math.max(
+    1,
+    Math.ceil(filteredDirectoryUsers.length / DIRECTORY_PAGE_SIZE),
+  );
+  const currentUserPage = Math.min(userPage, totalUserPages);
+  const paginatedDirectoryUsers = useMemo(() => {
+    const startIndex = (currentUserPage - 1) * DIRECTORY_PAGE_SIZE;
+    return filteredDirectoryUsers.slice(
+      startIndex,
+      startIndex + DIRECTORY_PAGE_SIZE,
+    );
+  }, [currentUserPage, filteredDirectoryUsers]);
+  const firstVisibleUserIndex =
+    filteredDirectoryUsers.length === 0
+      ? 0
+      : (currentUserPage - 1) * DIRECTORY_PAGE_SIZE + 1;
+  const lastVisibleUserIndex = Math.min(
+    currentUserPage * DIRECTORY_PAGE_SIZE,
+    filteredDirectoryUsers.length,
+  );
 
   return (
     <div className="min-h-screen bg-[#0A0A0C] p-6 font-['Urbanist'] text-white">
@@ -655,7 +691,7 @@ export default function ManageStaff() {
             <div className="flex flex-wrap gap-2 text-xs font-bold">
               <button
                 type="button"
-                onClick={() => setUserRoleFilter('ALL')}
+                onClick={() => handleUserRoleFilterChange('ALL')}
                 className={`rounded-lg px-3 py-1.5 transition ${
                   userRoleFilter === 'ALL'
                     ? 'bg-[#4318FF] text-white font-bold'
@@ -667,7 +703,7 @@ export default function ManageStaff() {
 
               <button
                 type="button"
-                onClick={() => setUserRoleFilter('STAFF')}
+                onClick={() => handleUserRoleFilterChange('STAFF')}
                 className={`rounded-lg px-3 py-1.5 transition ${
                   userRoleFilter === 'STAFF'
                     ? 'bg-emerald-600 text-white font-bold'
@@ -679,7 +715,7 @@ export default function ManageStaff() {
 
               <button
                 type="button"
-                onClick={() => setUserRoleFilter('MANAGER')}
+                onClick={() => handleUserRoleFilterChange('MANAGER')}
                 className={`rounded-lg px-3 py-1.5 transition ${
                   userRoleFilter === 'MANAGER'
                     ? 'bg-purple-600 text-white font-bold'
@@ -691,7 +727,7 @@ export default function ManageStaff() {
 
               <button
                 type="button"
-                onClick={() => setUserRoleFilter('CUSTOMER')}
+                onClick={() => handleUserRoleFilterChange('CUSTOMER')}
                 className={`rounded-lg px-3 py-1.5 transition ${
                   userRoleFilter === 'CUSTOMER'
                     ? 'bg-cyan-600 text-white font-bold'
@@ -707,7 +743,7 @@ export default function ManageStaff() {
               type="text"
               placeholder="Tìm kiếm người dùng (Tên, Email, SĐT, ID)..."
               value={userSearchQuery}
-              onChange={(e) => setUserSearchQuery(e.target.value)}
+              onChange={(e) => handleUserSearchChange(e.target.value)}
               className="w-full md:w-80 rounded-xl border border-gray-800 bg-[#0F172A] px-3.5 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -734,7 +770,7 @@ export default function ManageStaff() {
                     </td>
                   </tr>
                 ) : (
-                  filteredDirectoryUsers.map((user) => (
+                  paginatedDirectoryUsers.map((user) => (
                     <tr key={user.userId} className="hover:bg-white/[0.02] transition">
                       <td className="py-2.5 px-3 font-mono text-gray-300 font-semibold">
                         {user.userId}
@@ -801,6 +837,64 @@ export default function ManageStaff() {
               </tbody>
             </table>
           </div>
+          {filteredDirectoryUsers.length > DIRECTORY_PAGE_SIZE && (
+            <div className="mt-5 flex flex-col gap-3 border-t border-gray-800 pt-4 text-xs text-gray-400 md:flex-row md:items-center md:justify-between">
+              <p>
+                Hiển thị{" "}
+                <span className="font-bold text-white">{firstVisibleUserIndex}</span>
+                {" - "}
+                <span className="font-bold text-white">{lastVisibleUserIndex}</span>
+                {" / "}
+                <span className="font-bold text-white">
+                  {filteredDirectoryUsers.length}
+                </span>{" "}
+                người dùng
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUserPage((page) => Math.max(1, page - 1))}
+                  disabled={currentUserPage === 1}
+                  className="rounded-lg border border-gray-800 bg-white/5 px-3 py-2 font-bold text-gray-300 transition hover:border-[#FFD166]/50 hover:text-[#FFD166] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Trước
+                </button>
+
+                {Array.from({ length: totalUserPages }, (_, index) => index + 1).map(
+                  (pageNumber) => {
+                    const isActive = pageNumber === currentUserPage;
+
+                    return (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        onClick={() => setUserPage(pageNumber)}
+                        className={`h-9 min-w-9 rounded-lg border px-3 font-black transition ${
+                          isActive
+                            ? "border-[#FFD166] bg-[#FFD166] text-black"
+                            : "border-gray-800 bg-white/5 text-gray-300 hover:border-[#FFD166]/50 hover:text-[#FFD166]"
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    );
+                  },
+                )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setUserPage((page) => Math.min(totalUserPages, page + 1))
+                  }
+                  disabled={currentUserPage === totalUserPages}
+                  className="rounded-lg border border-gray-800 bg-white/5 px-3 py-2 font-bold text-gray-300 transition hover:border-[#FFD166]/50 hover:text-[#FFD166] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Sau
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -19,6 +19,7 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import { getCurrentUserProfile } from "../../lib/auth";
 import {
   bookingService,
+  hideCancelledBookingFromHistory,
   shouldHideBookingFromHistory,
   type BookingSummary,
 } from "../../services/bookingService";
@@ -359,6 +360,7 @@ export default function MyBookings() {
       setCancellingBookingId(booking.bookingId);
       setErrorMessage("");
       await bookingService.cancelPendingBooking(booking.bookingId);
+      hideCancelledBookingFromHistory(booking.bookingId);
       localStorage.removeItem(getPaymentStorageKey(booking.showtimeId));
       removeCheckoutAttempt(booking.showtimeId, getUserKey());
       setBookings((currentBookings) =>

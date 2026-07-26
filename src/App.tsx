@@ -4,6 +4,7 @@ import {
   Outlet,
   RouterProvider,
 } from 'react-router-dom';
+import ConfirmDialogHost from './components/ConfirmDialogHost';
 import RequireAuth from './components/RequireAuth';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { useMultiTabSecurity } from './hooks/useMultiTabSecurity';
@@ -160,7 +161,12 @@ const router = createBrowserRouter([
 ]);
 
 function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      <ConfirmDialogHost />
+    </>
+  );
 }
 
 export default App;

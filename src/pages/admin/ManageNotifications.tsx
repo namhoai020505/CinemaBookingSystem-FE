@@ -10,6 +10,7 @@ import {
 } from '../../services/notificationService';
 import { getCurrentUserProfile } from '../../lib/auth';
 import { managerDashboardService } from '../../services/managerDashboardService';
+import { confirmWithPopup } from '../../services/confirmDialogService';
 
 type ApiErrorLike = {
   message?: string;
@@ -517,7 +518,13 @@ export default function ManageNotifications() {
       toast.warning('Vui lòng chọn ít nhất một thông báo để xóa.');
       return;
     }
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa ${ids.length} thông báo đã chọn?`)) {
+    const confirmed = await confirmWithPopup({
+      title: 'Xóa thông báo?',
+      message: `Bạn có chắc chắn muốn xóa ${ids.length} thông báo đã chọn?`,
+      confirmLabel: 'Xóa thông báo',
+      cancelLabel: 'Giữ lại',
+    });
+    if (!confirmed) {
       return;
     }
     try {

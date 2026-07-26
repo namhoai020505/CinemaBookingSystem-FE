@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { bannerService } from "../../services/bannerService";
 import type { BannerResponse } from "../../services/bannerService";
 import { getMediaUrl } from "../../lib/media";
+import { confirmWithPopup } from "../../services/confirmDialogService";
 
 type ApiErrorLike = {
   response?: {
@@ -117,7 +118,13 @@ export default function ManageBanner() {
   };
 
   const handleDeleteBanner = async (bannerId: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa banner này?")) return;
+    const confirmed = await confirmWithPopup({
+      title: "Xóa banner?",
+      message: "Bạn có chắc chắn muốn xóa banner này?",
+      confirmLabel: "Xóa banner",
+      cancelLabel: "Giữ lại",
+    });
+    if (!confirmed) return;
 
     try {
       setLoading(true);

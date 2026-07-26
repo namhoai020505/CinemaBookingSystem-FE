@@ -19,6 +19,7 @@ import {
 } from 'react-icons/fa';
 import { useOutletContext } from 'react-router-dom';
 import type { AdminOutletContext } from '../../layouts/admin/AdminLayout';
+import { confirmWithPopup } from '../../services/confirmDialogService';
 import {
   adminRefundService,
   type AdminRefundItem,
@@ -612,7 +613,13 @@ export default function ManageRefunds() {
 
   // ── Auto Confirm ────────────────────────────────────────────────────────────
   const handleAutoConfirm = async (bookingId: string) => {
-    if (!window.confirm('Xác nhận hoàn tiền tự động cho booking này?')) return;
+    const confirmed = await confirmWithPopup({
+      title: 'Xác nhận hoàn tiền?',
+      message: 'Xác nhận hoàn tiền tự động cho booking này?',
+      confirmLabel: 'Xác nhận',
+      cancelLabel: 'Quay lại',
+    });
+    if (!confirmed) return;
     try {
       const res = await adminRefundService.confirmAutoRefund(bookingId);
       if ((res as Record<string, unknown>)?.success === false) {

@@ -24,6 +24,7 @@ import { getCurrentUserProfile } from "../../lib/auth";
 import { getMediaUrl } from "../../lib/media";
 import {
   bookingService,
+  hideCancelledBookingFromHistory,
   hideExpiredBookingFromHistory,
   type BookingSummary,
   type CheckoutPayload,
@@ -537,15 +538,7 @@ export default function Checkout() {
   const [displayDetails, setDisplayDetails] =
     useState<CheckoutDisplayDetails | null>(null);
   const [selectedPaymentProviderId, setSelectedPaymentProviderId] =
-    useState<PaymentProviderId>(() => {
-      const storedProviderId =
-        storedPaymentSession?.paymentProviderId ||
-        checkoutAttempt?.paymentProviderId;
-
-      return storedProviderId === PAYMENT_PROVIDER_IDS.VNPAY
-        ? PAYMENT_PROVIDER_IDS.VNPAY
-        : PAYMENT_PROVIDER_IDS.SEPAY;
-    });
+    useState<PaymentProviderId>(() => PAYMENT_PROVIDER_IDS.SEPAY);
 
   const seatsTotalAmount = useMemo(
     () =>
@@ -693,10 +686,7 @@ export default function Checkout() {
     estimatedTotalAmount - voucherDiscount - pointDiscount,
   );
   const paymentQrUrl = getSepayQrUrl(payment);
-  const isVnpayPayment =
-    selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY ||
-    payment?.paymentProviderName?.toUpperCase() === "VNPAY" ||
-    Boolean(payment?.checkoutUrl);
+  const isVnpayPayment = false;
   const isPaymentExpired = step === "payment" && paymentSeconds <= 0;
   const displayMovieTitle =
     booking?.movieTitle ||
@@ -1458,6 +1448,7 @@ export default function Checkout() {
       setCancellingBooking(true);
       setErrorMessage("");
       await bookingService.cancelPendingBooking(booking.bookingId);
+      hideCancelledBookingFromHistory(booking.bookingId);
 
       if (showtimeId) {
         removePaymentSession(showtimeId, userKey);
@@ -2074,7 +2065,7 @@ export default function Checkout() {
               <div
                 role="radiogroup"
                 aria-label="Phương thức thanh toán"
-                className="grid max-w-xl gap-3 sm:grid-cols-2"
+                className="grid max-w-sm gap-3"
               >
                 <button
                   type="button"
@@ -2112,41 +2103,6 @@ export default function Checkout() {
                   </span>
                 </button>
 
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={
-                    selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY
-                  }
-                  onClick={() => {
-                    setSelectedPaymentProviderId(PAYMENT_PROVIDER_IDS.VNPAY);
-                    setErrorMessage("");
-                  }}
-                  className={`flex min-h-20 items-center gap-3 rounded-md border px-4 py-3 text-left transition ${
-                    selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY
-                      ? "border-[#FFD166] bg-[#FFD166]/10 shadow-[0_0_0_1px_rgba(255,209,102,0.18)]"
-                      : "border-white/15 bg-white/5 hover:border-white/30 hover:bg-white/10"
-                  }`}
-                >
-                  <span
-                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                      selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY
-                        ? "border-[#FFD166]"
-                        : "border-slate-500"
-                    }`}
-                  >
-                    {selectedPaymentProviderId === PAYMENT_PROVIDER_IDS.VNPAY && (
-                      <span className="h-2 w-2 rounded-full bg-[#FFD166]" />
-                    )}
-                  </span>
-                  <FaCreditCard className="h-7 w-7 shrink-0 text-white" />
-                  <span>
-                    <span className="block text-sm font-black">VNPAY</span>
-                    <span className="mt-0.5 block text-[11px] text-slate-400">
-                      Thanh toán qua cổng VNPAY
-                    </span>
-                  </span>
-                </button>
               </div>
             </div>
 
