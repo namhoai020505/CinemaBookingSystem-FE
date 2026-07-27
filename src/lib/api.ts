@@ -129,6 +129,15 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
+const sanitizeErrorHeaders = (error: unknown) => {
+  if (error && typeof error === 'object' && 'config' in error) {
+    const errObj = error as { config?: { headers?: Record<string, unknown> } };
+    if (errObj.config?.headers?.Authorization) {
+      errObj.config.headers.Authorization = 'Bearer ***';
+    }
+  }
+};
+
 api.interceptors.response.use(
   (response) => response.data,
   async (error) => {
@@ -151,9 +160,11 @@ api.interceptors.response.use(
         return api(originalRequest);
       }
 
+      sanitizeErrorHeaders(error);
       return Promise.reject(error);
     }
 
+    sanitizeErrorHeaders(error);
     return Promise.reject(error);
   },
 );
