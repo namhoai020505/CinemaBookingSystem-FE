@@ -15,9 +15,6 @@ import {
   FaUsers,
 } from 'react-icons/fa';
 import { voucherService } from '../../services/voucherService';
-// Thêm mới
-import { roomService, type RoomResponse } from '../../services/roomService';
-import { showtimeService, type ShowtimeResponse } from '../../services/showtimeService';
 import type {
   Voucher,
   CreateVoucherPayload,
@@ -126,14 +123,6 @@ const toDatetimeLocal = (dateStr: string) => {
   return localISOTime;
 };
 
-// Thêm mới
-const getShowtimeDropdownLabel = (showtime: ShowtimeResponse) =>
-  `${showtime.movieTitle} - ${formatDate(showtime.startTime)} - ${showtime.roomName} - ${showtime.cinemaName}`;
-
-// Thêm mới
-const getRoomDropdownLabel = (room: RoomResponse) =>
-  `${room.roomName} - ${room.cinemaName} (${room.roomId})`;
-
 export default function ManageVouchers() {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -171,10 +160,6 @@ export default function ManageVouchers() {
   const [showtimeId, setShowtimeId] = useState('');
   const [roomId, setRoomId] = useState('');
   const [lookingUpCustomers, setLookingUpCustomers] = useState(false);
-  // Thêm mới
-  const [showtimeOptions, setShowtimeOptions] = useState<ShowtimeResponse[]>([]);
-  const [roomOptions, setRoomOptions] = useState<RoomResponse[]>([]);
-  const [loadingLookupOptions, setLoadingLookupOptions] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const [submitting, setSubmitting] = useState(false);
   const voucherNeedsCustomerIds =
@@ -233,34 +218,6 @@ export default function ManageVouchers() {
     }
   };
 
-  // Thêm mới
-  const loadLookupOptions = useCallback(async () => {
-    try {
-      setLoadingLookupOptions(true);
-      const [showtimes, rooms] = await Promise.all([
-        showtimeService.getShowtimes(),
-        roomService.getRooms(false),
-      ]);
-
-      setShowtimeOptions(
-        [...showtimes].sort(
-          (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
-        ),
-      );
-      setRoomOptions(
-        rooms
-          .filter((room) => room.roomStatus !== 'INACTIVE')
-          .sort((a, b) =>
-            `${a.cinemaName} ${a.roomName}`.localeCompare(`${b.cinemaName} ${b.roomName}`, 'vi'),
-          ),
-      );
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Không thể tải danh sách suất chiếu/phòng chiếu.'));
-    } finally {
-      setLoadingLookupOptions(false);
-    }
-  }, []);
-
   // Load vouchers
   const fetchVouchers = useCallback(async () => {
     try {
@@ -288,19 +245,6 @@ export default function ManageVouchers() {
 
     return () => window.clearTimeout(timeoutId);
   }, [fetchVouchers]);
-
-  // Thêm mới
-  useEffect(() => {
-    if (!isModalOpen) {
-      return undefined;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void loadLookupOptions();
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [isModalOpen, loadLookupOptions]);
 
   // Esc key close modal
   useEffect(() => {
@@ -1238,71 +1182,43 @@ export default function ManageVouchers() {
                           Cấp voucher đền bù theo suất chiếu / phòng
                         </h4>
                         <p className="mt-1 text-[11px] font-semibold leading-5 text-slate-400">
-                          Chọn suất chiếu hoặc phòng chiếu, hệ thống sẽ lấy các khách đã đặt vé liên quan và điền vào danh sách nhận voucher.
+                          Nhập mã suất chiếu hoặc mã phòng, hệ thống sẽ lấy các khách đã đặt vé liên quan và điền vào danh sách nhận voucher.
                         </p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_auto]">
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto]">
                       <div>
                         <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          Suất chiếu
+                          Mã suất chiếu
                         </label>
-                        <select
+                        <input
+                          type="text"
                           value={showtimeId}
                           onChange={(e) => setShowtimeId(e.target.value)}
-                          disabled={loadingLookupOptions}
-                          className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <option value="">
-                            {loadingLookupOptions ? 'Đang tải suất chiếu...' : 'Không chọn suất chiếu'}
-                          </option>
-                          {showtimeId && !showtimeOptions.some((showtime) => showtime.showtimeId === showtimeId) && (
-                            <option value={showtimeId}>Đang gắn: {showtimeId}</option>
-                          )}
-                          {showtimeOptions.map((showtime) => (
-                            <option key={showtime.showtimeId} value={showtime.showtimeId}>
-                              {getShowtimeDropdownLabel(showtime)}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="mt-2 truncate text-[10px] font-semibold text-slate-500">
-                          {showtimeId || 'Chọn một suất chiếu nếu muốn cấp theo đúng ca chiếu.'}
-                        </p>
+                          placeholder="VD: SHW_..."
+                          className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+                        />
                       </div>
 
                       <div>
                         <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          Phòng chiếu
+                          Mã phòng chiếu
                         </label>
-                        <select
+                        <input
+                          type="text"
                           value={roomId}
                           onChange={(e) => setRoomId(e.target.value)}
-                          disabled={loadingLookupOptions}
-                          className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <option value="">
-                            {loadingLookupOptions ? 'Đang tải phòng chiếu...' : 'Không chọn phòng chiếu'}
-                          </option>
-                          {roomId && !roomOptions.some((room) => room.roomId === roomId) && (
-                            <option value={roomId}>Đang gắn: {roomId}</option>
-                          )}
-                          {roomOptions.map((room) => (
-                            <option key={room.roomId} value={room.roomId}>
-                              {getRoomDropdownLabel(room)}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="mt-2 truncate text-[10px] font-semibold text-slate-500">
-                          {roomId || 'Chọn phòng nếu muốn cấp cho khách theo cả phòng chiếu.'}
-                        </p>
+                          placeholder="VD: RM01"
+                          className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+                        />
                       </div>
 
                       <button
                         type="button"
                         onClick={() => void handleLookupCustomersByShowtimeOrRoom()}
                         disabled={lookingUpCustomers}
-                        className="mt-6 inline-flex h-12 min-w-[15rem] items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 text-xs font-black uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 text-xs font-black uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <FaSearch />
                         {lookingUpCustomers ? 'Đang tra cứu...' : 'Tra cứu & Lấy danh sách User ID'}
