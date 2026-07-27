@@ -106,6 +106,7 @@ const ManagerShowtimesPage = () => {
   const [sortMode, setSortMode] = useState('START_ASC');
   const [cancelTarget, setCancelTarget] = useState<ShowtimeResponse | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [compensationVoucher, setCompensationVoucher] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState('');
   const [cancelResult, setCancelResult] = useState<CancelShowtimeResponse | null>(null);
@@ -278,6 +279,7 @@ const ManagerShowtimesPage = () => {
 
     setCancelTarget(null);
     setCancelReason('');
+    setCompensationVoucher('');
     setCancelError('');
     setCancelResult(null);
   };
@@ -557,9 +559,30 @@ const ManagerShowtimesPage = () => {
                 <textarea
                   value={cancelReason}
                   onChange={(event) => setCancelReason(event.target.value)}
-                  className={`${inputClass(isLightMode)} min-h-28 resize-y py-3`}
+                  className={`${inputClass(isLightMode)} min-h-24 resize-y py-3`}
                   placeholder="Ví dụ: Sự cố phòng chiếu, bảo trì đột xuất..."
                 />
+              </label>
+
+              <label className="grid min-w-0 gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Voucher bồi thường sự cố (Không bắt buộc)
+                  </span>
+                  <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                    Tự động tạo 100% nếu để trống
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={compensationVoucher}
+                  onChange={(event) => setCompensationVoucher(event.target.value)}
+                  className={inputClass(isLightMode)}
+                  placeholder="Nhập mã voucher đền bù tùy chỉnh (VD: COMP-100, VOUCHER-BOITHUONG-50K)..."
+                />
+                <p className={`text-[11px] ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Voucher bồi thường sẽ được phát hành tự động cho khách hàng đã mua vé khi hủy suất chiếu.
+                </p>
               </label>
 
               {cancelError ? <p className="text-sm font-bold text-rose-300">{cancelError}</p> : null}

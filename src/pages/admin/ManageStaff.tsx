@@ -510,11 +510,14 @@ export default function ManageStaff() {
                   className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-sm text-white outline-none transition focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <option value="">{TEXT.STAFF.SELECT_ROLE}</option>
-                  {staffRoles.map((role) => (
-                    <option key={role.roleId} value={role.roleId}>
-                      {formatRoleName(role.roleName)} ({role.profileKind})
-                    </option>
-                  ))}
+                  {staffRoles.map((role) => {
+                    const cleanName = formatRoleName(role.roleName.replace(/\s*\(STAFF\)/gi, '').trim());
+                    return (
+                      <option key={role.roleId} value={role.roleId}>
+                        {cleanName}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

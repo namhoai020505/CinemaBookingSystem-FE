@@ -1634,6 +1634,26 @@ export default function ManageShowtime() {
               </div>
             </div>
 
+            {/* Voucher bồi thường khi xóa showtime */}
+            <div className="flex flex-col gap-1.5 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                  Voucher bồi thường sự cố (Nếu có vé)
+                </span>
+                <span className="text-[9px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                  Phát hành 100% tự động
+                </span>
+              </div>
+              <input
+                type="text"
+                value={compensationVoucherCode}
+                onChange={(e) => setCompensationVoucherCode(e.target.value)}
+                placeholder="Nhập mã voucher đền bù tùy chỉnh (VD: COMP-100)..."
+                className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-3.5 py-2 text-xs text-white outline-none focus:border-amber-400"
+              />
+              <p className="text-[10px] text-gray-500">Mã voucher bồi thường sẽ được phát hành tự động cho khách hàng có vé bị ảnh hưởng do xóa suất chiếu.</p>
+            </div>
+
             {/* Action buttons */}
             <div className="flex gap-3 justify-end mt-1">
               <button
@@ -1908,6 +1928,22 @@ export default function ManageShowtime() {
                 onChange={(e) => setCancelReason(e.target.value)}
                 placeholder="VD: Thay đổi lịch bảo trì phòng chiếu, sự cố kỹ thuật rạp..."
                 className="w-full h-20 rounded-xl border border-gray-700 bg-gray-900 p-3 text-xs text-white placeholder-gray-500 focus:border-amber-400 focus:outline-none"
+              />
+            </div>
+
+            <div className="space-y-1.5 text-left">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-gray-300">
+                  Mã voucher bồi thường sự cố (Không bắt buộc):
+                </label>
+                <span className="text-[10px] text-amber-400">Tự động phát hành 100% nếu để trống</span>
+              </div>
+              <input
+                type="text"
+                value={compensationVoucherCode}
+                onChange={(e) => setCompensationVoucherCode(e.target.value)}
+                placeholder="Ví dụ: COMP-SHOWTIME-2026, VOUCHER-BOITHUONG-50K..."
+                className="w-full rounded-xl border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-white placeholder-gray-500 focus:border-amber-400 focus:outline-none"
               />
             </div>
 

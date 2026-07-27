@@ -31,6 +31,7 @@ export default function RefundClaimPage() {
 
   // Form states for saving bank details
   const [selectedBank, setSelectedBank] = useState('');
+  const [bankInput, setBankInput] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountHolderName, setAccountHolderName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -70,7 +71,10 @@ export default function RefundClaimPage() {
       setClaimInfo(data);
 
       // Pre-fill if already saved draft
-      setSelectedBank(data.bankCode || '');
+      const defaultBankCode = data.bankCode || '';
+      const defaultBankName = data.bankName || data.bankCode || '';
+      setSelectedBank(defaultBankCode);
+      setBankInput(defaultBankName);
       setAccountHolderName(data.accountHolderName || '');
       // Note: maskedAccountNumber is only for display, we cannot pre-fill accountNumber since it is encrypted and masked.
 
@@ -101,8 +105,10 @@ export default function RefundClaimPage() {
     e.preventDefault();
     if (!claimInfo) return;
 
-    if (!selectedBank) {
-      toast.error('Vui lòng chọn ngân hàng');
+    const targetBank = selectedBank.trim() || bankInput.trim();
+
+    if (!targetBank) {
+      toast.error('Vui lòng nhập tên ngân hàng');
       return;
     }
 
@@ -119,8 +125,9 @@ export default function RefundClaimPage() {
 
     try {
       setSaving(true);
+      const targetBank = selectedBank.trim() || bankInput.trim();
       const updated = await customerRefundService.saveBankAccount(claimInfo.refundClaimId, {
-        bankCode: selectedBank,
+        bankCode: targetBank,
         accountNumber: accountNumber.trim(),
         accountHolderName: accountHolderName.trim().toUpperCase(),
       });
@@ -381,23 +388,36 @@ export default function RefundClaimPage() {
               <form onSubmit={handleSaveBank} className="space-y-5">
                 <div className="grid gap-1.5">
                   <label className="text-xs font-black uppercase text-slate-400">Ngân hàng thụ hưởng *</label>
-                  <select
-                    required
-                    value={selectedBank}
-                    onChange={(e) => setSelectedBank(e.target.value)}
-                    className="w-full bg-[#17264a] border border-white/10 rounded-lg p-2.5 text-white outline-none focus:border-[#FFD166] text-sm"
-                  >
-                    <option value="">-- Chọn ngân hàng --</option>
-                    {banksLoading ? (
-                      <option disabled>Đang tải danh sách ngân hàng...</option>
-                    ) : (
-                      banks.map((b) => (
-                        <option key={b.bankCode} value={b.bankCode}>
-                          {b.shortName} - {b.fullName}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      list="bank-suggestions-list"
+                      placeholder={banksLoading ? 'Đang tải danh sách ngân hàng...' : 'Nhập tên ngân hàng (Ví dụ: Vietcombank, MBBank, VPBank, Techcombank...)'}
+                      value={bankInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBankInput(val);
+                        const match = banks.find(
+                          (b) =>
+                            b.bankCode.toLowerCase() === val.toLowerCase() ||
+                            b.shortName.toLowerCase() === val.toLowerCase() ||
+                            b.fullName.toLowerCase() === val.toLowerCase() ||
+                            `${b.shortName} - ${b.fullName}`.toLowerCase() === val.toLowerCase()
+                        );
+                        setSelectedBank(match ? match.bankCode : val);
+                      }}
+                      className="w-full bg-[#17264a] border border-white/10 rounded-lg p-2.5 text-white outline-none focus:border-[#FFD166] text-sm"
+                    />
+                    <datalist id="bank-suggestions-list">
+                      {banks.map((b) => (
+                        <option key={b.bankCode} value={`${b.shortName} - ${b.fullName}`}>
+                          {b.bankCode}
                         </option>
-                      ))
-                    )}
-                  </select>
+                      ))}
+                    </datalist>
+                  </div>
+                  <p className="text-[10px] text-slate-500">Bạn có thể gõ trực tiếp tên ngân hàng vào hoặc chọn từ danh sách gợi ý.</p>
                 </div>
 
                 <div className="grid gap-1.5">
