@@ -126,13 +126,147 @@ const toDatetimeLocal = (dateStr: string) => {
   return localISOTime;
 };
 
-// Thêm mới
-const getShowtimeDropdownLabel = (showtime: ShowtimeResponse) =>
-  `${showtime.movieTitle} - ${formatDate(showtime.startTime)} - ${showtime.roomName} - ${showtime.cinemaName}`;
+type CompactSelectOption = {
+  value: string;
+  title: string;
+  meta?: string;
+};
 
-// Thêm mới
-const getRoomDropdownLabel = (room: RoomResponse) =>
-  `${room.roomName} - ${room.cinemaName} (${room.roomId})`;
+type CompactLookupSelectProps = {
+  label: string;
+  value: string;
+  options: CompactSelectOption[];
+  placeholder: string;
+  searchPlaceholder: string;
+  emptyLabel: string;
+  loadingLabel: string;
+  helperText: string;
+  loading?: boolean;
+  onChange: (value: string) => void;
+};
+
+function CompactLookupSelect({
+  label,
+  value,
+  options,
+  placeholder,
+  searchPlaceholder,
+  emptyLabel,
+  loadingLabel,
+  helperText,
+  loading = false,
+  onChange,
+}: CompactLookupSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const selectedOption = options.find((option) => option.value === value);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredOptions = (normalizedQuery
+    ? options.filter((option) =>
+        [option.value, option.title, option.meta]
+          .filter((text): text is string => Boolean(text))
+          .some((text) => text.toLowerCase().includes(normalizedQuery)),
+      )
+    : options
+  ).slice(0, 18);
+
+  const closeIfFocusLeaves = (event: React.FocusEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+    setIsOpen(false);
+  };
+
+  const handleSelect = (nextValue: string) => {
+    onChange(nextValue);
+    setQuery('');
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative min-w-0" onBlur={closeIfFocusLeaves}>
+      <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+        {label}
+      </label>
+
+      <button
+        type="button"
+        disabled={loading}
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex h-14 w-full items-center justify-between gap-3 rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-left outline-none transition hover:border-cyan-400/60 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-black text-white">
+            {loading ? loadingLabel : selectedOption?.title || (value ? `Đang gắn: ${value}` : placeholder)}
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
+            {selectedOption?.meta || helperText}
+          </span>
+        </span>
+        <span className="shrink-0 text-sm font-black text-cyan-300">{isOpen ? '▲' : '▼'}</span>
+      </button>
+
+      {isOpen && !loading && (
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[90] overflow-hidden rounded-xl border border-slate-700 bg-[#0B1220] shadow-2xl shadow-black/50">
+          <div className="border-b border-slate-800 p-2">
+            <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
+              <FaSearch className="text-xs text-slate-500" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+                className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-white outline-none placeholder:text-slate-600"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <div className="max-h-72 overflow-y-auto p-2">
+            <button
+              type="button"
+              onClick={() => handleSelect('')}
+              className="mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-300 transition hover:bg-cyan-400/10 hover:text-white"
+            >
+              {emptyLabel}
+              {!value && <span className="text-xs text-cyan-300">Đang chọn</span>}
+            </button>
+
+            {filteredOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => handleSelect(option.value)}
+                className={`mb-1 flex w-full flex-col rounded-lg px-3 py-2 text-left transition ${
+                  option.value === value
+                    ? 'bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-400/35'
+                    : 'text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                <span className="line-clamp-1 text-sm font-black">{option.title}</span>
+                {option.meta && (
+                  <span className="mt-0.5 line-clamp-1 text-[11px] font-semibold text-slate-500">
+                    {option.meta}
+                  </span>
+                )}
+              </button>
+            ))}
+
+            {filteredOptions.length === 0 && (
+              <div className="rounded-lg border border-dashed border-slate-700 px-3 py-4 text-center text-xs font-semibold text-slate-500">
+                Không tìm thấy dữ liệu phù hợp.
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-slate-800 px-3 py-2 text-[10px] font-semibold text-slate-500">
+            Hiển thị tối đa 18 kết quả. Nhập tên phim, ngày hoặc phòng để lọc nhanh.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ManageVouchers() {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
@@ -1244,59 +1378,39 @@ export default function ManageVouchers() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_auto]">
-                      <div>
-                        <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          Suất chiếu
-                        </label>
-                        <select
-                          value={showtimeId}
-                          onChange={(e) => setShowtimeId(e.target.value)}
-                          disabled={loadingLookupOptions}
-                          className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <option value="">
-                            {loadingLookupOptions ? 'Đang tải suất chiếu...' : 'Không chọn suất chiếu'}
-                          </option>
-                          {showtimeId && !showtimeOptions.some((showtime) => showtime.showtimeId === showtimeId) && (
-                            <option value={showtimeId}>Đang gắn: {showtimeId}</option>
-                          )}
-                          {showtimeOptions.map((showtime) => (
-                            <option key={showtime.showtimeId} value={showtime.showtimeId}>
-                              {getShowtimeDropdownLabel(showtime)}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="mt-2 truncate text-[10px] font-semibold text-slate-500">
-                          {showtimeId || 'Chọn một suất chiếu nếu muốn cấp theo đúng ca chiếu.'}
-                        </p>
-                      </div>
+                      <CompactLookupSelect
+                        label="Suất chiếu"
+                        value={showtimeId}
+                        loading={loadingLookupOptions}
+                        onChange={setShowtimeId}
+                        placeholder="Không chọn suất chiếu"
+                        searchPlaceholder="Tìm theo tên phim, ngày, phòng..."
+                        emptyLabel="Không chọn suất chiếu"
+                        loadingLabel="Đang tải suất chiếu..."
+                        helperText="Chọn một suất chiếu nếu muốn cấp theo đúng ca chiếu."
+                        options={showtimeOptions.map((showtime) => ({
+                          value: showtime.showtimeId,
+                          title: showtime.movieTitle,
+                          meta: `${formatDate(showtime.startTime)} - ${showtime.roomName} - ${showtime.cinemaName}`,
+                        }))}
+                      />
 
-                      <div>
-                        <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          Phòng chiếu
-                        </label>
-                        <select
-                          value={roomId}
-                          onChange={(e) => setRoomId(e.target.value)}
-                          disabled={loadingLookupOptions}
-                          className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <option value="">
-                            {loadingLookupOptions ? 'Đang tải phòng chiếu...' : 'Không chọn phòng chiếu'}
-                          </option>
-                          {roomId && !roomOptions.some((room) => room.roomId === roomId) && (
-                            <option value={roomId}>Đang gắn: {roomId}</option>
-                          )}
-                          {roomOptions.map((room) => (
-                            <option key={room.roomId} value={room.roomId}>
-                              {getRoomDropdownLabel(room)}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="mt-2 truncate text-[10px] font-semibold text-slate-500">
-                          {roomId || 'Chọn phòng nếu muốn cấp cho khách theo cả phòng chiếu.'}
-                        </p>
-                      </div>
+                      <CompactLookupSelect
+                        label="Phòng chiếu"
+                        value={roomId}
+                        loading={loadingLookupOptions}
+                        onChange={setRoomId}
+                        placeholder="Không chọn phòng chiếu"
+                        searchPlaceholder="Tìm theo tên phòng hoặc rạp..."
+                        emptyLabel="Không chọn phòng chiếu"
+                        loadingLabel="Đang tải phòng chiếu..."
+                        helperText="Chọn phòng nếu muốn cấp cho khách theo cả phòng chiếu."
+                        options={roomOptions.map((room) => ({
+                          value: room.roomId,
+                          title: room.roomName,
+                          meta: `${room.cinemaName} - ${room.roomId}`,
+                        }))}
+                      />
 
                       <button
                         type="button"
