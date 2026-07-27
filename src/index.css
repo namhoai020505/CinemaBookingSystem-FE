@@ -16,9 +16,9 @@ html, body {
   --g2c-light-border: #E2E8F0;
   --g2c-light-text: #0F172A;
   --g2c-light-muted: #334155;
-  --g2c-light-accent: #38BDF8;
-  --g2c-light-accent-bright: #BAE6FD;
-  --g2c-light-text-accent: #0284C7;
+  --g2c-light-accent: #FFD166;
+  --g2c-light-accent-bright: #FFE7A3;
+  --g2c-light-text-accent: #B45309;
 }
 
 html.light,
@@ -336,7 +336,7 @@ body.g2c-light-mode .hover\:bg-\[\#FFE7A3\]:hover {
 body.g2c-light-mode .bg-gradient-to-r.from-\[\#FFD166\],
 body.g2c-light-mode .bg-gradient-to-br.from-\[\#FFD166\] {
   background-color: var(--g2c-light-accent) !important;
-  background-image: linear-gradient(90deg, #38BDF8 0%, #BAE6FD 100%) !important;
+  background-image: linear-gradient(90deg, #FFD166 0%, #FFE7A3 100%) !important;
   color: #000000 !important;
 }
 
@@ -419,8 +419,8 @@ body.g2c-light-mode .g2c-topbar button {
 }
 
 body.g2c-light-mode .g2c-topbar button[aria-label] {
-  background-color: #38BDF8 !important;
-  border-color: #38BDF8 !important;
+  background-color: #FFD166 !important;
+  border-color: #FFD166 !important;
   color: #1E293B !important;
 }
 
@@ -631,22 +631,22 @@ body:not(.g2c-light-mode) {
 body .g2c-topbar.g2c-metallic-topbar {
   position: relative;
   overflow: visible;
-  border-bottom: 1px solid rgba(3, 105, 161, 0.72);
+  border-bottom: 1px solid rgba(104, 65, 4, 0.72);
   background:
     linear-gradient(
       108deg,
-      #075985 0%,
-      #0284C7 17%,
-      #38BDF8 34%,
-      #E0F2FE 47%,
-      #0EA5E9 62%,
-      #7DD3FC 80%,
-      #0369A1 100%
+      #7A4B06 0%,
+      #C98B12 17%,
+      #F4D36B 34%,
+      #FFF2A6 47%,
+      #D29A23 62%,
+      #F0CC5B 80%,
+      #8A5709 100%
     ) !important;
-  color: #061625 !important;
+  color: #1A1305 !important;
   box-shadow:
-    inset 0 1px 0 rgba(224, 242, 254, 0.85),
-    inset 0 -1px 0 rgba(3, 105, 161, 0.5);
+    inset 0 1px 0 rgba(255, 250, 211, 0.8),
+    inset 0 -1px 0 rgba(91, 53, 0, 0.5);
 }
 
 body .g2c-topbar.g2c-metallic-topbar::before {
@@ -680,9 +680,9 @@ body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-actions > button:hover {
 }
 
 body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-control {
-  border-color: rgba(3, 105, 161, 0.34) !important;
+  border-color: rgba(45, 29, 3, 0.3) !important;
   background-color: rgba(255, 255, 255, 0.22) !important;
-  color: #061625 !important;
+  color: #171005 !important;
 }
 
 body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-control:hover {
@@ -721,7 +721,7 @@ body.g2c-light-mode .g2c-footer .border-white\/10 {
 }
 
 body.g2c-light-mode .g2c-footer .bg-\[\#FFD166\]\/10 {
-  background-color: rgba(56, 189, 248, 0.14) !important;
+  background-color: rgba(212, 175, 55, 0.12) !important;
 }
 
 body.g2c-light-mode .g2c-footer .bg-white\/\[0\.04\] {
@@ -729,7 +729,7 @@ body.g2c-light-mode .g2c-footer .bg-white\/\[0\.04\] {
 }
 
 body.g2c-light-mode .g2c-footer .text-\[\#FFD166\] {
-  color: #0284C7 !important;
+  color: #D4AF37 !important;
 }
 
 body.g2c-light-mode .g2c-footer .hover\:text-white:hover {
@@ -784,55 +784,7 @@ body.g2c-light-mode .g2c-footer .hover\:text-white:hover {
 }
 
 .g2c-toast-progress {
-  background: linear-gradient(90deg, #38bdf8, #22d3ee) !important;
-}
-
-/* Deploy marker: convert the customer gold accent to sea blue across light/dark UI. */
-body .text-\[\#FFD166\],
-body .hover\:text-\[\#FFD166\]:hover {
-  color: #38BDF8 !important;
-}
-
-body .border-\[\#FFD166\],
-body .border-\[\#FFD166\]\/20,
-body .border-\[\#FFD166\]\/25,
-body .border-\[\#FFD166\]\/30,
-body .border-\[\#FFD166\]\/35,
-body .border-\[\#FFD166\]\/40,
-body .border-\[\#FFD166\]\/45,
-body .border-\[\#FFD166\]\/70,
-body .hover\:border-\[\#FFD166\]:hover {
-  border-color: #38BDF8 !important;
-}
-
-body .bg-\[\#FFD166\],
-body .hover\:bg-\[\#FFE7A3\]:hover,
-body .hover\:bg-\[\#FFEBA4\]:hover {
-  background-color: #38BDF8 !important;
-  color: #061625 !important;
-}
-
-body .bg-\[\#FFD166\]\/10,
-body .bg-\[\#FFD166\]\/12,
-body .bg-\[\#FFD166\]\/14,
-body .bg-\[\#FFD166\]\/15,
-body .bg-\[\#FFD166\]\/20 {
-  background-color: rgba(56, 189, 248, 0.16) !important;
-}
-
-body .from-\[\#FFD166\] {
-  --tw-gradient-from: #38BDF8 var(--tw-gradient-from-position) !important;
-  --tw-gradient-to: rgb(56 189 248 / 0) var(--tw-gradient-to-position) !important;
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
-}
-
-body .to-\[\#FFE7A3\],
-body .to-\[\#FFEBA4\] {
-  --tw-gradient-to: #BAE6FD var(--tw-gradient-to-position) !important;
-}
-
-body .accent-\[\#FFD166\] {
-  accent-color: #38BDF8 !important;
+  background: linear-gradient(90deg, #ffd166, #22d3ee) !important;
 }
 
 .Toastify__toast--success.g2c-toast {
