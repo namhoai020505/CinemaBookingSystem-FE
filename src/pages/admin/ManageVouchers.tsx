@@ -156,6 +156,10 @@ export default function ManageVouchers() {
   const [specificFbItemIds, setSpecificFbItemIds] = useState('');
   const [isPrivateVoucher, setIsPrivateVoucher] = useState(false);
   const [requiredTicketCount, setRequiredTicketCount] = useState<number>(0);
+  // Thêm mới
+  const [showtimeId, setShowtimeId] = useState('');
+  const [roomId, setRoomId] = useState('');
+  const [lookingUpCustomers, setLookingUpCustomers] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const [submitting, setSubmitting] = useState(false);
   const voucherNeedsCustomerIds =
@@ -171,6 +175,47 @@ export default function ManageVouchers() {
 
     setTargetType('ALL_CUSTOMERS');
     setTargetCustomerIds('');
+  };
+
+  // Thêm mới
+  const handleLookupCustomersByShowtimeOrRoom = async () => {
+    const cleanShowtimeId = showtimeId.trim();
+    const cleanRoomId = roomId.trim();
+
+    if (!cleanShowtimeId && !cleanRoomId) {
+      toast.warn('Vui lòng nhập mã suất chiếu hoặc mã phòng chiếu trước khi tra cứu.');
+      return;
+    }
+
+    try {
+      setLookingUpCustomers(true);
+      const response = await voucherService.getCustomerIdsByShowtimeOrRoom(
+        cleanShowtimeId || null,
+        cleanRoomId || null,
+      );
+
+      if (!response.success) {
+        toast.error(response.message || 'Không thể lấy danh sách khách hàng từ suất chiếu/phòng chiếu.');
+        return;
+      }
+
+      const customerIds = response.data ?? [];
+
+      if (customerIds.length === 0) {
+        setTargetCustomerIds('');
+        toast.warn('Không tìm thấy khách hàng phù hợp với suất chiếu hoặc phòng chiếu đã nhập.');
+        return;
+      }
+
+      setTargetType('SPECIFIC_CUSTOMERS');
+      setIsPrivateVoucher(true);
+      setTargetCustomerIds(customerIds.join(','));
+      toast.success(`Đã lấy ${customerIds.length} khách hàng và điền vào danh sách nhận voucher.`);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Lỗi khi tra cứu danh sách khách hàng.'));
+    } finally {
+      setLookingUpCustomers(false);
+    }
   };
 
   // Load vouchers
@@ -240,6 +285,9 @@ export default function ManageVouchers() {
     setSpecificFbItemIds('');
     setIsPrivateVoucher(false);
     setRequiredTicketCount(0);
+    // Thêm mới
+    setShowtimeId('');
+    setRoomId('');
     setIsModalOpen(true);
   };
 
@@ -265,6 +313,9 @@ export default function ManageVouchers() {
     setSpecificFbItemIds(voucher.specificFbItemIds || '');
     setIsPrivateVoucher(Boolean(voucher.isPrivate));
     setRequiredTicketCount(voucher.requiredTicketCount || 0);
+    // Thêm mới
+    setShowtimeId(voucher.showtimeId || '');
+    setRoomId(voucher.roomId || '');
     setIsModalOpen(true);
   };
 
@@ -309,6 +360,9 @@ export default function ManageVouchers() {
 
     const cleanTargetCustomerIds = normalizeDelimitedIds(targetCustomerIds);
     const cleanSpecificFbItemIds = normalizeDelimitedIds(specificFbItemIds);
+    // Thêm mới
+    const cleanShowtimeId = showtimeId.trim();
+    const cleanRoomId = roomId.trim();
     const finalTargetType: VoucherTargetType = voucherNeedsCustomerIds
       ? 'SPECIFIC_CUSTOMERS'
       : 'ALL_CUSTOMERS';
@@ -374,6 +428,9 @@ export default function ManageVouchers() {
           specificFbItemIds: cleanSpecificFbItemIds || null,
           isPrivate: isPrivateVoucher,
           requiredTicketCount: finalRequiredTicketCount,
+          // Thêm mới
+          showtimeId: cleanShowtimeId || null,
+          roomId: cleanRoomId || null,
         };
         const response = await voucherService.updateVoucher(editingVoucher.voucherId, payload);
         if (response.success) {
@@ -404,6 +461,9 @@ export default function ManageVouchers() {
           specificFbItemIds: cleanSpecificFbItemIds || null,
           isPrivate: isPrivateVoucher,
           requiredTicketCount: finalRequiredTicketCount,
+          // Thêm mới
+          showtimeId: cleanShowtimeId || null,
+          roomId: cleanRoomId || null,
         };
         const response = await voucherService.createVoucher(payload);
         if (response.success) {
@@ -476,6 +536,9 @@ export default function ManageVouchers() {
         specificFbItemIds: voucher.specificFbItemIds || null,
         isPrivate: Boolean(voucher.isPrivate),
         requiredTicketCount: voucher.requiredTicketCount,
+        // Thêm mới
+        showtimeId: voucher.showtimeId || null,
+        roomId: voucher.roomId || null,
       };
       const response = await voucherService.updateVoucher(voucher.voucherId, payload);
       if (response.success) {
@@ -602,6 +665,8 @@ export default function ManageVouchers() {
               <thead>
                 <tr className="border-b border-gray-800 bg-blue-950/20 text-xs font-black uppercase tracking-wider text-slate-400">
                   <th className="p-4">Mã Voucher / Mô Tả</th>
+                  {/* Thêm mới */}
+                  <th className="p-4">Nguồn Cấp</th>
                   <th className="p-4">Loại & Mức Giảm</th>
                   <th className="p-4 text-center">Đơn Tối Thiểu</th>
                   <th className="p-4 text-center">Giảm Tối Đa</th>
@@ -654,6 +719,24 @@ export default function ManageVouchers() {
                         <div className="mt-1 text-[10px] font-semibold text-gray-500">
                           Phạm vi: {getScopeLabel(voucher.applicableScope)}
                           {voucher.specificFbItemIds ? ` · F&B: ${voucher.specificFbItemIds}` : ''}
+                        </div>
+                      </td>
+
+                      {/* Thêm mới */}
+                      <td className="p-4 text-xs">
+                        <div className="space-y-1 font-semibold text-slate-300">
+                          <div>
+                            <span className="text-[10px] uppercase text-gray-500">Suất chiếu:</span>{' '}
+                            <span className="font-mono text-cyan-300">
+                              {voucher.showtimeId || 'Không gắn'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase text-gray-500">Phòng:</span>{' '}
+                            <span className="font-mono text-amber-300">
+                              {voucher.roomId || 'Không gắn'}
+                            </span>
+                          </div>
                         </div>
                       </td>
 
@@ -1089,6 +1172,58 @@ export default function ManageVouchers() {
                         </span>
                       </span>
                     </label>
+                  </div>
+
+                  {/* Thêm mới */}
+                  <div className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 p-4 xl:col-span-2">
+                    <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">
+                          Cấp voucher đền bù theo suất chiếu / phòng
+                        </h4>
+                        <p className="mt-1 text-[11px] font-semibold leading-5 text-slate-400">
+                          Nhập mã suất chiếu hoặc mã phòng, hệ thống sẽ lấy các khách đã đặt vé liên quan và điền vào danh sách nhận voucher.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto]">
+                      <div>
+                        <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          Mã suất chiếu
+                        </label>
+                        <input
+                          type="text"
+                          value={showtimeId}
+                          onChange={(e) => setShowtimeId(e.target.value)}
+                          placeholder="VD: SHW_..."
+                          className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          Mã phòng chiếu
+                        </label>
+                        <input
+                          type="text"
+                          value={roomId}
+                          onChange={(e) => setRoomId(e.target.value)}
+                          placeholder="VD: RM01"
+                          className="h-12 w-full rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleLookupCustomersByShowtimeOrRoom()}
+                        disabled={lookingUpCustomers}
+                        className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 text-xs font-black uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <FaSearch />
+                        {lookingUpCustomers ? 'Đang tra cứu...' : 'Tra cứu & Lấy danh sách User ID'}
+                      </button>
+                    </div>
                   </div>
 
                   {voucherNeedsCustomerIds && (

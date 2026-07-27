@@ -39,6 +39,9 @@ export interface Voucher {
   specificFbItemIds: string | null;
   isPrivate: boolean;
   requiredTicketCount?: number | null;
+  // Thêm mới
+  showtimeId?: string | null;
+  roomId?: string | null;
 }
 
 export interface CreateVoucherPayload {
@@ -61,6 +64,9 @@ export interface CreateVoucherPayload {
   specificFbItemIds?: string | null;
   isPrivate?: boolean;
   requiredTicketCount?: number | null;
+  // Thêm mới
+  showtimeId?: string | null;
+  roomId?: string | null;
 }
 
 export interface UpdateVoucherPayload {
@@ -81,6 +87,9 @@ export interface UpdateVoucherPayload {
   specificFbItemIds?: string | null;
   isPrivate?: boolean;
   requiredTicketCount?: number | null;
+  // Thêm mới
+  showtimeId?: string | null;
+  roomId?: string | null;
 }
 
 export interface ValidateVoucherResponse {
@@ -97,6 +106,12 @@ export interface ApiResponse<T = unknown> {
   errorCode?: string | null;
   errors?: Record<string, string[]> | null;
 }
+
+// Thêm mới
+type CustomerLookupParams = {
+  showtimeId?: string;
+  roomId?: string;
+};
 
 export const VOUCHER_WALLET_UPDATED_EVENT = 'g2c-voucher-wallet-updated';
 
@@ -166,6 +181,29 @@ export const voucherService = {
 
   deleteVoucher: async (voucherId: string) =>
     api.delete<unknown, ApiResponse<unknown>>(`/api/admin/vouchers/${voucherId}`),
+
+  // Thêm mới
+  getCustomerIdsByShowtimeOrRoom: async (
+    showtimeId?: string | null,
+    roomId?: string | null,
+  ) => {
+    const params: CustomerLookupParams = {};
+    const normalizedShowtimeId = showtimeId?.trim();
+    const normalizedRoomId = roomId?.trim();
+
+    if (normalizedShowtimeId) {
+      params.showtimeId = normalizedShowtimeId;
+    }
+
+    if (normalizedRoomId) {
+      params.roomId = normalizedRoomId;
+    }
+
+    return api.get<unknown, ApiResponse<string[]>>(
+      '/api/admin/vouchers/customers-by-showtime',
+      { params },
+    );
+  },
 
   // Public/Customer Vouchers APIs
   getActiveVouchers: async () =>
