@@ -101,6 +101,8 @@ export interface UserDirectoryItem {
   email: string;
   phone: string;
   role: 'Staff' | 'Manager' | 'Customer' | 'Admin';
+  roleId: string;
+  cinemaId?: string | null;
   cinemaName: string;
   status: 'Active' | 'Blocked';
   createdAt: string;
@@ -132,6 +134,13 @@ export default function ManageStaff() {
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [userPage, setUserPage] = useState(1);
   const [selectedUserDetail, setSelectedUserDetail] = useState<UserDirectoryItem | null>(null);
+
+  // User Edit Modal state
+  const [editingUser, setEditingUser] = useState<UserDirectoryItem | null>(null);
+  const [editRoleId, setEditRoleId] = useState('');
+  const [editCinemaId, setEditCinemaId] = useState('');
+  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
+  const [updateUserError, setUpdateUserError] = useState('');
 
   useEffect(() => {
     let isCurrent = true;
@@ -169,14 +178,14 @@ export default function ManageStaff() {
     void loadFormOptions();
 
     const fetchLiveUsers = () => {
-      notificationService
-        .getFilteredUsers({})
+      staffService
+        .getManagedUsers()
         .then((res) => {
           if (!isCurrent) return;
           if (res.success && res.data) {
             const apiUsers: UserDirectoryItem[] = res.data.map((u) => {
               let role: 'Staff' | 'Manager' | 'Customer' | 'Admin' = 'Customer';
-              const rUpper = (u.role || '').toUpperCase();
+              const rUpper = (u.roleName || u.roleId || '').toUpperCase();
               if (rUpper.includes('MANAGER')) role = 'Manager';
               else if (rUpper.includes('STAFF')) role = 'Staff';
               else if (rUpper.includes('ADMIN')) role = 'Admin';
@@ -185,11 +194,19 @@ export default function ManageStaff() {
                 userId: u.userId,
                 fullName: u.fullName || u.userId,
                 email: u.email || 'Không có',
-                phone: 'Không có',
+                phone: u.phoneNumber || 'Không có',
                 role,
-                cinemaName: role === 'Customer' ? 'ALL' : 'CINEMA',
-                status: 'Active',
-                createdAt: '—',
+                roleId: u.roleId,
+                cinemaId: u.cinemaId,
+                cinemaName:
+                  u.cinemaName ||
+                  (u.cinemaId
+                    ? u.cinemaId
+                    : role === 'Customer'
+                      ? 'ALL'
+                      : 'Chưa phân rạp'),
+                status: (u.status === 'Active' ? 'Active' : 'Blocked') as 'Active' | 'Blocked',
+                createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '—',
                 isOnlineFromBe: u.isOnline,
               };
             });
@@ -197,7 +214,38 @@ export default function ManageStaff() {
             setDirectoryUsers(apiUsers);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          notificationService
+            .getFilteredUsers({})
+            .then((res) => {
+              if (!isCurrent) return;
+              if (res.success && res.data) {
+                const apiUsers: UserDirectoryItem[] = res.data.map((u) => {
+                  let role: 'Staff' | 'Manager' | 'Customer' | 'Admin' = 'Customer';
+                  const rUpper = (u.role || '').toUpperCase();
+                  if (rUpper.includes('MANAGER')) role = 'Manager';
+                  else if (rUpper.includes('STAFF')) role = 'Staff';
+                  else if (rUpper.includes('ADMIN')) role = 'Admin';
+
+                  return {
+                    userId: u.userId,
+                    fullName: u.fullName || u.userId,
+                    email: u.email || 'Không có',
+                    phone: 'Không có',
+                    role,
+                    roleId: u.role || 'ROLE_CUSTOMER',
+                    cinemaName: role === 'Customer' ? 'ALL' : 'CINEMA',
+                    status: 'Active',
+                    createdAt: '—',
+                    isOnlineFromBe: u.isOnline,
+                  };
+                });
+
+                setDirectoryUsers(apiUsers);
+              }
+            })
+            .catch(() => {});
+        });
     };
 
     fetchLiveUsers();
@@ -301,6 +349,103 @@ export default function ManageStaff() {
     setIsCinemaMenuOpen(false);
   };
 
+  const selectedEditRole = useMemo(
+    () => roles.find((r) => r.roleId === editRoleId),
+    [roles, editRoleId],
+  );
+
+  const openEditModal = (user: UserDirectoryItem) => {
+    setEditingUser(user);
+    setEditRoleId(user.roleId || '');
+    setEditCinemaId(user.cinemaId || '');
+    setUpdateUserError('');
+  };
+
+  const handleEditRoleChange = (nextRoleId: string) => {
+    setEditRoleId(nextRoleId);
+    const targetRole = roles.find((r) => r.roleId === nextRoleId);
+    if (!targetRole?.requiresCinema) {
+      setEditCinemaId('');
+    }
+  };
+
+  const handleSaveRoleCinema = async () => {
+    if (!editingUser) return;
+    if (!editRoleId) {
+      setUpdateUserError('Vui lòng chọn vai trò (Role).');
+      return;
+    }
+    if (selectedEditRole?.requiresCinema && !editCinemaId) {
+      setUpdateUserError('Role này yêu cầu phải chọn Rạp phân quyền.');
+      return;
+    }
+
+    try {
+      setIsUpdatingUser(true);
+      setUpdateUserError('');
+      const res = await staffService.updateUserRoleCinema(editingUser.userId, {
+        roleId: editRoleId,
+        cinemaId: selectedEditRole?.requiresCinema ? editCinemaId : undefined,
+      });
+
+      if (!res.success || !res.data) {
+        throw new Error(res.message || 'Cập nhật vai trò thất bại.');
+      }
+
+      const updated = res.data;
+      let role: 'Staff' | 'Manager' | 'Customer' | 'Admin' = 'Customer';
+      const rUpper = (updated.roleName || updated.roleId || '').toUpperCase();
+      if (rUpper.includes('MANAGER')) role = 'Manager';
+      else if (rUpper.includes('STAFF')) role = 'Staff';
+      else if (rUpper.includes('ADMIN')) role = 'Admin';
+
+      const updatedCinemaName =
+        updated.cinemaName ||
+        (updated.cinemaId
+          ? updated.cinemaId
+          : role === 'Customer'
+            ? 'ALL'
+            : 'Chưa phân rạp');
+
+      setDirectoryUsers((prev) =>
+        prev.map((item) =>
+          item.userId === editingUser.userId
+            ? {
+                ...item,
+                role,
+                roleId: updated.roleId,
+                cinemaId: updated.cinemaId,
+                cinemaName: updatedCinemaName,
+              }
+            : item,
+        ),
+      );
+
+      if (selectedUserDetail?.userId === editingUser.userId) {
+        setSelectedUserDetail((prev) =>
+          prev
+            ? {
+                ...prev,
+                role,
+                roleId: updated.roleId,
+                cinemaId: updated.cinemaId,
+                cinemaName: updatedCinemaName,
+              }
+            : null,
+        );
+      }
+
+      toast.success(res.message || 'Cập nhật vai trò và rạp thành công!');
+      setEditingUser(null);
+    } catch (err: unknown) {
+      const apiError = parseApiError(err);
+      setUpdateUserError(apiError.message);
+      toast.error(apiError.message);
+    } finally {
+      setIsUpdatingUser(false);
+    }
+  };
+
   const handleUserRoleFilterChange = (
     nextFilter: 'ALL' | 'STAFF' | 'MANAGER' | 'CUSTOMER',
   ) => {
@@ -349,6 +494,8 @@ export default function ManageStaff() {
         email: email.trim().toLowerCase(),
         phone: '—',
         role: selectedRole.roleName.toUpperCase().includes('MANAGER') ? 'Manager' : 'Staff',
+        roleId: selectedRole.roleId,
+        cinemaId: selectedCinemaId || null,
         cinemaName: selectedCinema?.cinemaName || 'Rạp phân quyền',
         status: 'Active',
         createdAt: new Date().toISOString().slice(0, 10),
@@ -804,13 +951,22 @@ export default function ManageStaff() {
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedUserDetail(user)}
-                          className="text-[11px] font-bold text-[#FFD166] hover:underline"
-                        >
-                          Chi tiết
-                        </button>
+                        <div className="flex justify-end items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(user)}
+                            className="rounded-md bg-cyan-500/10 px-2 py-1 text-[11px] font-bold text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/20 transition"
+                          >
+                            Cập nhật Role/Rạp
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedUserDetail(user)}
+                            className="text-[11px] font-bold text-[#FFD166] hover:underline"
+                          >
+                            Chi tiết
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -932,13 +1088,117 @@ export default function ManageStaff() {
               </div>
             </div>
 
-            <div className="flex justify-end border-t border-gray-800 pt-3">
+            <div className="flex justify-between items-center border-t border-gray-800 pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = selectedUserDetail;
+                  setSelectedUserDetail(null);
+                  openEditModal(target);
+                }}
+                className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-3.5 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 transition"
+              >
+                Chỉnh sửa Role & Rạp
+              </button>
               <button
                 type="button"
                 onClick={() => setSelectedUserDetail(null)}
                 className="rounded-xl bg-[#4318FF] px-4 py-2 text-xs font-bold text-white hover:bg-blue-600 transition"
               >
                 [Đóng Cửa Sổ]
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT USER ROLE & CINEMA MODAL */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-800 bg-[#111C44] p-6 text-white shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <h3 className="text-lg font-bold">
+                Cập Nhật Role & Rạp Cho: {editingUser.fullName}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="text-xs font-bold text-gray-400 hover:text-white"
+              >
+                [Đóng]
+              </button>
+            </div>
+
+            {updateUserError && (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+                {updateUserError}
+              </div>
+            )}
+
+            <div className="rounded-xl border border-gray-800 bg-[#0F172A] p-3.5 text-xs space-y-1.5">
+              <p><span className="text-gray-400">Mã User ID:</span> <span className="font-mono text-white font-bold">{editingUser.userId}</span></p>
+              <p><span className="text-gray-400">Email:</span> <span className="text-white font-medium">{editingUser.email}</span></p>
+              <p><span className="text-gray-400">Vai trò hiện tại:</span> <span className="text-emerald-400 font-bold">{editingUser.role} ({editingUser.roleId || 'N/A'})</span></p>
+              <p><span className="text-gray-400">Rạp hiện tại:</span> <span className="text-cyan-400 font-bold">{editingUser.cinemaName}</span></p>
+            </div>
+
+            {/* Role Selection */}
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase text-gray-400">
+                Vai trò mới (Role) <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={editRoleId}
+                onChange={(e) => handleEditRoleChange(e.target.value)}
+                className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-sm text-white outline-none transition focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Chọn vai trò mới --</option>
+                {roles.map((r) => (
+                  <option key={r.roleId} value={r.roleId}>
+                    {formatRoleName(r.roleName)} ({r.roleId})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Cinema Selection */}
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase text-gray-400">
+                Rạp phân quyền {selectedEditRole?.requiresCinema ? <span className="text-red-500">*</span> : '(Không áp dụng)'}
+              </label>
+              <select
+                disabled={!selectedEditRole?.requiresCinema}
+                value={editCinemaId}
+                onChange={(e) => setEditCinemaId(e.target.value)}
+                className="w-full rounded-xl border border-gray-800 bg-[#0F172A] px-4 py-2.5 text-sm text-white outline-none transition focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">-- Chọn rạp chi nhánh --</option>
+                {activeCinemas.map((c) => (
+                  <option key={c.cinemaId} value={c.cinemaId}>
+                    {c.cinemaName} {c.city ? `(${c.city})` : ''}
+                  </option>
+                ))}
+              </select>
+              {!selectedEditRole?.requiresCinema && (
+                <p className="mt-1 text-[11px] text-gray-400">Role này không bắt buộc phân quyền theo rạp.</p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-gray-800 pt-4">
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-gray-300 hover:bg-white/20 transition"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={isUpdatingUser}
+                onClick={handleSaveRoleCinema}
+                className="rounded-xl bg-[#4318FF] px-5 py-2 text-xs font-bold text-white hover:bg-blue-600 transition disabled:opacity-50"
+              >
+                {isUpdatingUser ? 'Đang lưu...' : 'Lưu Thay Đổi'}
               </button>
             </div>
           </div>
