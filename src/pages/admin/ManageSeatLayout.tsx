@@ -5,6 +5,7 @@ import { FaChair, FaCouch } from 'react-icons/fa';
 import { roomService } from '../../services/roomService';
 import type { RoomResponse, SeatResponse } from '../../services/roomService';
 import { TEXT } from '../../constants/vi';
+import { confirmWithPopup } from '../../services/confirmDialogService';
 
 // ============================================================
 // Constants
@@ -500,10 +501,14 @@ export default function ManageSeatLayout() {
       // Đặt làm lối đi -> Phát hiện ghế active đang nằm trên cột này
       const activeSeatsOnCol = seats.filter(s => s.seatNumber === colNumber && s.isActive);
       if (activeSeatsOnCol.length > 0) {
-        const confirmed = window.confirm(
-          `CẢNH BÁO: Cột ${colNumber} đang chứa ${activeSeatsOnCol.length} ghế đang hoạt động.\n` +
-          `Thiết lập lối đi sẽ tự động XÓA (vô hiệu hóa) toàn bộ ghế trên cột này. Bạn có chắc chắn muốn tiếp tục?`
-        );
+        const confirmed = await confirmWithPopup({
+          title: 'Thiết lập lối đi?',
+          message:
+            `CẢNH BÁO: Cột ${colNumber} đang chứa ${activeSeatsOnCol.length} ghế đang hoạt động.\n` +
+            'Thiết lập lối đi sẽ tự động xóa/vô hiệu hóa toàn bộ ghế trên cột này. Bạn có chắc chắn muốn tiếp tục?',
+          confirmLabel: 'Tiếp tục',
+          cancelLabel: 'Quay lại',
+        });
         if (!confirmed) return;
 
         try {
@@ -547,7 +552,13 @@ export default function ManageSeatLayout() {
     if (!roomId || !selectedSourceRoomId) return;
 
     const confirmMsg = TEXT.SEAT_LAYOUT.MSG_COPY_WARN;
-    if (!window.confirm(confirmMsg)) return;
+    const confirmed = await confirmWithPopup({
+      title: 'Sao chép sơ đồ ghế?',
+      message: confirmMsg,
+      confirmLabel: 'Sao chép',
+      cancelLabel: 'Quay lại',
+    });
+    if (!confirmed) return;
 
     try {
       setActionLoading(true);
@@ -965,10 +976,14 @@ export default function ManageSeatLayout() {
 
   const handleResetLayout = async () => {
     if (!roomId) return;
-    const confirmed = window.confirm(
-      "CẢNH BÁO: Bạn có chắc chắn muốn xóa toàn bộ sơ đồ ghế của phòng chiếu này?\n" +
-      "Hành động này sẽ vô hiệu hóa tất cả ghế hiện tại và đặt kích thước khung rạp về mặc định (Hàng J x 12 Cột)."
-    );
+    const confirmed = await confirmWithPopup({
+      title: 'Reset sơ đồ ghế?',
+      message:
+        'CẢNH BÁO: Bạn có chắc chắn muốn xóa toàn bộ sơ đồ ghế của phòng chiếu này?\n' +
+        'Hành động này sẽ vô hiệu hóa tất cả ghế hiện tại và đặt kích thước khung rạp về mặc định (Hàng J x 12 Cột).',
+      confirmLabel: 'Reset sơ đồ',
+      cancelLabel: 'Quay lại',
+    });
     if (!confirmed) return;
 
     try {
@@ -1202,7 +1217,12 @@ export default function ManageSeatLayout() {
       return;
     }
 
-    const confirmed = window.confirm(TEXT.SEAT_LAYOUT.MSG_DEACTIVATE_CONFIRM.replace('{0}', String(selectedSeatIds.size)));
+    const confirmed = await confirmWithPopup({
+      title: 'Vô hiệu hóa ghế?',
+      message: TEXT.SEAT_LAYOUT.MSG_DEACTIVATE_CONFIRM.replace('{0}', String(selectedSeatIds.size)),
+      confirmLabel: 'Vô hiệu hóa',
+      cancelLabel: 'Quay lại',
+    });
     if (!confirmed) return;
 
     try {
@@ -1897,7 +1917,12 @@ export default function ManageSeatLayout() {
                       // 2. Cảnh báo và xóa ghế lọt ra ngoài
                       if (seatsToOrphan.length > 0) {
                         const confirmMsg = `CẢNH BÁO: Việc thu nhỏ lưới sẽ làm biến mất và XÓA (vô hiệu hóa) ${seatsToOrphan.length} ghế hiện tại nằm ngoài phạm vi lưới mới trong database.\n\nBạn có chắc chắn muốn tiếp tục?`;
-                        const confirmed = window.confirm(confirmMsg);
+                        const confirmed = await confirmWithPopup({
+                          title: 'Thu nhỏ lưới ghế?',
+                          message: confirmMsg,
+                          confirmLabel: 'Tiếp tục',
+                          cancelLabel: 'Quay lại',
+                        });
                         if (!confirmed) return;
 
                         try {

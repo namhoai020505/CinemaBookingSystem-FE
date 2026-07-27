@@ -4,6 +4,7 @@ import { movieService } from "../../services/movieService";
 import type { MovieResponse } from "../../services/movieService";
 import { getMediaUrl } from "../../lib/media";
 import { TEXT } from "../../constants/vi";
+import { confirmWithPopup } from "../../services/confirmDialogService";
 
 type ApiErrorLike = {
   response?: {
@@ -255,7 +256,12 @@ export default function ManageMovie() {
   };
 
   const handleDeleteMovie = async (movie: MovieResponse) => {
-    const confirmDelete = window.confirm(TEXT.MOVIE.CONFIRM_HIDE.replace("{0}", movie.movieNameVn));
+    const confirmDelete = await confirmWithPopup({
+      title: "Ẩn phim?",
+      message: TEXT.MOVIE.CONFIRM_HIDE.replace("{0}", movie.movieNameVn),
+      confirmLabel: "Ẩn phim",
+      cancelLabel: "Giữ lại",
+    });
     if (confirmDelete) {
       try {
         setLoading(true);
@@ -271,7 +277,12 @@ export default function ManageMovie() {
   };
 
   const handleReactivateMovie = async (movie: MovieResponse) => {
-    const confirmReactivate = window.confirm(TEXT.MOVIE.CONFIRM_REACTIVATE.replace("{0}", movie.movieNameVn));
+    const confirmReactivate = await confirmWithPopup({
+      title: "Kích hoạt lại phim?",
+      message: TEXT.MOVIE.CONFIRM_REACTIVATE.replace("{0}", movie.movieNameVn),
+      confirmLabel: "Kích hoạt",
+      cancelLabel: "Quay lại",
+    });
     if (confirmReactivate) {
       try {
         setLoading(true);
@@ -440,7 +451,13 @@ export default function ManageMovie() {
       return;
     }
 
-    if (!window.confirm("Bạn có chắc chắn muốn xóa banner của phim này?")) {
+    const confirmed = await confirmWithPopup({
+      title: "Xóa banner phim?",
+      message: "Bạn có chắc chắn muốn xóa banner của phim này?",
+      confirmLabel: "Xóa banner",
+      cancelLabel: "Giữ lại",
+    });
+    if (!confirmed) {
       return;
     }
 

@@ -13,6 +13,7 @@ import {
 import api from "../../lib/api";
 import { managerService } from "../../services/managerService";
 import { voucherService, type Voucher } from "../../services/voucherService";
+import { confirmWithPopup } from "../../services/confirmDialogService";
 import {
   buildRecurringShowtimeDrafts,
   getRecurringDateKeys,
@@ -249,14 +250,36 @@ export default function ManageShowtime() {
   );
 
   useEffect(() => {
-    if (blocker.state === "blocked") {
-      const confirmed = window.confirm(TEXT.SHOWTIME.CONFIRM_NAVIGATE_AWAY);
+    if (blocker.state !== "blocked") {
+      return undefined;
+    }
+
+    let disposed = false;
+
+    const confirmNavigation = async () => {
+      const confirmed = await confirmWithPopup({
+        title: "Rời khỏi trang?",
+        message: TEXT.SHOWTIME.CONFIRM_NAVIGATE_AWAY,
+        confirmLabel: "Rời trang",
+        cancelLabel: "Ở lại",
+      });
+
+      if (disposed) {
+        return;
+      }
+
       if (confirmed) {
         blocker.proceed();
       } else {
         blocker.reset();
       }
-    }
+    };
+
+    void confirmNavigation();
+
+    return () => {
+      disposed = true;
+    };
   }, [blocker]);
 
   // ---------- Blocker: Cảnh báo reload hoặc đóng tab khi chưa lưu ----------
@@ -637,9 +660,14 @@ export default function ManageShowtime() {
     }
   };
 
-  const handleCancelChanges = () => {
-    const confirm = window.confirm(TEXT.SHOWTIME.CONFIRM_CANCEL_CHANGES);
-    if (!confirm) return;
+  const handleCancelChanges = async () => {
+    const confirmed = await confirmWithPopup({
+      title: "Hủy thay đổi?",
+      message: TEXT.SHOWTIME.CONFIRM_CANCEL_CHANGES,
+      confirmLabel: "Hủy thay đổi",
+      cancelLabel: "Quay lại",
+    });
+    if (!confirmed) return;
 
     setIsDirty(false);
     setDeletedShowtimeIds(new Set());
@@ -1036,11 +1064,16 @@ export default function ManageShowtime() {
   // 💡 EVENT HANDLERS CHO BỘ LỌC
   // =================================================================
 
-  const handleCinemaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleCinemaChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nextVal = e.target.value;
     if (isDirty) {
-      const confirm = window.confirm(TEXT.SHOWTIME.CONFIRM_CHANGE_CINEMA);
-      if (!confirm) return;
+      const confirmed = await confirmWithPopup({
+        title: "Đổi rạp?",
+        message: TEXT.SHOWTIME.CONFIRM_CHANGE_CINEMA,
+        confirmLabel: "Đổi rạp",
+        cancelLabel: "Giữ lại",
+      });
+      if (!confirmed) return;
     }
     setSelectedCinemaId(nextVal);
     setIsDirty(false);
@@ -1049,11 +1082,16 @@ export default function ManageShowtime() {
     setRecurrenceEndDate("");
   };
 
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDateChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const nextVal = e.target.value;
     if (isDirty) {
-      const confirm = window.confirm(TEXT.SHOWTIME.CONFIRM_CHANGE_DATE);
-      if (!confirm) return;
+      const confirmed = await confirmWithPopup({
+        title: "Đổi ngày?",
+        message: TEXT.SHOWTIME.CONFIRM_CHANGE_DATE,
+        confirmLabel: "Đổi ngày",
+        cancelLabel: "Giữ lại",
+      });
+      if (!confirmed) return;
     }
     setSelectedDate(nextVal);
     if (recurrenceEndDate && recurrenceEndDate < nextVal) {

@@ -4,8 +4,11 @@ import {
   Outlet,
   RouterProvider,
 } from 'react-router-dom';
+import ConfirmDialogHost from './components/ConfirmDialogHost';
 import RequireAuth from './components/RequireAuth';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
+import { useMultiTabSecurity } from './hooks/useMultiTabSecurity';
+import { useSessionHeartbeat } from './lib/sessionHeartbeat';
 import AdminLayout from './layouts/admin/AdminLayout';
 import ManagerLayout from './layouts/manager/ManagerLayout';
 import StaffLayout from './layouts/staff/StaffLayout';
@@ -19,15 +22,18 @@ import ManageSeatLayout from './pages/admin/ManageSeatLayout';
 import ManageShowtime from './pages/admin/ManageShowtime';
 import ManageStaff from './pages/admin/ManageStaff';
 import ManageVouchers from './pages/admin/ManageVouchers';
+import ManageNotifications from './pages/admin/ManageNotifications';
 import ReviewModeration from './pages/admin/ReviewModeration';
 import Login from './pages/auth/Login';
 import StaffSetPassword from './pages/auth/StaffSetPassword';
 import ManagerDashboardPage from './pages/manager/ManagerDashboardPage';
 import ManagerRefundsPage from './pages/manager/ManagerRefundsPage';
 import ManagerShowtimesPage from './pages/manager/ManagerShowtimesPage';
+import ManagerStaffPage from './pages/manager/ManagerStaffPage';
 import MyCinemaPage from './pages/manager/MyCinemaPage';
 import TicketScannerPage from './pages/manager/TicketScannerPage';
 import CounterFbSalesPage from './pages/staff/CounterFbSalesPage';
+import StaffSchedulePage from './pages/staff/StaffSchedulePage';
 import StaffTicketScannerPage from './pages/staff/StaffTicketScannerPage';
 import BookingSuccess from './pages/user/BookingSuccess';
 import Checkout from './pages/user/Checkout';
@@ -52,6 +58,8 @@ const staffRoles = ['staff'];
 
 const RootLayout = () => {
   useIdleTimeout(10);
+  useMultiTabSecurity();
+  useSessionHeartbeat();
   return <Outlet />;
 };
 
@@ -70,6 +78,7 @@ const router = createBrowserRouter([
           { path: '/cinema-schedule', element: <CinemaSchedule /> },
           { path: '/movies', element: <Movies /> },
           { path: '/movie/:movieId/showtimes', element: <MovieShowtimes /> },
+          { path: '/vnpay-return', element: <VnpayReturn /> },
           { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
           { path: '/booking/confirm-time-change', element: <ConfirmTimeChangePage /> },
           {
@@ -77,7 +86,6 @@ const router = createBrowserRouter([
             children: [
               { path: '/booking/seats/:showtimeId', element: <SeatSelection /> },
               { path: '/booking/checkout/:showtimeId', element: <Checkout /> },
-              { path: '/vnpay-return', element: <VnpayReturn /> },
               { path: '/booking/success/:bookingId', element: <BookingSuccess /> },
               { path: '/my-bookings', element: <MyBookings /> },
               { path: '/my-vouchers', element: <MyVouchers /> },
@@ -104,6 +112,8 @@ const router = createBrowserRouter([
               { path: 'rooms/:roomId/seats', element: <ManageSeatLayout /> },
               { path: 'review', element: <ReviewModeration /> },
               { path: 'vouchers', element: <ManageVouchers /> },
+              { path: 'banners', element: <ManageBanner /> },
+              { path: 'notifications', element: <ManageNotifications /> },
               { path: 'refunds', element: <ManageRefunds /> },
             ],
           },
@@ -122,7 +132,9 @@ const router = createBrowserRouter([
               { path: 'refunds', element: <ManagerRefundsPage /> },
               { path: 'ticket-scanner', element: <TicketScannerPage /> },
               { path: 'vouchers', element: <ManageVouchers /> },
-              { path: 'banners', element: <ManageBanner /> },
+              { path: 'notifications', element: <ManageNotifications /> },
+              { path: 'staff', element: <ManagerStaffPage /> },
+              { path: 'staff-shifts', element: <ManagerStaffPage /> },
               { path: 'my-cinema', element: <MyCinemaPage /> },
             ],
           },
@@ -138,6 +150,7 @@ const router = createBrowserRouter([
               { index: true, element: <Navigate to="ticket-scanner" replace /> },
               { path: 'ticket-scanner', element: <StaffTicketScannerPage /> },
               { path: 'fb-counter', element: <CounterFbSalesPage /> },
+              { path: 'schedule', element: <StaffSchedulePage /> },
             ],
           },
         ],
@@ -148,7 +161,12 @@ const router = createBrowserRouter([
 ]);
 
 function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      <ConfirmDialogHost />
+    </>
+  );
 }
 
 export default App;

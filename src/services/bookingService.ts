@@ -130,6 +130,7 @@ export type CheckoutRecovery = {
 };
 
 const HIDDEN_EXPIRED_BOOKINGS_KEY = 'g2c-hidden-expired-bookings';
+const HIDDEN_CANCELLED_BOOKINGS_KEY = 'g2c-hidden-cancelled-bookings';
 
 export const parseBackendTime = (value?: string | null): number => {
   if (!value) {
@@ -152,36 +153,45 @@ export const parseBackendTime = (value?: string | null): number => {
 const canUseLocalStorage = () =>
   typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
-export const getHiddenExpiredBookingIds = () => {
+const getHiddenBookingIds = (storageKey: string) => {
   if (!canUseLocalStorage()) {
     return [];
   }
 
   try {
     const parsed = JSON.parse(
-      localStorage.getItem(HIDDEN_EXPIRED_BOOKINGS_KEY) || '[]',
+      localStorage.getItem(storageKey) || '[]',
     );
     return Array.isArray(parsed)
       ? parsed.filter((item): item is string => typeof item === 'string')
       : [];
   } catch {
-    localStorage.removeItem(HIDDEN_EXPIRED_BOOKINGS_KEY);
+    localStorage.removeItem(storageKey);
     return [];
   }
 };
 
-export const hideExpiredBookingFromHistory = (bookingId?: string | null) => {
+export const getHiddenExpiredBookingIds = () =>
+  getHiddenBookingIds(HIDDEN_EXPIRED_BOOKINGS_KEY);
+
+export const getHiddenCancelledBookingIds = () =>
+  getHiddenBookingIds(HIDDEN_CANCELLED_BOOKINGS_KEY);
+
+const hideBookingFromHistory = (storageKey: string, bookingId?: string | null) => {
   if (!bookingId || !canUseLocalStorage()) {
     return;
   }
 
-  const bookingIds = new Set(getHiddenExpiredBookingIds());
+  const bookingIds = new Set(getHiddenBookingIds(storageKey));
   bookingIds.add(bookingId);
-  localStorage.setItem(
-    HIDDEN_EXPIRED_BOOKINGS_KEY,
-    JSON.stringify(Array.from(bookingIds)),
-  );
+  localStorage.setItem(storageKey, JSON.stringify(Array.from(bookingIds)));
 };
+
+export const hideExpiredBookingFromHistory = (bookingId?: string | null) =>
+  hideBookingFromHistory(HIDDEN_EXPIRED_BOOKINGS_KEY, bookingId);
+
+export const hideCancelledBookingFromHistory = (bookingId?: string | null) =>
+  hideBookingFromHistory(HIDDEN_CANCELLED_BOOKINGS_KEY, bookingId);
 
 export const isExpiredPendingBooking = (booking: BookingSummary) => {
   if (booking.status.toUpperCase() !== 'PENDING_PAYMENT') {
@@ -194,7 +204,8 @@ export const isExpiredPendingBooking = (booking: BookingSummary) => {
 
 export const shouldHideBookingFromHistory = (booking: BookingSummary) =>
   isExpiredPendingBooking(booking) ||
-  getHiddenExpiredBookingIds().includes(booking.bookingId);
+  getHiddenExpiredBookingIds().includes(booking.bookingId) ||
+  getHiddenCancelledBookingIds().includes(booking.bookingId);
 
 export const bookingService = {
   createBooking: async (payload: BookingPayload) => {

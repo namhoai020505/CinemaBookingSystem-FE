@@ -1,6 +1,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { FaCalendarAlt, FaChartLine, FaCoins, FaReceipt, FaTicketAlt } from 'react-icons/fa';
+import {
+  FaCalendarAlt,
+  FaChartLine,
+  FaCoins,
+  FaReceipt,
+  FaTicketAlt,
+} from 'react-icons/fa';
 import type { ManagerOutletContext } from '../../layouts/manager/ManagerLayout';
 import {
   managerDashboardService,
@@ -195,11 +201,11 @@ const ManagerDashboardPage = () => {
 
   return (
     <PageShell
-      eyebrow="Manager reporting"
+      eyebrow="Báo cáo Quản lý Rạp"
       title="Dashboard rạp của tôi"
       description="Theo dõi doanh thu, vé bán và hiệu suất ghế trong phạm vi rạp backend đã phân quyền cho tài khoản Manager."
       isLightMode={isLightMode}
-      action={<StatusBadge status={dashboard.cinemaName || 'Scope by backend'} />}
+      action={<StatusBadge status={dashboard.cinemaName || 'Tất cả rạp phân quyền'} />}
     >
       <form
         onSubmit={handleSubmit}

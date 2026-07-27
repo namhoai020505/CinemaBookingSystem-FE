@@ -5,6 +5,7 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import { getCurrentUserProfile } from "../../lib/auth";
 import {
   bookingService,
+  hideCancelledBookingFromHistory,
   type BookingDetails,
   type BookingSeatDetail,
 } from "../../services/bookingService";
@@ -199,6 +200,7 @@ export default function BookingSuccess() {
       setCancellingBooking(true);
       setErrorMessage("");
       await bookingService.cancelPendingBooking(bookingInfo.bookingId);
+      hideCancelledBookingFromHistory(bookingInfo.bookingId);
       localStorage.removeItem(getPaymentStorageKey(bookingInfo.showtimeId));
       removeCheckoutAttempt(bookingInfo.showtimeId, getUserKey());
       setBookingInfo({ ...bookingInfo, status: "CANCELLED" });
