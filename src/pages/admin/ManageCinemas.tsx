@@ -13,7 +13,7 @@ import {
   FaCheckCircle,
 } from 'react-icons/fa';
 import { cinemaService, type CinemaResponse, type CreateCinemaPayload, type UpdateCinemaPayload } from '../../services/cinemaService';
-import { confirmWithPopup } from '../../services/confirmDialogService';
+import { useConfirm } from '../../hooks/useConfirm';
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string; badge: string }> = {
   ACTIVE: {
@@ -48,6 +48,7 @@ const getStatusBadge = (status: string) => {
 };
 
 export default function ManageCinemas() {
+  const { confirm, ConfirmComponent } = useConfirm();
   const [cinemas, setCinemas] = useState<CinemaResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -163,23 +164,23 @@ export default function ManageCinemas() {
     }
   };
 
-  // Delete / Deactivate Cinema
-  const handleDelete = async (cinema: CinemaResponse) => {
-    const confirmed = await confirmWithPopup({
+  // Delete / Deactivate Cinema using useConfirm hook
+  const handleDelete = (cinema: CinemaResponse) => {
+    confirm({
       title: 'Xóa / Tạm dừng rạp chiếu',
       message: `Bạn có chắc chắn muốn xóa hoặc chuyển rạp "${cinema.cinemaName}" sang trạng thái tạm dừng?`,
       confirmLabel: 'Xác nhận xóa',
+      cancelLabel: 'Hủy bỏ',
+      onConfirm: async () => {
+        try {
+          await cinemaService.deleteCinema(cinema.cinemaId);
+          toast.success('Đã cập nhật trạng thái rạp chiếu.');
+          void fetchCinemas();
+        } catch {
+          toast.error('Thao tác thất bại.');
+        }
+      },
     });
-
-    if (!confirmed) return;
-
-    try {
-      await cinemaService.deleteCinema(cinema.cinemaId);
-      toast.success('Đã cập nhật trạng thái rạp chiếu.');
-      void fetchCinemas();
-    } catch {
-      toast.error('Thao tác thất bại.');
-    }
   };
 
   // Filter Logic
@@ -344,7 +345,7 @@ export default function ManageCinemas() {
                         <span>Sửa</span>
                       </button>
                       <button
-                        onClick={() => void handleDelete(cinema)}
+                        onClick={() => handleDelete(cinema)}
                         title="Xóa hoặc Tạm dừng"
                         className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-medium transition-colors"
                       >
@@ -470,6 +471,9 @@ export default function ManageCinemas() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Dialog Component */}
+      <ConfirmComponent />
     </div>
   );
 }
