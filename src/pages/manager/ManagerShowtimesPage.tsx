@@ -569,9 +569,6 @@ const ManagerShowtimesPage = () => {
                   <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                     Voucher bồi thường sự cố (Không bắt buộc)
                   </span>
-                  <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
-                    Tự động tạo 100% nếu để trống
-                  </span>
                 </div>
                 <input
                   type="text"

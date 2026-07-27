@@ -593,20 +593,25 @@ export default function ManageShowtime() {
   const handleDeleteShowtime = (roomId: string, slotId: string) => {
     const slot = schedule[roomId]?.find((s) => s.id === slotId);
     if (!slot) return;
-    const movieName = slot.movieNameVn || "suất chiếu này";
-    const room = filteredRooms.find((r) => r.roomId === roomId);
-    const roomName = room ? room.roomName : "Phòng chiếu";
-    const startShort = getShortTimeFromISO(slot.startTime);
-    const endShort = getShortTimeFromISO(slot.endTime);
-    const startTimeStr = startShort && endShort ? `${startShort} - ${endShort}` : "N/A";
 
-    setDeleteConfirm({
-      roomId,
-      slotId,
-      movieName,
-      roomName,
-      startTimeStr,
+    setSchedule((prev) => {
+      const next = { ...prev };
+      if (next[roomId]) {
+        next[roomId] = next[roomId].filter((s) => s.id !== slotId);
+      }
+      return next;
     });
+
+    if (!slotId.startsWith("temp_")) {
+      setDeletedShowtimeIds((prev) => {
+        const next = new Set(prev);
+        next.add(slotId);
+        return next;
+      });
+    }
+
+    setIsDirty(true);
+    toast.info(TEXT.SHOWTIME.TOAST_TEMP_DELETED);
   };
 
   const confirmDeleteShowtime = () => {
@@ -622,7 +627,6 @@ export default function ManageShowtime() {
       return next;
     });
 
-    // Nếu slotId không phải là tempId, ta đưa vào hàng đợi xóa
     if (!slotId.startsWith("temp_")) {
       setDeletedShowtimeIds((prev) => {
         const next = new Set(prev);
@@ -871,7 +875,7 @@ export default function ManageShowtime() {
         setCancelConfirmShowtimes(showtimesToCancel);
         setCancelReason("");
 
-        // Chờ người dùng nhập lý do hủy qua modal
+        // Tạm dừng chờ người dùng nhập lý do hủy & mã voucher đền bù trong modal
         const proceed = await new Promise<boolean>((resolve) => {
           setSavePromiseResolve(() => resolve);
         });
@@ -888,7 +892,11 @@ export default function ManageShowtime() {
 
       // Hủy các suất chiếu có đặt chỗ
       for (const st of showtimesToCancel) {
-        const result = await managerService.cancelShowtime(st.id, cancelReason.trim() || "Hủy suất chiếu bởi Quản trị viên") as any;
+        const result = await managerService.cancelShowtime(
+          st.id,
+          cancelReason.trim() || "Hủy suất chiếu bởi Quản trị viên",
+          compensationVoucherCode.trim() || undefined
+        ) as any;
         if (result) {
           totalPaidCompensated += result.paidBookingsCompensated || 0;
           totalTicketsIssued += result.ticketVouchersIssued || 0;
@@ -1640,9 +1648,6 @@ export default function ManageShowtime() {
                 <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
                   Voucher bồi thường sự cố (Nếu có vé)
                 </span>
-                <span className="text-[9px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
-                  Phát hành 100% tự động
-                </span>
               </div>
               <input
                 type="text"
@@ -1936,7 +1941,6 @@ export default function ManageShowtime() {
                 <label className="text-xs font-bold text-gray-300">
                   Mã voucher bồi thường sự cố (Không bắt buộc):
                 </label>
-                <span className="text-[10px] text-amber-400">Tự động phát hành 100% nếu để trống</span>
               </div>
               <input
                 type="text"
