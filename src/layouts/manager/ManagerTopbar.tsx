@@ -29,6 +29,10 @@ const routeTitles: Record<string, { title: string; subtitle: string }> = {
     title: 'Soát Vé Điện Tử',
     subtitle: 'Soát vé bằng QR hoặc nhập mã thủ công tại rạp.',
   },
+  '/manager/fb-items': {
+    title: 'Quản Lý F&B Của Rạp',
+    subtitle: 'Theo dõi món đang bán và cập nhật tồn kho bắp nước tại chi nhánh.',
+  },
   '/manager/vouchers': {
     title: 'Voucher & Mã Giảm Giá',
     subtitle: 'Quản lý mã giảm giá và chương trình khuyến mãi rạp.',

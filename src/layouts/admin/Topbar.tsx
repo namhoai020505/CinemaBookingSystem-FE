@@ -26,6 +26,10 @@ const routeTitles: Record<string, { title: string; subtitle: string }> = {
     title: 'Quản Lý Lịch Chiếu & Suất Chiếu',
     subtitle: 'Sắp xếp suất chiếu theo rạp, phòng chiếu và khung giờ.',
   },
+  '/admin/fb-items': {
+    title: 'Quản Lý F&B',
+    subtitle: 'Quản lý danh mục món bắp nước và tồn kho theo từng chi nhánh.',
+  },
   '/admin/review': {
     title: 'Kiểm Duyệt Bình Luận & Đánh Giá',
     subtitle: 'Xử lý đánh giá đang chờ và duyệt bình luận phim.',

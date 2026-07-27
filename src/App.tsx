@@ -16,6 +16,7 @@ import UserLayout from './layouts/user/UserLayout';
 import Dashboard from './pages/admin/Dashboard';
 import ManageBanner from './pages/admin/ManageBanner';
 import ManageCinemas from './pages/admin/ManageCinemas';
+import ManageFbItems from './pages/admin/ManageFbItems';
 import ManageMovie from './pages/admin/ManageMovie';
 import ManageRefunds from './pages/admin/ManageRefunds';
 import ManageRooms from './pages/admin/ManageRooms';
@@ -107,6 +108,7 @@ const router = createBrowserRouter([
               { index: true, element: <Navigate to="dashboard" replace /> },
               { path: 'dashboard', element: <Dashboard /> },
               { path: 'cinemas', element: <ManageCinemas /> },
+              { path: 'fb-items', element: <ManageFbItems /> },
               { path: 'movies', element: <ManageMovie /> },
               { path: 'showtime', element: <ManageShowtime /> },
               { path: 'staff', element: <ManageStaff /> },
@@ -133,6 +135,7 @@ const router = createBrowserRouter([
               { path: 'showtimes', element: <ManagerShowtimesPage /> },
               { path: 'refunds', element: <ManagerRefundsPage /> },
               { path: 'ticket-scanner', element: <TicketScannerPage /> },
+              { path: 'fb-items', element: <ManageFbItems /> },
               { path: 'vouchers', element: <ManageVouchers /> },
               { path: 'notifications', element: <ManageNotifications /> },
               { path: 'staff', element: <ManagerStaffPage /> },

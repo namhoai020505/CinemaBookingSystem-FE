@@ -9,6 +9,7 @@ import {
   FaMoneyBillWave,
   FaRegBuilding,
   FaShieldAlt,
+  FaShoppingBasket,
   FaTicketAlt,
   FaUsersCog,
 } from 'react-icons/fa';
@@ -48,6 +49,12 @@ const navItems = [
     label: 'Lịch chiếu',
     description: 'Suất chiếu & khung giờ',
     icon: <FaTicketAlt />,
+  },
+  {
+    to: '/admin/fb-items',
+    label: 'F&B',
+    description: 'Danh mục và tồn kho bắp nước',
+    icon: <FaShoppingBasket />,
   },
   {
     to: '/admin/review',

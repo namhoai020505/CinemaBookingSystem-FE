@@ -8,6 +8,7 @@ import {
   FaDoorOpen,
   FaMoneyCheckAlt,
   FaShieldAlt,
+  FaShoppingBasket,
   FaTicketAlt,
   FaUsersCog,
 } from 'react-icons/fa';
@@ -41,6 +42,12 @@ const navItems = [
     label: 'Soát vé',
     description: 'Soát vé tại rạp',
     icon: <FaBarcode />,
+  },
+  {
+    to: '/manager/fb-items',
+    label: 'F&B',
+    description: 'Tồn kho bắp nước tại rạp',
+    icon: <FaShoppingBasket />,
   },
   {
     to: '/manager/vouchers',

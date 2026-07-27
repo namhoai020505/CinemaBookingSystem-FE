@@ -8,6 +8,18 @@ export type FbItem = {
   itemStatus: string;
 };
 
+export type CreateFbItemPayload = {
+  itemName: string;
+  price: number;
+  itemStatus?: string;
+};
+
+export type UpdateFbItemPayload = {
+  itemName: string;
+  price: number;
+  itemStatus: string;
+};
+
 export type CinemaFbInventoryItem = {
   cinemaInventoryId: string;
   cinemaId: string;
@@ -51,6 +63,12 @@ export type CreateCounterFbOrderPayload = {
   changeAmount?: number;
 };
 
+export type UpdateCinemaFbInventoryPayload = {
+  cinemaId: string;
+  fbItemId: string;
+  quantity: number;
+};
+
 export type FbFulfillmentResponse = {
   bookingId: string;
   cinemaId?: string | null;
@@ -78,8 +96,33 @@ export const fbItemService = {
     return response;
   },
 
+  getAllForAdmin: async () => {
+    const response = await api.get('/api/fb-items/admin') as unknown as ApiResponse<FbItem[]>;
+    return response;
+  },
+
+  createItem: async (payload: CreateFbItemPayload) => {
+    const response = await api.post('/api/fb-items', payload) as unknown as ApiResponse<FbItem>;
+    return response;
+  },
+
+  updateItem: async (fbItemId: string, payload: UpdateFbItemPayload) => {
+    const response = await api.put(`/api/fb-items/${fbItemId}`, payload) as unknown as ApiResponse<FbItem>;
+    return response;
+  },
+
+  deactivateItem: async (fbItemId: string) => {
+    const response = await api.delete(`/api/fb-items/${fbItemId}`) as unknown as ApiResponse<boolean>;
+    return response;
+  },
+
   getCinemaInventory: async (cinemaId: string) => {
     const response = await api.get(`/api/fb-items/cinemas/${cinemaId}/inventory`) as unknown as ApiResponse<CinemaFbInventoryItem[]>;
+    return response;
+  },
+
+  updateCinemaInventory: async (payload: UpdateCinemaFbInventoryPayload) => {
+    const response = await api.put('/api/fb-items/cinemas/inventory', payload) as unknown as ApiResponse<CinemaFbInventoryItem>;
     return response;
   },
 
