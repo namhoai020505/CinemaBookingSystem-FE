@@ -388,8 +388,8 @@ export default function ShowtimePickerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/65 px-3 py-6 backdrop-blur-sm sm:px-6">
-      <div className="relative max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-white/10 bg-[#1C2A3D] p-5 text-white shadow-2xl sm:p-7">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/65 px-3 py-6 backdrop-blur-sm sm:px-6">
+      <div className="relative z-[101] max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-white/10 bg-[#1C2A3D] p-5 text-white shadow-2xl sm:p-7">
         <button
           type="button"
           aria-label="Đóng lịch chiếu"
@@ -508,8 +508,8 @@ export default function ShowtimePickerModal({
       </div>
 
       {selectedSlot && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/35 px-4 backdrop-blur-[2px]">
-          <div className="w-full max-w-4xl rounded-md border border-white/10 bg-[#1C2A3D] p-6 text-white shadow-2xl sm:p-8">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/35 px-4 backdrop-blur-[2px]">
+          <div className="relative z-[111] w-full max-w-4xl rounded-md border border-white/10 bg-[#1C2A3D] p-6 text-white shadow-2xl sm:p-8">
             <h3 className="text-sm font-black uppercase tracking-wide">
               Bạn đang đặt vé xem phim
             </h3>
