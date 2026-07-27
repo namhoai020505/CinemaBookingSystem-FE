@@ -15,7 +15,7 @@ export default function UserLayout() {
         <Outlet />
       </main>
 
-      <div className="user-layout-footer relative z-20 hidden md:block">
+      <div className="user-layout-footer relative z-0 hidden md:block">
         <Footer />
       </div>
       <MobileBottomNav />

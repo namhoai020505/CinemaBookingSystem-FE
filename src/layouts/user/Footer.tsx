@@ -38,7 +38,7 @@ const facebookLinks = [
 
 export default function Footer() {
   return (
-    <footer className="g2c-footer relative z-20 isolate border-t border-slate-200 bg-white text-sm text-slate-700 dark:border-white/10 dark:bg-black dark:text-slate-300">
+    <footer className="g2c-footer relative z-0 border-t border-slate-200 bg-white text-sm text-slate-700 dark:border-white/10 dark:bg-black dark:text-slate-300">
       <div className="mx-auto max-w-[1180px] px-4 py-12 sm:px-6">
         <div className="grid gap-8 lg:grid-cols-[1.15fr_1.6fr_1fr]">
           <section className="space-y-5">
