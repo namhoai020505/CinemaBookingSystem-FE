@@ -871,6 +871,21 @@ export default function ManageShowtime() {
         }
       }
 
+      if (showtimesToCancel.length > 0) {
+        setCancelConfirmShowtimes(showtimesToCancel);
+        setCancelReason("");
+
+        // Tạm dừng chờ người dùng nhập lý do hủy & mã voucher đền bù trong modal
+        const proceed = await new Promise<boolean>((resolve) => {
+          setSavePromiseResolve(() => resolve);
+        });
+
+        if (!proceed) {
+          setActionLoading(false);
+          return;
+        }
+      }
+
       let totalPaidCompensated = 0;
       let totalTicketsIssued = 0;
       let totalCombosIssued = 0;
