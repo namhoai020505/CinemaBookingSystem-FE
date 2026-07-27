@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   FaBell,
+  FaBuilding,
   FaChair,
   FaChartLine,
   FaComments,
@@ -23,6 +24,12 @@ const navItems = [
     label: 'Dashboard',
     description: 'Tổng quan vận hành',
     icon: <FaChartLine />,
+  },
+  {
+    to: '/admin/cinemas',
+    label: 'Cụm rạp',
+    description: 'Quản lý hệ thống rạp chiếu',
+    icon: <FaBuilding />,
   },
   {
     to: '/admin/movies',

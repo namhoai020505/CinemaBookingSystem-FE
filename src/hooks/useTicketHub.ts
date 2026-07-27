@@ -64,7 +64,7 @@ export function useTicketHub(): UseTicketHubReturn {
       })
       .withAutomaticReconnect({
         // Tự reconnect sau 0s, 2s, 5s, 10s nếu mất kết nối
-        nextRetryDelayInMilliseconds: (context) => {
+        nextRetryDelayInMilliseconds: (context: signalR.RetryContext) => {
           const delays = [0, 2000, 5000, 10000];
           return delays[context.previousRetryCount] ?? 15000;
         },

@@ -15,6 +15,7 @@ import StaffLayout from './layouts/staff/StaffLayout';
 import UserLayout from './layouts/user/UserLayout';
 import Dashboard from './pages/admin/Dashboard';
 import ManageBanner from './pages/admin/ManageBanner';
+import ManageCinemas from './pages/admin/ManageCinemas';
 import ManageMovie from './pages/admin/ManageMovie';
 import ManageRefunds from './pages/admin/ManageRefunds';
 import ManageRooms from './pages/admin/ManageRooms';
@@ -105,6 +106,7 @@ const router = createBrowserRouter([
             children: [
               { index: true, element: <Navigate to="dashboard" replace /> },
               { path: 'dashboard', element: <Dashboard /> },
+              { path: 'cinemas', element: <ManageCinemas /> },
               { path: 'movies', element: <ManageMovie /> },
               { path: 'showtime', element: <ManageShowtime /> },
               { path: 'staff', element: <ManageStaff /> },
