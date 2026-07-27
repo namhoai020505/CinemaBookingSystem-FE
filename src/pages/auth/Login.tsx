@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import Header from '../../layouts/user/Header';
 import Footer from '../../layouts/user/Footer';
 import {
@@ -14,16 +15,49 @@ import { useLoginController } from './useLoginController';
 
 export default function Login() {
   const controller = useLoginController();
+  const authPageRef = useRef<HTMLDivElement>(null);
+  const glowFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleWindowPointerMove = (event: globalThis.PointerEvent) => {
+      const pageElement = authPageRef.current;
+      if (!pageElement) {
+        return;
+      }
+
+      if (glowFrameRef.current !== null) {
+        window.cancelAnimationFrame(glowFrameRef.current);
+      }
+
+      glowFrameRef.current = window.requestAnimationFrame(() => {
+        pageElement.style.setProperty('--g2c-auth-glow-x', `${event.clientX}px`);
+        pageElement.style.setProperty('--g2c-auth-glow-y', `${event.clientY}px`);
+      });
+    };
+
+    window.addEventListener('pointermove', handleWindowPointerMove, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointermove', handleWindowPointerMove);
+      if (glowFrameRef.current !== null) {
+        window.cancelAnimationFrame(glowFrameRef.current);
+      }
+    };
+  }, []);
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#1E293B]">
+    <div
+      ref={authPageRef}
+      className="g2c-auth-page flex min-h-screen flex-col bg-[#1E293B]"
+    >
       <Header />
 
-      <main className="flex min-h-[80vh] items-start justify-center bg-[#1E293B] px-3 pb-12 pt-24 sm:px-4 sm:pt-32">
-        <div className="w-full max-w-md overflow-hidden rounded-lg shadow-2xl shadow-black/15">
+      <main className="g2c-auth-main relative flex min-h-[80vh] items-start justify-center overflow-hidden bg-[#1E293B] px-3 pb-12 pt-24 sm:px-4 sm:pt-32">
+        <div aria-hidden="true" className="g2c-auth-glow" />
+        <div className="g2c-auth-card relative z-[2] w-full max-w-md overflow-hidden rounded-lg shadow-2xl shadow-black/15">
           <AuthTabs authMode={controller.authMode} onSwitchMode={controller.switchMode} />
 
-          <div className="rounded-b-lg border-x border-b border-gray-700 bg-transparent p-4 sm:p-6">
+          <div className="g2c-auth-panel rounded-b-lg border-x border-b border-gray-700 bg-transparent p-4 sm:p-6">
             <form onSubmit={controller.handleSubmit} className="flex flex-col gap-4">
               <AuthFeedback
                 successMessage={controller.successMessage}
