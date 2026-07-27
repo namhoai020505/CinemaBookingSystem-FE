@@ -765,14 +765,14 @@ body .g2c-auth-card {
   position: relative;
   z-index: 2;
   border: 1px solid rgba(148, 163, 184, 0.28);
-  background-color: #020617 !important;
+  background-color: #000000 !important;
   box-shadow:
     0 22px 70px rgba(2, 6, 23, 0.42),
     0 0 0 1px rgba(255, 255, 255, 0.04) inset !important;
 }
 
 body .g2c-auth-card .bg-\[\#0F172A\] {
-  background-color: #020617 !important;
+  background-color: #000000 !important;
 }
 
 body .g2c-auth-card .text-gray-400 {
@@ -782,7 +782,7 @@ body .g2c-auth-card .text-gray-400 {
 body .g2c-auth-panel {
   border-color: rgba(148, 163, 184, 0.26) !important;
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98)) !important;
+    linear-gradient(180deg, rgba(0, 0, 0, 0.98), rgba(0, 0, 0, 0.98)) !important;
   color: #FFFFFF !important;
 }
 
@@ -794,7 +794,7 @@ body .g2c-auth-panel .text-gray-300 {
 
 body:not(.g2c-light-mode) .g2c-auth-page,
 body:not(.g2c-light-mode) .g2c-auth-main {
-  background-color: #08111F !important;
+  background-color: #000000 !important;
 }
 
 body.g2c-light-mode .g2c-auth-page,
