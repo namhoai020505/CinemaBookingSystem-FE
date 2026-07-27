@@ -217,7 +217,7 @@ export default function Header() {
                 isLightMode={isLightMode}
                 buttonClassName={`g2c-topbar-control grid h-8 w-8 place-items-center rounded-full border text-[12px] transition ${
                   isLightMode
-                    ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#B45309]'
+                    ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#D4AF37]'
                     : 'border-white/15 bg-white/10 text-white hover:bg-white/15'
                 }`}
               />
@@ -426,7 +426,7 @@ export default function Header() {
                 aria-label="Mở voucher của tôi"
                 className={`grid h-9 w-9 place-items-center rounded-full border text-sm transition ${
                   isLightMode
-                    ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#B45309]'
+                    ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#D4AF37]'
                     : 'border-white/15 bg-white/10 text-[#FFD166] hover:bg-white/15'
                 }`}
               >
@@ -436,7 +436,7 @@ export default function Header() {
                 isLightMode={isLightMode}
                 buttonClassName={`grid h-9 w-9 place-items-center rounded-full border text-sm transition ${
                   isLightMode
-                    ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#B45309]'
+                    ? 'border-slate-300 bg-white text-slate-700 hover:border-[#FFD166] hover:text-[#D4AF37]'
                     : 'border-white/15 bg-white/10 text-white hover:bg-white/15'
                 }`}
               />

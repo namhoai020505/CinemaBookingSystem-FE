@@ -18,7 +18,7 @@ html, body {
   --g2c-light-muted: #334155;
   --g2c-light-accent: #FFD166;
   --g2c-light-accent-bright: #FFE7A3;
-  --g2c-light-text-accent: #B45309;
+  --g2c-light-text-accent: #D4AF37;
 }
 
 html.light,
@@ -207,7 +207,7 @@ body.g2c-light-mode .text-yellow-200,
 body.g2c-light-mode .text-yellow-300,
 body.g2c-light-mode .text-yellow-400,
 body.g2c-light-mode .text-yellow-500 {
-  color: #92400E !important;
+  color: #D4AF37 !important;
 }
 
 /* Purple text colors */
@@ -446,7 +446,7 @@ body:not(.g2c-light-mode) .text-black:not(.bg-\[\#FFD166\]):not(.bg-gradient-to-
 body:not(.g2c-light-mode) .text-\[\#0F172A\]:not(.bg-gradient-to-r):not(.bg-gradient-to-br),
 body:not(.g2c-light-mode) .text-\[\#111827\],
 body:not(.g2c-light-mode) .text-\[\#1E293B\],
-body:not(.g2c-light-mode) .text-slate-950:not(.bg-yellow-300):not(.bg-amber-500),
+body:not(.g2c-light-mode) .text-slate-950:not(.bg-\[\#FFD166\]):not(.bg-gradient-to-r):not(.bg-gradient-to-br):not(.bg-yellow-300):not(.bg-amber-500),
 body:not(.g2c-light-mode) .text-slate-900,
 body:not(.g2c-light-mode) .text-gray-900 {
   color: #FFFFFF !important;
@@ -631,22 +631,31 @@ body:not(.g2c-light-mode) {
 body .g2c-topbar.g2c-metallic-topbar {
   position: relative;
   overflow: visible;
-  border-bottom: 1px solid rgba(104, 65, 4, 0.72);
+  border-bottom: 1px solid rgba(212, 175, 55, 0.52);
+  background-color: #F6C948 !important;
   background:
     linear-gradient(
-      108deg,
-      #7A4B06 0%,
-      #C98B12 17%,
-      #F4D36B 34%,
-      #FFF2A6 47%,
-      #D29A23 62%,
-      #F0CC5B 80%,
-      #8A5709 100%
+      105deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.34) 35%,
+      rgba(255, 255, 255, 0.7) 50%,
+      rgba(255, 255, 255, 0.24) 65%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    linear-gradient(
+      90deg,
+      #E8B321 0%,
+      #F6C948 18%,
+      #FFF4B8 35%,
+      #FFFFFF 50%,
+      #FFE17A 66%,
+      #F2C23A 82%,
+      #DCA30E 100%
     ) !important;
-  color: #1A1305 !important;
+  color: #1F1600 !important;
   box-shadow:
-    inset 0 1px 0 rgba(255, 250, 211, 0.8),
-    inset 0 -1px 0 rgba(91, 53, 0, 0.5);
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(212, 175, 55, 0.35);
 }
 
 body .g2c-topbar.g2c-metallic-topbar::before {
@@ -657,8 +666,8 @@ body .g2c-topbar.g2c-metallic-topbar::before {
   background: linear-gradient(
     105deg,
     transparent 30%,
-    rgba(255, 255, 255, 0.38) 47%,
-    rgba(255, 255, 255, 0.08) 58%,
+    rgba(255, 255, 255, 0.58) 47%,
+    rgba(255, 255, 255, 0.18) 58%,
     transparent 72%
   );
 }
@@ -680,13 +689,54 @@ body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-actions > button:hover {
 }
 
 body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-control {
-  border-color: rgba(45, 29, 3, 0.3) !important;
-  background-color: rgba(255, 255, 255, 0.22) !important;
-  color: #171005 !important;
+  border-color: rgba(212, 175, 55, 0.5) !important;
+  background-color: rgba(255, 255, 255, 0.34) !important;
+  color: #1F1600 !important;
 }
 
 body .g2c-topbar.g2c-metallic-topbar .g2c-topbar-control:hover {
-  background-color: rgba(255, 255, 255, 0.36) !important;
+  background-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+body .bg-\[\#FFD166\],
+body .hover\:bg-\[\#FFE7A3\]:hover,
+body .hover\:bg-\[\#FFEBA4\]:hover {
+  background-color: #F6C948 !important;
+  background-image: linear-gradient(135deg, #F0B90B 0%, #FFE58A 42%, #FFF8D6 58%, #DFA30A 100%) !important;
+  color: #111827 !important;
+}
+
+body .bg-gradient-to-r.from-\[\#FFD166\],
+body .bg-gradient-to-br.from-\[\#FFD166\] {
+  background-color: #F6C948 !important;
+  background-image: linear-gradient(135deg, #F0B90B 0%, #FFE58A 42%, #FFF8D6 58%, #DFA30A 100%) !important;
+  color: #111827 !important;
+}
+
+body .bg-\[\#FFD166\] *,
+body .bg-gradient-to-r.from-\[\#FFD166\] *,
+body .bg-gradient-to-br.from-\[\#FFD166\] * {
+  color: inherit !important;
+}
+
+body .from-\[\#FFD166\] {
+  --tw-gradient-from: #F5C542 var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgb(245 197 66 / 0) var(--tw-gradient-to-position) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+body .to-\[\#FFE7A3\],
+body .to-\[\#FFEBA4\] {
+  --tw-gradient-to: #FFF8D6 var(--tw-gradient-to-position) !important;
+}
+
+body .g2c-cinema-schedule-slot:not(.g2c-cinema-schedule-slot--late),
+body .g2c-cinema-schedule-slot:not(.g2c-cinema-schedule-slot--late) .g2c-cinema-schedule-time {
+  color: #000000 !important;
+}
+
+body .g2c-cinema-schedule-slot:not(.g2c-cinema-schedule-slot--late) .g2c-cinema-schedule-seat {
+  color: #475569 !important;
 }
 
 body .g2c-footer {

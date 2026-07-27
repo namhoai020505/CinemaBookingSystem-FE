@@ -410,15 +410,17 @@ export default function CinemaSchedule() {
         key={slot.showtimeId}
         type="button"
         onClick={() => handleSelectShowtime(slot.showtimeId)}
-        className={`min-h-[48px] min-w-[88px] rounded-sm px-3 py-2 text-center text-xs font-black shadow-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] ${
+        className={`g2c-cinema-schedule-slot min-h-[48px] min-w-[88px] rounded-sm px-3 py-2 text-center text-xs font-black shadow-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] ${
           isLate
-            ? "bg-[#FF3347] text-white hover:bg-[#E31F32]"
+            ? "g2c-cinema-schedule-slot--late bg-[#FF3347] text-white hover:bg-[#E31F32]"
             : "bg-white text-[#111827] hover:bg-[#FFE8A8]"
         }`}
       >
-        <span className="block text-sm leading-none">{timeLabel}</span>
+        <span className="g2c-cinema-schedule-time block text-sm leading-none">
+          {timeLabel}
+        </span>
         <span
-          className={`mt-1 block text-[9px] font-bold ${
+          className={`g2c-cinema-schedule-seat mt-1 block text-[9px] font-bold ${
             isLate ? "text-white/80" : "text-slate-500"
           }`}
         >

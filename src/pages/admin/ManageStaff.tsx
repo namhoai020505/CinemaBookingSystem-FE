@@ -107,15 +107,6 @@ export interface UserDirectoryItem {
   isOnlineFromBe?: boolean;
 }
 
-const INITIAL_DIRECTORY_USERS: UserDirectoryItem[] = [
-  { userId: 'usr-mgr-01', fullName: 'Đặng Quốc Huy', email: 'huy.manager@g2cinema.vn', phone: '0988123456', role: 'Manager', cinemaName: 'G2Cinema Thái Nguyên', status: 'Active', createdAt: '2026-01-15 09:30' },
-  { userId: 'usr-staff-01', fullName: 'Nguyễn Văn An', email: 'an.nguyen@g2cinema.vn', phone: '0912345678', role: 'Staff', cinemaName: 'G2Cinema Thái Nguyên', status: 'Active', createdAt: '2026-02-01 10:15' },
-  { userId: 'usr-staff-02', fullName: 'Trần Thị Bình', email: 'binh.tran@g2cinema.vn', phone: '0923456789', role: 'Staff', cinemaName: 'G2Cinema Thái Nguyên', status: 'Active', createdAt: '2026-02-05 14:20' },
-  { userId: 'usr-staff-03', fullName: 'Lê Văn Cường', email: 'cuong.le@g2cinema.vn', phone: '0934567890', role: 'Staff', cinemaName: 'G2Cinema Thái Nguyên', status: 'Active', createdAt: '2026-02-10 11:00' },
-  { userId: 'usr-cus-101', fullName: 'Phạm Thu Trang', email: 'trang.pham@gmail.com', phone: '0977112233', role: 'Customer', cinemaName: 'Hệ thống toàn quốc', status: 'Active', createdAt: '2026-03-12 16:45' },
-  { userId: 'usr-cus-102', fullName: 'Vũ Đức Minh', email: 'minh.vu@yahoo.com', phone: '0966554433', role: 'Customer', cinemaName: 'Hệ thống toàn quốc', status: 'Active', createdAt: '2026-03-20 08:10' },
-  { userId: 'usr-mgr-02', fullName: 'Hoàng Thị Yến', email: 'yen.hoang@g2cinema.vn', phone: '0911223344', role: 'Manager', cinemaName: 'G2Cinema Hà Nội', status: 'Active', createdAt: '2026-01-20 13:00' },
-];
 
 export default function ManageStaff() {
   const [activeTab, setActiveTab] = useState<'invite' | 'users'>('invite');
@@ -136,7 +127,7 @@ export default function ManageStaff() {
   const [invitation, setInvitation] = useState<ProvisionedAccountData | null>(null);
 
   // User Directory State
-  const [directoryUsers, setDirectoryUsers] = useState<UserDirectoryItem[]>(INITIAL_DIRECTORY_USERS);
+  const [directoryUsers, setDirectoryUsers] = useState<UserDirectoryItem[]>([]);
   const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | 'STAFF' | 'MANAGER' | 'CUSTOMER'>('ALL');
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [userPage, setUserPage] = useState(1);
@@ -182,7 +173,7 @@ export default function ManageStaff() {
         .getFilteredUsers({})
         .then((res) => {
           if (!isCurrent) return;
-          if (res.success && res.data && res.data.length > 0) {
+          if (res.success && res.data) {
             const apiUsers: UserDirectoryItem[] = res.data.map((u) => {
               let role: 'Staff' | 'Manager' | 'Customer' | 'Admin' = 'Customer';
               const rUpper = (u.role || '').toUpperCase();
@@ -203,20 +194,7 @@ export default function ManageStaff() {
               };
             });
 
-            setDirectoryUsers((prev) => {
-              const apiMap = new Map(apiUsers.map((a) => [a.userId, a]));
-              const updated = prev.map((p) => {
-                const match = apiMap.get(p.userId) || apiUsers.find((a) => a.email && a.email.toLowerCase() === p.email.toLowerCase());
-                if (match) {
-                  return { ...p, isOnlineFromBe: match.isOnlineFromBe };
-                }
-                return p;
-              });
-
-              const existingIds = new Set(updated.map((p) => p.userId));
-              const newItems = apiUsers.filter((a) => !existingIds.has(a.userId));
-              return [...updated, ...newItems];
-            });
+            setDirectoryUsers(apiUsers);
           }
         })
         .catch(() => {});
