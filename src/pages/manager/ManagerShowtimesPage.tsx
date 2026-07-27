@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { FaBan, FaExclamationTriangle, FaFilter, FaRedoAlt } from 'react-icons/fa';
 import type { ManagerOutletContext } from '../../layouts/manager/ManagerLayout';
 import { managerService, type CancelShowtimeResponse } from '../../services/managerService';
 import type { RoomResponse } from '../../services/roomService';
@@ -439,22 +438,20 @@ const ManagerShowtimesPage = () => {
           <button
           type="button"
           onClick={() => void loadData()}
-          className="inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-500 sm:w-auto"
+          className="inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-lg bg-emerald-600 px-4 text-sm font-black text-white transition hover:bg-emerald-500 sm:w-auto"
         >
-          <FaFilter />
           Làm mới
         </button>
 
           <button
           type="button"
           onClick={resetFilters}
-          className={`inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border px-4 text-sm font-black transition sm:w-auto ${
+          className={`inline-flex h-11 w-full items-center justify-center whitespace-nowrap rounded-lg border px-4 text-sm font-black transition sm:w-auto ${
             isLightMode
               ? 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700'
               : 'border-white/10 bg-white/5 text-white hover:border-emerald-400/40'
           }`}
         >
-          <FaRedoAlt />
           Đặt lại
           </button>
         </div>
@@ -491,19 +488,19 @@ const ManagerShowtimesPage = () => {
                   </p>
                 </div>
                 <div className="min-w-0">
-                  <span className={`block text-xs font-black uppercase xl:hidden ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>PhÃ²ng</span>
+                  <span className={`block text-xs font-black uppercase xl:hidden ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Phòng</span>
                   <span className="block truncate">{showtime.roomName}</span>
                 </div>
                 <div className="min-w-0">
-                  <span className={`block text-xs font-black uppercase xl:hidden ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Thá»i gian</span>
+                  <span className={`block text-xs font-black uppercase xl:hidden ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Thời gian</span>
                   <span className="block truncate">{formatDateTime(showtime.startTime)}</span>
                 </div>
                 <div>
-                  <span className={`block text-xs font-black uppercase xl:hidden ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>GiÃ¡</span>
+                  <span className={`block text-xs font-black uppercase xl:hidden ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Giá</span>
                   <span className="block">{formatCurrency(showtime.basePrice)}</span>
                 </div>
                 <div>
-                  <span className={`mb-1 block text-xs font-black uppercase xl:hidden ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Tráº¡ng thÃ¡i</span>
+                  <span className={`mb-1 block text-xs font-black uppercase xl:hidden ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Trạng thái</span>
                   <StatusBadge status={showtime.status} />
                 </div>
                 <div className="xl:text-right">
@@ -511,9 +508,8 @@ const ManagerShowtimesPage = () => {
                     <button
                       type="button"
                       onClick={() => openCancelModal(showtime)}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 text-xs font-black text-rose-200 transition hover:bg-rose-500/20"
+                      className="inline-flex h-10 items-center justify-center rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 text-xs font-black text-rose-200 transition hover:bg-rose-500/20"
                     >
-                      <FaBan />
                       Hủy suất
                     </button>
                   ) : (
@@ -534,9 +530,6 @@ const ManagerShowtimesPage = () => {
           >
             <div className={`border-b p-5 ${isLightMode ? 'border-slate-200' : 'border-white/10'}`}>
               <div className="flex items-start gap-3">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-rose-500/10 text-rose-300">
-                  <FaExclamationTriangle />
-                </span>
                 <div>
                   <h2 className={`text-lg font-black ${isLightMode ? 'text-slate-950' : 'text-white'}`}>Xác nhận hủy suất chiếu</h2>
                   <p className={`mt-1 text-sm leading-6 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>

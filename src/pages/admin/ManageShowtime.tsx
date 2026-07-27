@@ -1142,15 +1142,10 @@ export default function ManageShowtime() {
               Rạp chiếu
             </label>
             <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center text-cyan-300">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 21h18M5 21V6a2 2 0 012-2h10a2 2 0 012 2v15M9 8h1m4 0h1M9 12h1m4 0h1M9 16h1m4 0h1" />
-                </svg>
-              </span>
               <select
                 value={selectedCinemaId}
                 onChange={handleCinemaChange}
-                className="h-12 w-full appearance-none rounded-xl border border-slate-700 bg-[#0F172A] pl-12 pr-10 text-sm font-bold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
+                className="h-12 w-full appearance-none rounded-xl border border-slate-700 bg-[#0F172A] px-4 text-sm font-bold text-blue-50 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25"
               >
                 {cinemas.length === 0 && <option value="" className="bg-[#0F172A] text-white">{TEXT.SHOWTIME.NO_CINEMAS}</option>}
                 {cinemas.map((c) => (
@@ -1159,11 +1154,6 @@ export default function ManageShowtime() {
                   </option>
                 ))}
               </select>
-              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </span>
             </div>
           </div>
 
@@ -1172,17 +1162,12 @@ export default function ManageShowtime() {
               Ngày xếp lịch
             </label>
             <div className="relative">
-              <span className={`pointer-events-none absolute left-4 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center ${isPastDate ? "text-amber-400" : "text-cyan-300"}`}>
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </span>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={handleDateChange}
                 style={{ colorScheme: "dark" }}
-                className={`h-12 w-full rounded-xl border pl-12 pr-4 text-sm font-bold outline-none transition focus:ring-2 ${
+                className={`h-12 w-full rounded-xl border px-4 text-sm font-bold outline-none transition focus:ring-2 ${
                   isPastDate
                     ? "border-amber-500/40 bg-amber-950/20 text-amber-300 focus:ring-amber-500/25"
                     : "border-slate-700 bg-[#0F172A] text-blue-50 focus:border-cyan-400 focus:ring-cyan-500/25"
