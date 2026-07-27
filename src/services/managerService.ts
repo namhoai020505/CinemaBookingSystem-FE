@@ -84,9 +84,11 @@ export const managerService = {
   cancelShowtime: async (
     showtimeId: string,
     reason: string,
+    compensationVoucher?: string,
   ): Promise<CancelShowtimeResponse> => {
     const response = (await api.post(`/api/manager/showtimes/${showtimeId}/cancel`, {
       reason,
+      compensationVoucher: compensationVoucher?.trim() || undefined,
     })) as unknown as ApiEnvelope<CancelShowtimeResponse>;
 
     return unwrap(response);
