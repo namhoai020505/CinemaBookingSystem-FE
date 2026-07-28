@@ -42,6 +42,8 @@ const normalizeForSearch = (value: string) =>
 const formatRoleName = (roleName: string) =>
   roleName.charAt(0).toUpperCase() + roleName.slice(1).toLowerCase();
 
+const compactCellTitle = (value?: string | null) => value?.trim() || '—';
+
 const getCinemaSearchRank = (cinema: CinemaOption, searchTerm: string) => {
   if (!searchTerm) {
     return 0;
@@ -878,7 +880,16 @@ export default function ManageStaff() {
 
           {/* User Table Grid */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="min-w-[1180px] table-fixed text-left text-xs">
+              <colgroup>
+                <col className="w-[170px]" />
+                <col className="w-[170px]" />
+                <col className="w-[300px]" />
+                <col className="w-[110px]" />
+                <col className="w-[180px]" />
+                <col className="w-[120px]" />
+                <col className="w-[210px]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-gray-800 text-gray-400 uppercase tracking-wider font-bold">
                   <th className="py-2.5 px-3">ID</th>
@@ -901,15 +912,23 @@ export default function ManageStaff() {
                   paginatedDirectoryUsers.map((user) => (
                     <tr key={user.userId} className="hover:bg-white/[0.02] transition">
                       <td className="py-2.5 px-3 font-mono text-gray-300 font-semibold">
-                        {user.userId}
+                        <span className="block max-w-[150px] truncate" title={compactCellTitle(user.userId)}>
+                          {user.userId}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3 font-bold text-white">
-                        {user.fullName || '—'}
+                        <span className="block max-w-[150px] truncate" title={compactCellTitle(user.fullName)}>
+                          {user.fullName || '—'}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3 text-gray-300">
-                        <div>{user.email || '—'}</div>
+                        <div className="max-w-[270px] truncate" title={compactCellTitle(user.email)}>
+                          {user.email || '—'}
+                        </div>
                         {user.phone && user.phone !== '—' && user.phone !== 'Không có' ? (
-                          <div className="text-[10px] text-gray-500">{user.phone}</div>
+                          <div className="max-w-[270px] truncate text-[10px] text-gray-500" title={user.phone}>
+                            {user.phone}
+                          </div>
                         ) : (
                           <div className="text-[10px] text-gray-600">SĐT: —</div>
                         )}
@@ -937,7 +956,9 @@ export default function ManageStaff() {
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-gray-300 font-medium">
-                        {user.cinemaName || '—'}
+                        <span className="block max-w-[155px] truncate" title={compactCellTitle(user.cinemaName)}>
+                          {user.cinemaName || '—'}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3">
                         {user.isOnlineFromBe || isUserOnline(user.userId, user.email, user.role) ? (
@@ -1056,7 +1077,7 @@ export default function ManageStaff() {
               <div className="grid grid-cols-2 gap-3 rounded-xl border border-gray-800 bg-[#0F172A] p-3.5">
                 <div>
                   <span className="text-gray-400 block mb-0.5">Mã User ID:</span>
-                  <span className="font-mono font-bold text-white">{selectedUserDetail.userId}</span>
+                  <span className="break-all font-mono font-bold text-white">{selectedUserDetail.userId}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 block mb-0.5">Vai trò (Role):</span>
@@ -1136,8 +1157,8 @@ export default function ManageStaff() {
             )}
 
             <div className="rounded-xl border border-gray-800 bg-[#0F172A] p-3.5 text-xs space-y-1.5">
-              <p><span className="text-gray-400">Mã User ID:</span> <span className="font-mono text-white font-bold">{editingUser.userId}</span></p>
-              <p><span className="text-gray-400">Email:</span> <span className="text-white font-medium">{editingUser.email}</span></p>
+              <p><span className="text-gray-400">Mã User ID:</span> <span className="break-all font-mono text-white font-bold">{editingUser.userId}</span></p>
+              <p><span className="text-gray-400">Email:</span> <span className="break-all text-white font-medium">{editingUser.email}</span></p>
               <p><span className="text-gray-400">Vai trò hiện tại:</span> <span className="text-emerald-400 font-bold">{editingUser.role} ({editingUser.roleId || 'N/A'})</span></p>
               <p><span className="text-gray-400">Rạp hiện tại:</span> <span className="text-cyan-400 font-bold">{editingUser.cinemaName}</span></p>
             </div>

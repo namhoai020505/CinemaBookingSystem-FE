@@ -152,6 +152,13 @@ const EmptyCell = ({ children = null }: { children?: ReactNode }) => (
   <td className="px-4 py-4 text-sm font-semibold text-slate-500">{children}</td>
 );
 
+const parseFormattedNumberInput = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  return digits ? Number(digits) : 0;
+};
+
+const getFormattedNumberInputValue = (value: number) => (value > 0 ? formatNumber(value) : '');
+
 export default function ManageFbItems() {
   const { isLightMode } = useOutletContext<LayoutContext>();
   const location = useLocation();
@@ -868,12 +875,12 @@ export default function ManageFbItems() {
                     Giá bán
                   </label>
                   <input
-                    value={formPrice}
-                    onChange={(event) => setFormPrice(Number(event.target.value))}
+                    value={getFormattedNumberInputValue(formPrice)}
+                    onChange={(event) => setFormPrice(parseFormattedNumberInput(event.target.value))}
+                    onFocus={(event) => event.currentTarget.select()}
                     className={inputClass(isLightMode)}
-                    type="number"
-                    min={0}
-                    step={1000}
+                    inputMode="numeric"
+                    placeholder="0"
                   />
                 </div>
 
@@ -962,12 +969,12 @@ export default function ManageFbItems() {
                   Số lượng tồn kho
                 </label>
                 <input
-                  value={stockQuantity}
-                  onChange={(event) => setStockQuantity(Number(event.target.value))}
+                  value={getFormattedNumberInputValue(stockQuantity)}
+                  onChange={(event) => setStockQuantity(parseFormattedNumberInput(event.target.value))}
+                  onFocus={(event) => event.currentTarget.select()}
                   className={inputClass(isLightMode)}
-                  type="number"
-                  min={0}
-                  step={1}
+                  inputMode="numeric"
+                  placeholder="0"
                 />
                 <p className={`mt-2 text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                   Nhập 0 nếu món đang hết tại rạp. API sẽ tạo bản ghi tồn kho nếu món chưa từng có trong rạp này.

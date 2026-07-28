@@ -60,14 +60,14 @@ const getScopedCinemas = (rooms: RoomResponse[]): ScopedCinema[] => {
   return Array.from(cinemaMap, ([cinemaId, cinemaName]) => ({ cinemaId, cinemaName }));
 };
 
-const PAYMENT_METHODS = [
-  { value: 'Cash', label: 'Tiền mặt' },
-  { value: 'Card', label: 'Thẻ ngân hàng' },
-  { value: 'Transfer', label: 'Chuyển khoản' },
-  { value: 'Momo', label: 'MoMo' },
-  { value: 'ZaloPay', label: 'ZaloPay' },
-  { value: 'VNPay', label: 'VNPay' },
-];
+const CASH_PAYMENT_METHOD = 'Cash';
+
+const parseFormattedNumberInput = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  return digits ? Number(digits) : 0;
+};
+
+const getFormattedNumberInputValue = (value: number) => (value > 0 ? formatNumber(value) : '');
 
 const CounterFbSalesPage = () => {
   const { isLightMode } = useOutletContext<StaffOutletContext>();
@@ -76,7 +76,6 @@ const CounterFbSalesPage = () => {
   const [inventory, setInventory] = useState<CinemaFbInventoryItem[]>([]);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [guestInfo, setGuestInfo] = useState<GuestInfo>(emptyGuestInfo);
-  const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [receivedAmount, setReceivedAmount] = useState<number>(0);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [loadingScope, setLoadingScope] = useState(true);
@@ -125,10 +124,7 @@ const CounterFbSalesPage = () => {
     [cartItems],
   );
 
-  const changeAmount = useMemo(() => {
-    if (paymentMethod !== 'Cash') return 0;
-    return Math.max(0, receivedAmount - cartTotal);
-  }, [paymentMethod, receivedAmount, cartTotal]);
+  const changeAmount = useMemo(() => Math.max(0, receivedAmount - cartTotal), [receivedAmount, cartTotal]);
 
   const clearCart = () => {
     setCart({});
@@ -247,7 +243,7 @@ const CounterFbSalesPage = () => {
       return;
     }
 
-    if (paymentMethod === 'Cash' && receivedAmount < cartTotal) {
+    if (receivedAmount < cartTotal) {
       setOrderError(`Tiền nhận (${formatCurrency(receivedAmount)}) không đủ để thanh toán (${formatCurrency(cartTotal)}).`);
       return;
     }
@@ -269,9 +265,9 @@ const CounterFbSalesPage = () => {
           options: [],
         })),
         totalAmount: cartTotal,
-        paymentMethod: paymentMethod,
-        receivedAmount: paymentMethod === 'Cash' ? receivedAmount : cartTotal,
-        changeAmount: paymentMethod === 'Cash' ? changeAmount : 0,
+        paymentMethod: CASH_PAYMENT_METHOD,
+        receivedAmount,
+        changeAmount,
         discountAmount: 0,
       });
 
@@ -448,12 +444,12 @@ const CounterFbSalesPage = () => {
                             <FaMinus />
                           </button>
                           <input
-                            type="number"
-                            min={0}
-                            max={item.quantity}
-                            value={selectedQuantity}
-                            onChange={(event) => setItemQuantity(item, Number(event.target.value) || 0)}
+                            inputMode="numeric"
+                            value={getFormattedNumberInputValue(selectedQuantity)}
+                            onChange={(event) => setItemQuantity(item, parseFormattedNumberInput(event.target.value))}
+                            onFocus={(event) => event.currentTarget.select()}
                             className={`${inputClass(isLightMode)} text-center`}
+                            placeholder="0"
                             aria-label={`Số lượng ${item.itemName}`}
                           />
                           <button
@@ -568,35 +564,27 @@ const CounterFbSalesPage = () => {
             </div>
 
             <div className="grid gap-4 p-5">
-              {/* Payment method */}
-              <label className="grid gap-2">
+              <div className="grid gap-2">
                 <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Phương thức thanh toán</span>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className={inputClass(isLightMode)}
-                >
-                  {PAYMENT_METHODS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </label>
+                <div className={`${inputClass(isLightMode)} flex items-center justify-between gap-3`}>
+                  <span>Tiền mặt</span>
+                  <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-black uppercase text-emerald-300">
+                    Mặc định
+                  </span>
+                </div>
+              </div>
 
-              {/* Received amount — only for cash */}
-              {paymentMethod === 'Cash' && (
-                <label className="grid gap-2">
-                  <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Tiền khách đưa (₫)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    value={receivedAmount}
-                    onChange={(e) => setReceivedAmount(Number(e.target.value) || 0)}
-                    className={inputClass(isLightMode)}
-                    placeholder="Nhập số tiền khách đưa"
-                  />
-                </label>
-              )}
+              <label className="grid gap-2">
+                <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Tiền khách đưa (₫)</span>
+                <input
+                  inputMode="numeric"
+                  value={getFormattedNumberInputValue(receivedAmount)}
+                  onChange={(event) => setReceivedAmount(parseFormattedNumberInput(event.target.value))}
+                  onFocus={(event) => event.currentTarget.select()}
+                  className={inputClass(isLightMode)}
+                  placeholder="0"
+                />
+              </label>
 
               <div className={`${surfaceClass(true)} p-4`}>
                 <div className="flex items-center justify-between gap-4">
@@ -605,7 +593,7 @@ const CounterFbSalesPage = () => {
                   </span>
                   <strong className="text-2xl font-black text-amber-300">{formatCurrency(cartTotal)}</strong>
                 </div>
-                {paymentMethod === 'Cash' && receivedAmount > 0 && (
+                {receivedAmount > 0 && (
                   <div className="mt-3 flex items-center justify-between gap-4 border-t pt-3 border-dashed border-current/20">
                     <span className={`text-sm font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
                       Tiền thừa trả khách

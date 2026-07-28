@@ -118,6 +118,8 @@ const formatDate = (dateStr: string) => {
   });
 };
 
+const compactCellTitle = (value?: string | null, fallback = 'Không gắn') => value?.trim() || fallback;
+
 const toDatetimeLocal = (dateStr: string) => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
@@ -851,7 +853,18 @@ export default function ManageVouchers() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
+            <table className="min-w-[1320px] table-fixed border-collapse text-left">
+              <colgroup>
+                <col className="w-[340px]" />
+                <col className="w-[150px]" />
+                <col className="w-[140px]" />
+                <col className="w-[130px]" />
+                <col className="w-[130px]" />
+                <col className="w-[120px]" />
+                <col className="w-[170px]" />
+                <col className="w-[140px]" />
+                <col className="w-[100px]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-gray-800 bg-blue-950/20 text-xs font-black uppercase tracking-wider text-slate-400">
                   <th className="p-4">Mã Voucher / Mô Tả</th>
@@ -871,6 +884,9 @@ export default function ManageVouchers() {
                   const isExpired = new Date(voucher.endDate) < new Date();
                   const isExhausted = voucher.usedCount >= voucher.usageLimit;
                   const isReallyActive = voucher.voucherStatus === 'ACTIVE' && !isExpired && !isExhausted;
+                  const scopeSummary = `Phạm vi: ${getScopeLabel(voucher.applicableScope)}${
+                    voucher.specificFbItemIds ? ` · F&B: ${voucher.specificFbItemIds}` : ''
+                  }`;
 
                   return (
                     <tr
@@ -878,16 +894,21 @@ export default function ManageVouchers() {
                       className={`hover:bg-blue-950/10 transition group ${voucher.voucherStatus !== 'ACTIVE' ? 'opacity-60' : ''}`}
                     >
                       {/* Code & Title */}
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <span className="rounded bg-blue-500/10 px-2.5 py-1 text-xs font-bold text-blue-400 border border-blue-500/20 uppercase font-mono">
+                      <td className="p-4 align-top">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="inline-block max-w-[145px] truncate rounded bg-blue-500/10 px-2.5 py-1 align-bottom text-xs font-bold uppercase font-mono text-blue-400 border border-blue-500/20"
+                            title={voucher.voucherCode}
+                          >
                             {voucher.voucherCode}
                           </span>
-                          <span className="text-xs font-bold text-white max-w-[200px] truncate" title={voucher.title}>
+                          <span className="min-w-0 flex-1 truncate text-xs font-bold text-white" title={voucher.title}>
                             {voucher.title}
                           </span>
                         </div>
-                        <div className="text-[10px] text-gray-400 mt-1 font-semibold max-w-[320px] truncate">{voucher.description}</div>
+                        <div className="mt-1 max-w-[300px] truncate text-[10px] font-semibold text-gray-400" title={voucher.description}>
+                          {voucher.description}
+                        </div>
                         <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black uppercase tracking-wide">
                           <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${
                             voucher.isPrivate
@@ -906,24 +927,29 @@ export default function ManageVouchers() {
                             {getTargetTypeLabel(voucher.targetType)}
                           </span>
                         </div>
-                        <div className="mt-1 text-[10px] font-semibold text-gray-500">
-                          Phạm vi: {getScopeLabel(voucher.applicableScope)}
-                          {voucher.specificFbItemIds ? ` · F&B: ${voucher.specificFbItemIds}` : ''}
+                        <div className="mt-1 max-w-[300px] truncate text-[10px] font-semibold text-gray-500" title={scopeSummary}>
+                          {scopeSummary}
                         </div>
                       </td>
 
                       {/* Thêm mới */}
-                      <td className="p-4 text-xs">
+                      <td className="p-4 align-top text-xs">
                         <div className="space-y-1 font-semibold text-slate-300">
                           <div>
                             <span className="text-[10px] uppercase text-gray-500">Suất chiếu:</span>{' '}
-                            <span className="font-mono text-cyan-300">
+                            <span
+                              className="block max-w-[120px] truncate font-mono text-cyan-300"
+                              title={compactCellTitle(voucher.showtimeId)}
+                            >
                               {voucher.showtimeId || 'Không gắn'}
                             </span>
                           </div>
                           <div>
                             <span className="text-[10px] uppercase text-gray-500">Phòng:</span>{' '}
-                            <span className="font-mono text-amber-300">
+                            <span
+                              className="block max-w-[120px] truncate font-mono text-amber-300"
+                              title={compactCellTitle(voucher.roomId)}
+                            >
                               {voucher.roomId || 'Không gắn'}
                             </span>
                           </div>
