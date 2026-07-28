@@ -167,6 +167,10 @@ export const roomService = {
     return envelope.data;
   },
 
+  deleteSeatType: async (seatTypeId: string): Promise<void> => {
+    await axiosInstance.delete(`/api/seat-types/${seatTypeId}`);
+  },
+
   getSeatMap: async (roomId: string): Promise<SeatResponse[]> => {
     const envelope = await axiosInstance.get(`/api/seats/room/${roomId}`) as unknown as ApiEnvelope<SeatResponse[]>;
     const seats = envelope?.data ?? [];

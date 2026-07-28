@@ -51,10 +51,6 @@ export default function ManageSeatLayout() {
   const [seatTypes, setSeatTypes] = useState<SeatTypeResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [catalogSaving, setCatalogSaving] = useState(false);
-  const [newTypeName, setNewTypeName] = useState('');
-  const [newTypeFee, setNewTypeFee] = useState(0);
-  const [newTypeSpan, setNewTypeSpan] = useState(1);
 
   // Selection
   const [selectedSeatIds, setSelectedSeatIds] = useState<Set<string>>(new Set());
@@ -251,38 +247,34 @@ export default function ManageSeatLayout() {
     return () => window.clearTimeout(timeoutId);
   }, [fetchData]);
 
-  const handleCreateSeatType = async () => {
-    const typeName = newTypeName.trim();
-    if (!typeName) {
-      toast.error('Vui lòng nhập tên loại ghế.');
+  const handleDeleteUnusedSeatType = async (seatType: SeatTypeResponse) => {
+    const confirmed = await confirmWithPopup({
+      title: 'Xóa loại ghế không sử dụng?',
+      message: `Loại ${seatType.typeName} không được gắn với ghế nào và sẽ bị xóa khỏi hệ thống.`,
+      confirmLabel: 'Xóa loại ghế',
+      cancelLabel: 'Giữ lại',
+    });
+    if (!confirmed) {
       return;
     }
 
     try {
-      setCatalogSaving(true);
-      const created = await roomService.createSeatType({
-        typeName,
-        extraFee: Math.max(0, newTypeFee),
-        seatSpan: newTypeSpan,
-        isActive: true,
-        sortOrder: seatTypes.length
-      });
-      setSeatTypes((current) => [...current, created].sort(
-        (left, right) => left.sortOrder - right.sortOrder ||
-          left.typeName.localeCompare(right.typeName)
+      setActionLoading(true);
+      await roomService.deleteSeatType(seatType.seatTypeId);
+      setSeatTypes((current) => current.filter(
+        (item) => item.seatTypeId !== seatType.seatTypeId
       ));
-      setBatchType(created.seatTypeId);
-      setNewTypeName('');
-      setNewTypeFee(0);
-      setNewTypeSpan(1);
-      toast.success(`Đã thêm loại ghế ${created.typeName}.`);
+      setBatchType((current) => current === seatType.seatTypeId
+        ? (activeSeatTypes.find((item) => item.seatTypeId !== seatType.seatTypeId)?.seatTypeId ?? '')
+        : current);
+      toast.success(`Đã xóa loại ghế ${seatType.typeName}.`);
     } catch (error) {
       const message = (error as {
         response?: { data?: { message?: string } };
       }).response?.data?.message;
-      toast.error(message ?? 'Không thể tạo loại ghế.');
+      toast.error(message ?? `Không thể xóa loại ghế ${seatType.typeName}.`);
     } finally {
-      setCatalogSaving(false);
+      setActionLoading(false);
     }
   };
 
@@ -1895,6 +1887,9 @@ export default function ManageSeatLayout() {
                   </div>
                   {seatTypes.map((seatType) => {
                     const typeStats = seatStats.byType.get(seatType.seatTypeId);
+                    const isUnused = !seats.some(
+                      (seat) => seat.seatTypeId === seatType.seatTypeId
+                    );
                     return (
                       <div
                         key={seatType.seatTypeId}
@@ -1904,6 +1899,16 @@ export default function ManageSeatLayout() {
                         <div className="text-[9px] text-gray-500 uppercase tracking-wider mt-0.5">
                           {seatType.typeName}
                         </div>
+                        {isUnused && !isCustomerPreview && (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteUnusedSeatType(seatType)}
+                            disabled={actionLoading}
+                            className="mt-1 text-[9px] font-semibold text-red-400 hover:text-red-300 disabled:opacity-50"
+                          >
+                            Xóa
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -2046,84 +2051,11 @@ export default function ManageSeatLayout() {
             </div>
           </div>
 
-          <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl w-full">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300">
-                  Danh mục loại ghế
-                </h3>
-                <p className="text-[10px] text-gray-500 mt-1">
-                  Dữ liệu được quản lý từ database; ID được backend tự sinh.
-                </p>
-              </div>
-              <span className="text-xs text-gray-400">{seatTypes.length} loại</span>
-            </div>
-
-            <div className="flex flex-wrap gap-2 mb-4">
-              {seatTypes.map((seatType) => {
-                const visual = getSeatVisual(seatType.seatTypeId);
-                return (
-                  <div
-                    key={seatType.seatTypeId}
-                    className={`px-3 py-2 rounded-xl border text-xs ${
-                      seatType.isActive
-                        ? 'border-gray-700 bg-[#0F172A] text-gray-200'
-                        : 'border-gray-800 bg-gray-950/30 text-gray-600'
-                    }`}
-                  >
-                    <span
-                      className="inline-block w-2.5 h-2.5 rounded mr-2"
-                      style={{ backgroundColor: visual.color }}
-                    />
-                    <span className="font-semibold">{seatType.typeName}</span>
-                    <span className="ml-2 text-gray-500">
-                      {seatType.seatSpan === 1 ? 'ghế đơn' : `chiếm ${seatType.seatSpan} ô`}
-                      {' · '}+{seatType.extraFee.toLocaleString('vi-VN')}đ
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr_1fr_auto] gap-2">
-              <input
-                value={newTypeName}
-                onChange={(event) => setNewTypeName(event.target.value)}
-                placeholder="Tên loại ghế"
-                maxLength={100}
-                className="px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                type="number"
-                min={0}
-                value={newTypeFee}
-                onChange={(event) => setNewTypeFee(Math.max(0, Number(event.target.value)))}
-                placeholder="Phụ thu"
-                className="px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <select
-                value={newTypeSpan}
-                onChange={(event) => setNewTypeSpan(Number(event.target.value))}
-                className="px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value={1}>Ghế đơn (1 ô)</option>
-                <option value={2}>Ghế đôi (2 ô)</option>
-              </select>
-              <button
-                onClick={handleCreateSeatType}
-                disabled={catalogSaving || !newTypeName.trim()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50"
-              >
-                {catalogSaving ? 'Đang lưu…' : 'Thêm loại'}
-              </button>
-            </div>
-          </div>
-
-          {/* Hàng 2: Selection / Batch Action Panel */}
+          {/* Seat actions are visually promoted above statistics to minimize scrolling. */}
           {(() => {
             if (isCustomerPreview) {
               return (
-                <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl w-full">
+                <div className="order-first bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl w-full">
                   <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
                     Trạng thái xem trước
                   </h3>
@@ -2148,7 +2080,7 @@ export default function ManageSeatLayout() {
             const isDoublePanel = hasActiveSelected && hasInstallableSelected;
 
             return (
-              <div className={`w-full ${isDoublePanel ? 'grid grid-cols-1 sm:grid-cols-2 gap-5' : 'space-y-5'}`}>
+              <div className={`order-first w-full ${isDoublePanel ? 'grid grid-cols-1 sm:grid-cols-2 gap-5' : 'space-y-5'}`}>
                 {/* ── Batch Editor cho ghế hoạt động ── */}
                 {hasActiveSelected && (
                   <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between">
