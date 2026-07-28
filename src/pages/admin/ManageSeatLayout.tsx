@@ -303,9 +303,13 @@ export default function ManageSeatLayout() {
           ? { ...seat, seatTypeId: replacement.seatTypeId }
           : seat
       )));
-      setSeatTypes((current) => current.filter(
-        (item) => item.seatTypeId !== source.seatTypeId
-      ));
+      setSeatTypes((current) => current
+        .filter((item) => item.seatTypeId !== source.seatTypeId)
+        .map((item) => (
+          item.seatTypeId === replacement.seatTypeId
+            ? { ...item, usageCount: item.usageCount + movedSeatCount }
+            : item
+        )));
       setBatchType((current) => (
         current === source.seatTypeId ? replacement.seatTypeId : current
       ));
