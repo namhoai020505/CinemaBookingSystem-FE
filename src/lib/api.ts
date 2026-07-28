@@ -23,6 +23,8 @@ type RefreshOptions = {
 
 const LOGIN_PATH = '/login';
 
+const UPLOAD_TIMEOUT_MS = 60_000; // 60s for file uploads (images, banners)
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'https://localhost:7122',
   timeout: 15_000, // 15s global timeout to prevent hanging requests
@@ -123,6 +125,12 @@ api.interceptors.request.use(
 
     if (token && !isAuthEndpoint && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // Auto-extend timeout for file upload requests
+    const contentType = (config.headers?.['Content-Type'] as string) || '';
+    if (contentType.includes('multipart/form-data') && config.timeout === 15_000) {
+      config.timeout = UPLOAD_TIMEOUT_MS;
     }
 
     return config;
