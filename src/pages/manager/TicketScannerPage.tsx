@@ -4,7 +4,6 @@ import { FaBarcode, FaCamera, FaCheckCircle, FaHistory, FaPrint, FaQrcode, FaSto
 import { BrowserQRCodeReader, type IScannerControls } from '@zxing/browser';
 import type { ManagerOutletContext } from '../../layouts/manager/ManagerLayout';
 import { managerService, type ScanTicketResponse } from '../../services/managerService';
-import { compensationService } from '../../services/compensationService';
 import type { RoomResponse } from '../../services/roomService';
 import { buildConfirmTicketScanRequest } from '../../services/scanTicketContract';
 import { useTicketHub } from '../../hooks/useTicketHub';
@@ -35,11 +34,7 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-type TicketScannerPageProps = {
-  enableCompensationRedeem?: boolean;
-};
-
-const TicketScannerPage = ({ enableCompensationRedeem = true }: TicketScannerPageProps) => {
+const TicketScannerPage = () => {
   const { isLightMode } = useOutletContext<ManagerOutletContext>();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerControlsRef = useRef<IScannerControls | null>(null);
@@ -70,16 +65,6 @@ const TicketScannerPage = ({ enableCompensationRedeem = true }: TicketScannerPag
     clearScannedTicket();
   }, [clearScannedTicket]);
   // ───────────────────────────────────────────────────────────────────────────
-
-  const [activeMode, setActiveMode] = useState<'SCAN_TICKET' | 'REDEEM_COMBO'>('SCAN_TICKET');
-  const activeModeRef = useRef(activeMode);
-  useEffect(() => {
-    activeModeRef.current = activeMode;
-  }, [activeMode]);
-
-  const [redeemLoading, setRedeemLoading] = useState(false);
-  const [redeemSuccess, setRedeemSuccess] = useState('');
-  const [redeemError, setRedeemError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -163,11 +148,7 @@ const TicketScannerPage = ({ enableCompensationRedeem = true }: TicketScannerPag
           scannerControlsRef.current = null;
           setCameraStatus('idle');
           scanHandledRef.current = true;
-          if (!enableCompensationRedeem || activeModeRef.current === 'SCAN_TICKET') {
-            void scanTicketCode(value);
-          } else {
-            void redeemComboCode(value);
-          }
+          void scanTicketCode(value);
         },
       );
 
@@ -265,40 +246,9 @@ const TicketScannerPage = ({ enableCompensationRedeem = true }: TicketScannerPag
     }
   };
 
-  const redeemComboCode = async (code: string) => {
-    if (!code.trim()) {
-      setRedeemError('Vui lòng nhập hoặc quét mã combo.');
-      return;
-    }
-    try {
-      setRedeemLoading(true);
-      setRedeemError('');
-      setRedeemSuccess('');
-      const response = await compensationService.redeemCompensationCombo(code.trim());
-      if (response.success) {
-        setRedeemSuccess(response.message || `Đổi combo ${code} thành công!`);
-        setQrCode('');
-        addHistory({ success: true, message: `[COMBO] Đổi thành công mã ${code}` });
-      } else {
-        setRedeemError(response.message || 'Đổi combo thất bại.');
-        addHistory({ success: false, message: `[COMBO] Đổi thất bại mã ${code}` });
-      }
-    } catch (error) {
-      const msg = getApiErrorMessage(error, 'Lỗi hệ thống khi đổi combo.');
-      setRedeemError(msg);
-      addHistory({ success: false, message: `[COMBO] Lỗi: ${msg}` });
-    } finally {
-      setRedeemLoading(false);
-    }
-  };
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!enableCompensationRedeem || activeMode === 'SCAN_TICKET') {
-      await scanTicketCode(qrCode);
-    } else {
-      await redeemComboCode(qrCode);
-    }
+    await scanTicketCode(qrCode);
   };
 
   return (
@@ -355,46 +305,6 @@ const TicketScannerPage = ({ enableCompensationRedeem = true }: TicketScannerPag
               </div>
             </div>
 
-            {/* Tab Chọn Chế Độ: Soát Vé hoặc Đổi Combo */}
-            {enableCompensationRedeem ? (
-              <div className="mt-5 flex border-b border-gray-800 gap-2 mb-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveMode('SCAN_TICKET');
-                    setScanError('');
-                    setRedeemError('');
-                    setRedeemSuccess('');
-                  }}
-                  className={`pb-2.5 px-4 font-bold text-xs uppercase border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
-                    activeMode === 'SCAN_TICKET'
-                      ? 'border-emerald-500 text-emerald-400'
-                      : 'border-transparent text-gray-500 hover:text-white'
-                  }`}
-                >
-                  <FaBarcode size={12} />
-                  Soát vé xem phim
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveMode('REDEEM_COMBO');
-                    setScanError('');
-                    setRedeemError('');
-                    setRedeemSuccess('');
-                  }}
-                  className={`pb-2.5 px-4 font-bold text-xs uppercase border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
-                    activeMode === 'REDEEM_COMBO'
-                      ? 'border-yellow-500 text-yellow-400'
-                      : 'border-transparent text-gray-500 hover:text-white'
-                  }`}
-                >
-                  <FaUtensils size={12} />
-                  Đổi combo bồi thường
-                </button>
-              </div>
-            ) : null}
-
             <div className="mt-5 grid gap-4">
               <div className={`rounded-lg border p-3 ${isLightMode ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/[0.03]'}`}>
                 <div className="overflow-hidden rounded-lg bg-black">
@@ -431,47 +341,38 @@ const TicketScannerPage = ({ enableCompensationRedeem = true }: TicketScannerPag
                 </div>
               </div>
 
-              {(!enableCompensationRedeem || activeMode === 'SCAN_TICKET') && (
-                <label className="grid gap-2">
-                  <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Phòng chiếu</span>
-                  <select value={selectedRoomId} onChange={(event) => setSelectedRoomId(event.target.value)} className={inputClass(isLightMode)}>
-                    {rooms.map((room) => (
-                      <option key={room.roomId} value={room.roomId}>
-                        {room.roomName} - {room.cinemaName}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
+              <label className="grid gap-2">
+                <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>Phòng chiếu</span>
+                <select value={selectedRoomId} onChange={(event) => setSelectedRoomId(event.target.value)} className={inputClass(isLightMode)}>
+                  {rooms.map((room) => (
+                    <option key={room.roomId} value={room.roomId}>
+                      {room.roomName} - {room.cinemaName}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <label className="grid gap-2">
                 <span className={`text-xs font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                  {!enableCompensationRedeem || activeMode === 'SCAN_TICKET' ? 'Mã QR / mã vé' : 'Mã bắp nước bồi hoàn'}
+                  Mã QR / mã vé
                 </span>
                 <textarea
                   value={qrCode}
                   onChange={(event) => setQrCode(event.target.value)}
                   className={`${inputClass(isLightMode)} min-h-36 resize-y py-3 font-mono`}
-                  placeholder={!enableCompensationRedeem || activeMode === 'SCAN_TICKET' ? "Dán dữ liệu QR hoặc nhập mã vé..." : "Dán dữ liệu QR hoặc nhập mã combo bồi thường..."}
+                  placeholder="Dán dữ liệu QR hoặc nhập mã vé..."
                   autoFocus
                 />
               </label>
 
-              {enableCompensationRedeem && redeemSuccess && (
-                <div className="flex items-start gap-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm font-bold text-emerald-200">
-                  <FaCheckCircle className="mt-0.5 shrink-0 text-emerald-400" />
-                  <span>{redeemSuccess}</span>
-                </div>
-              )}
-
-              {(scanError || (enableCompensationRedeem && redeemError)) ? (
+              {scanError ? (
                 <div className="flex items-start gap-3 rounded-lg border border-rose-400/30 bg-rose-500/10 p-4 text-sm font-bold text-rose-200">
                   <FaTimesCircle className="mt-0.5 shrink-0" />
-                  <span>{scanError || redeemError}</span>
+                  <span>{scanError}</span>
                 </div>
               ) : null}
 
-              {(!enableCompensationRedeem || activeMode === 'SCAN_TICKET') && lastScan ? (
+              {lastScan ? (
                 <div className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
                   <div className="flex items-center gap-2 font-black">
                     <FaCheckCircle />
@@ -488,13 +389,11 @@ const TicketScannerPage = ({ enableCompensationRedeem = true }: TicketScannerPag
 
               <button
                 type="submit"
-                disabled={!enableCompensationRedeem || activeMode === 'SCAN_TICKET' ? scanLoading : redeemLoading}
+                disabled={scanLoading}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-black text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
               >
                 <FaBarcode />
-                {!enableCompensationRedeem || activeMode === 'SCAN_TICKET'
-                  ? (scanLoading ? 'Đang soát vé...' : 'Xác nhận soát vé')
-                  : (redeemLoading ? 'Đang đổi combo...' : 'Xác nhận đổi combo')}
+                {scanLoading ? 'Đang soát vé...' : 'Xác nhận soát vé'}
               </button>
             </div>
           </form>

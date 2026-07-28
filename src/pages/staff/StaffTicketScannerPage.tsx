@@ -49,7 +49,7 @@ const StaffTicketScannerPage = () => {
   // TicketScannerPage dùng useOutletContext<ManagerOutletContext> nên cần
   // đảm bảo context được cung cấp từ StaffLayout (outlet context).
   // StaffLayout đã expose { themeMode, isLightMode } giống ManagerLayout.
-  return <DesktopTicketScannerPage enableCompensationRedeem={false} />;
+  return <DesktopTicketScannerPage />;
 };
 
 export default StaffTicketScannerPage;

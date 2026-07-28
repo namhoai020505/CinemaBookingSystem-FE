@@ -852,31 +852,31 @@ export default function ManageVouchers() {
             <p className="text-xs text-gray-500 mt-1">Hãy thử đổi bộ lọc hoặc tạo voucher mới.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[1320px] table-fixed border-collapse text-left">
+          <div className="overflow-hidden">
+            <table className="w-full table-fixed border-collapse text-left">
               <colgroup>
-                <col className="w-[340px]" />
-                <col className="w-[150px]" />
-                <col className="w-[140px]" />
-                <col className="w-[130px]" />
-                <col className="w-[130px]" />
-                <col className="w-[120px]" />
-                <col className="w-[170px]" />
-                <col className="w-[140px]" />
-                <col className="w-[100px]" />
+                <col className="w-[26%]" />
+                <col className="w-[10%]" />
+                <col className="w-[9%]" />
+                <col className="w-[9%]" />
+                <col className="w-[9%]" />
+                <col className="w-[7%]" />
+                <col className="w-[13%]" />
+                <col className="w-[8%]" />
+                <col className="w-[9%]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-gray-800 bg-blue-950/20 text-xs font-black uppercase tracking-wider text-slate-400">
-                  <th className="p-4">Mã Voucher / Mô Tả</th>
+                  <th className="p-3">Mã Voucher / Mô Tả</th>
                   {/* Thêm mới */}
-                  <th className="p-4">Nguồn Cấp</th>
-                  <th className="p-4">Loại & Mức Giảm</th>
-                  <th className="p-4 text-center">Đơn Tối Thiểu</th>
-                  <th className="p-4 text-center">Giảm Tối Đa</th>
-                  <th className="p-4 text-center">Đã Dùng / Giới Hạn</th>
-                  <th className="p-4">Thời Gian Khả Dụng</th>
-                  <th className="p-4 text-center">Trạng thái</th>
-                  <th className="p-4 text-center">Hành Động</th>
+                  <th className="p-3">Nguồn Cấp</th>
+                  <th className="p-3">Loại & Mức Giảm</th>
+                  <th className="p-3 text-center">Đơn Tối Thiểu</th>
+                  <th className="p-3 text-center">Giảm Tối Đa</th>
+                  <th className="p-3 text-center whitespace-nowrap">Lượt Dùng</th>
+                  <th className="p-3">Thời Gian Khả Dụng</th>
+                  <th className="p-3 text-center">Trạng thái</th>
+                  <th className="p-3 text-center">Hành Động</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/50 text-sm">
@@ -894,19 +894,16 @@ export default function ManageVouchers() {
                       className={`hover:bg-blue-950/10 transition group ${voucher.voucherStatus !== 'ACTIVE' ? 'opacity-60' : ''}`}
                     >
                       {/* Code & Title */}
-                      <td className="p-4 align-top">
-                        <div className="flex min-w-0 items-center gap-2">
+                      <td className="p-3 align-top">
+                        <div className="flex min-w-0 items-center">
                           <span
-                            className="inline-block max-w-[145px] truncate rounded bg-blue-500/10 px-2.5 py-1 align-bottom text-xs font-bold uppercase font-mono text-blue-400 border border-blue-500/20"
-                            title={voucher.voucherCode}
+                            className="inline-block max-w-full truncate rounded bg-blue-500/10 px-2.5 py-1 align-bottom text-xs font-bold uppercase font-mono text-blue-400 border border-blue-500/20"
+                            title={`${voucher.voucherCode}${voucher.title ? ` - ${voucher.title}` : ''}`}
                           >
                             {voucher.voucherCode}
                           </span>
-                          <span className="min-w-0 flex-1 truncate text-xs font-bold text-white" title={voucher.title}>
-                            {voucher.title}
-                          </span>
                         </div>
-                        <div className="mt-1 max-w-[300px] truncate text-[10px] font-semibold text-gray-400" title={voucher.description}>
+                        <div className="mt-1 line-clamp-2 text-[10px] font-semibold leading-4 text-gray-400" title={voucher.description}>
                           {voucher.description}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-black uppercase tracking-wide">
@@ -927,18 +924,18 @@ export default function ManageVouchers() {
                             {getTargetTypeLabel(voucher.targetType)}
                           </span>
                         </div>
-                        <div className="mt-1 max-w-[300px] truncate text-[10px] font-semibold text-gray-500" title={scopeSummary}>
+                        <div className="mt-1 line-clamp-2 text-[10px] font-semibold leading-4 text-gray-500" title={scopeSummary}>
                           {scopeSummary}
                         </div>
                       </td>
 
                       {/* Thêm mới */}
-                      <td className="p-4 align-top text-xs">
+                      <td className="p-3 align-top text-xs">
                         <div className="space-y-1 font-semibold text-slate-300">
                           <div>
                             <span className="text-[10px] uppercase text-gray-500">Suất chiếu:</span>{' '}
                             <span
-                              className="block max-w-[120px] truncate font-mono text-cyan-300"
+                              className="block max-w-full truncate font-mono text-cyan-300"
                               title={compactCellTitle(voucher.showtimeId)}
                             >
                               {voucher.showtimeId || 'Không gắn'}
@@ -947,7 +944,7 @@ export default function ManageVouchers() {
                           <div>
                             <span className="text-[10px] uppercase text-gray-500">Phòng:</span>{' '}
                             <span
-                              className="block max-w-[120px] truncate font-mono text-amber-300"
+                              className="block max-w-full truncate font-mono text-amber-300"
                               title={compactCellTitle(voucher.roomId)}
                             >
                               {voucher.roomId || 'Không gắn'}
@@ -957,7 +954,7 @@ export default function ManageVouchers() {
                       </td>
 
                       {/* Type & Value */}
-                      <td className="p-4 font-semibold text-white">
+                      <td className="p-3 font-semibold text-white">
                         <div className="flex items-center gap-2">
                           {voucher.discountType === 'PERCENT' ? (
                             <>
@@ -974,12 +971,12 @@ export default function ManageVouchers() {
                       </td>
 
                       {/* Min Order */}
-                      <td className="p-4 text-center text-gray-300">
+                      <td className="p-3 text-center text-gray-300">
                         {voucher.minOrderAmount && voucher.minOrderAmount > 0 ? formatCurrency(voucher.minOrderAmount) : 'Không có'}
                       </td>
 
                       {/* Max Discount */}
-                      <td className="p-4 text-center text-gray-300">
+                      <td className="p-3 text-center text-gray-300">
                         {voucher.discountType === 'PERCENT'
                           ? voucher.maxDiscountAmount && voucher.maxDiscountAmount > 0
                             ? formatCurrency(voucher.maxDiscountAmount)
@@ -988,14 +985,14 @@ export default function ManageVouchers() {
                       </td>
 
                       {/* Used / Limit */}
-                      <td className="p-4 text-center">
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${isExhausted ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'}`}>
+                      <td className="p-3 text-center">
+                        <span className={`inline-flex whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold ${isExhausted ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'}`}>
                           {voucher.usedCount} / {voucher.usageLimit}
                         </span>
                       </td>
 
                       {/* Period */}
-                      <td className="p-4 text-xs space-y-1">
+                      <td className="p-3 text-xs space-y-1">
                         <div className="flex items-center gap-1 text-slate-300">
                           <span className="text-[10px] uppercase text-gray-500 w-8">Từ:</span>
                           <span>{formatDate(voucher.startDate)}</span>
@@ -1010,7 +1007,7 @@ export default function ManageVouchers() {
                       </td>
 
                       {/* Status */}
-                      <td className="p-4 text-center">
+                      <td className="p-3 text-center">
                         <button
                           onClick={() => handleToggleStatus(voucher)}
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 border rounded-lg text-xs font-semibold transition hover:brightness-110 ${
@@ -1027,7 +1024,7 @@ export default function ManageVouchers() {
                       </td>
 
                       {/* Actions */}
-                      <td className="p-4 text-center">
+                      <td className="p-3 text-center">
                         <div className="flex justify-center gap-2">
                           <button
                             onClick={() => handleOpenEdit(voucher)}
