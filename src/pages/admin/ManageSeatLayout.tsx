@@ -18,6 +18,12 @@ const SEAT_TYPE_PALETTE = [
   { color: '#14B8A6', hoverColor: '#2DD4BF' },
 ] as const;
 
+const NAMED_SEAT_TYPE_PALETTE: Record<string, { color: string; hoverColor: string }> = {
+  NORMAL: { color: '#4B5563', hoverColor: '#6B7280' },
+  VIP: { color: '#3B82F6', hoverColor: '#60A5FA' },
+  SWEETBOX: { color: '#EC4899', hoverColor: '#F472B6' },
+};
+
 const readAisleColumns = (roomId?: string) => {
   if (!roomId) {
     return [];
@@ -90,10 +96,12 @@ export default function ManageSeatLayout() {
   );
   const getSeatVisual = useCallback((seatTypeId: string) => {
     const index = Math.max(0, seatTypes.findIndex((item) => item.seatTypeId === seatTypeId));
-    const palette = SEAT_TYPE_PALETTE[index % SEAT_TYPE_PALETTE.length];
+    const typeName = seatTypeById.get(seatTypeId)?.typeName ?? 'Unknown';
+    const palette = NAMED_SEAT_TYPE_PALETTE[typeName.trim().toUpperCase()]
+      ?? SEAT_TYPE_PALETTE[index % SEAT_TYPE_PALETTE.length];
     return {
       ...palette,
-      label: seatTypeById.get(seatTypeId)?.typeName ?? 'Unknown'
+      label: typeName
     };
   }, [seatTypeById, seatTypes]);
 
