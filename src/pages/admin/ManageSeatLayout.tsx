@@ -278,6 +278,50 @@ export default function ManageSeatLayout() {
     }
   };
 
+  const handleMergeSeatType = async (
+    source: SeatTypeResponse,
+    replacement: SeatTypeResponse
+  ) => {
+    const confirmed = await confirmWithPopup({
+      title: 'Gộp loại ghế trùng cấu hình?',
+      message: `Tất cả ${source.usageCount} ghế ${source.typeName} trong hệ thống sẽ chuyển sang ${replacement.typeName}. Loại ${source.typeName} sau đó sẽ bị xóa.`,
+      confirmLabel: `Gộp vào ${replacement.typeName}`,
+      cancelLabel: 'Giữ lại',
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      const movedSeatCount = await roomService.mergeSeatType(
+        source.seatTypeId,
+        replacement.seatTypeId
+      );
+      setSeats((current) => current.map((seat) => (
+        seat.seatTypeId === source.seatTypeId
+          ? { ...seat, seatTypeId: replacement.seatTypeId }
+          : seat
+      )));
+      setSeatTypes((current) => current.filter(
+        (item) => item.seatTypeId !== source.seatTypeId
+      ));
+      setBatchType((current) => (
+        current === source.seatTypeId ? replacement.seatTypeId : current
+      ));
+      toast.success(
+        `Đã chuyển ${movedSeatCount} ghế sang ${replacement.typeName} và xóa ${source.typeName}.`
+      );
+    } catch (error) {
+      const message = (error as {
+        response?: { data?: { message?: string } };
+      }).response?.data?.message;
+      toast.error(message ?? `Không thể gộp loại ghế ${source.typeName}.`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // ──────────────────────────────────────────
   // Seat grid grouping
   // ──────────────────────────────────────────
@@ -1887,19 +1931,36 @@ export default function ManageSeatLayout() {
                   </div>
                   {seatTypes.map((seatType) => {
                     const typeStats = seatStats.byType.get(seatType.seatTypeId);
-                    const isUnused = !seats.some(
-                      (seat) => seat.seatTypeId === seatType.seatTypeId
+                    const roomUsageCount = typeStats?.total ?? 0;
+                    const globalUsageCount = seatType.usageCount ?? roomUsageCount;
+                    const compatibleReplacements = activeSeatTypes.filter(
+                      (candidate) =>
+                        candidate.seatTypeId !== seatType.seatTypeId &&
+                        candidate.seatSpan === seatType.seatSpan &&
+                        candidate.extraFee === seatType.extraFee
                     );
+                    const mergeTarget = compatibleReplacements.length === 1
+                      ? compatibleReplacements[0]
+                      : null;
+                    const isGloballyUnused = globalUsageCount === 0;
+                    const canMerge = roomUsageCount === 0 &&
+                      globalUsageCount > 0 &&
+                      mergeTarget !== null;
                     return (
                       <div
                         key={seatType.seatTypeId}
                         className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800"
                       >
-                        <div className="text-lg font-bold text-blue-300">{typeStats?.total ?? 0}</div>
+                        <div className="text-lg font-bold text-blue-300">{roomUsageCount}</div>
                         <div className="text-[9px] text-gray-500 uppercase tracking-wider mt-0.5">
                           {seatType.typeName}
                         </div>
-                        {isUnused && !isCustomerPreview && (
+                        {globalUsageCount > roomUsageCount && (
+                          <div className="mt-1 text-[8px] text-gray-600">
+                            Hệ thống: {globalUsageCount}
+                          </div>
+                        )}
+                        {isGloballyUnused && !isCustomerPreview && (
                           <button
                             type="button"
                             onClick={() => void handleDeleteUnusedSeatType(seatType)}
@@ -1907,6 +1968,16 @@ export default function ManageSeatLayout() {
                             className="mt-1 text-[9px] font-semibold text-red-400 hover:text-red-300 disabled:opacity-50"
                           >
                             Xóa
+                          </button>
+                        )}
+                        {canMerge && !isCustomerPreview && (
+                          <button
+                            type="button"
+                            onClick={() => void handleMergeSeatType(seatType, mergeTarget)}
+                            disabled={actionLoading}
+                            className="mt-1 text-[9px] font-semibold text-amber-400 hover:text-amber-300 disabled:opacity-50"
+                          >
+                            Gộp vào {mergeTarget.typeName}
                           </button>
                         )}
                       </div>

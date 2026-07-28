@@ -72,6 +72,7 @@ export interface SeatTypeResponse {
   seatSpan: number;
   isActive: boolean;
   sortOrder: number;
+  usageCount: number;
 }
 
 export interface UpsertSeatTypePayload {
@@ -169,6 +170,17 @@ export const roomService = {
 
   deleteSeatType: async (seatTypeId: string): Promise<void> => {
     await axiosInstance.delete(`/api/seat-types/${seatTypeId}`);
+  },
+
+  mergeSeatType: async (
+    seatTypeId: string,
+    replacementSeatTypeId: string
+  ): Promise<number> => {
+    const envelope = await axiosInstance.post(
+      `/api/seat-types/${seatTypeId}/merge`,
+      { replacementSeatTypeId }
+    ) as unknown as ApiEnvelope<number>;
+    return envelope.data;
   },
 
   getSeatMap: async (roomId: string): Promise<SeatResponse[]> => {
