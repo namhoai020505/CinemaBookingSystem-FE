@@ -19,6 +19,20 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   return apiError.response?.data?.message || fallback;
 };
 
+const normalizeGenreName = (name: string) =>
+  name.trim().replace(/\s+/g, " ");
+
+const splitGenreNames = (value: string) =>
+  value
+    .split(/[,;\n]+/)
+    .map(normalizeGenreName)
+    .filter(Boolean);
+
+const includesGenreName = (genreNames: string[], candidate: string) =>
+  genreNames.some(
+    (name) => name.toLocaleLowerCase() === candidate.toLocaleLowerCase(),
+  );
+
 export default function ManageMovie() {
   const [allMovies, setAllMovies] = useState<MovieResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +78,7 @@ export default function ManageMovie() {
   // States for DB-backed Genre Selection
   const [genres, setGenres] = useState<{ genreId: number; name: string }[]>([]);
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
+  const [newGenreNames, setNewGenreNames] = useState<string[]>([]);
   const [isGenreDropdownOpen, setIsGenreDropdownOpen] = useState(false);
   const [genreSearchInput, setGenreSearchInput] = useState("");
   const genreDropdownRef = useRef<HTMLDivElement>(null);
@@ -73,10 +88,58 @@ export default function ManageMovie() {
   const [filterGenreSearchInput, setFilterGenreSearchInput] = useState("");
   const filterGenreDropdownRef = useRef<HTMLDivElement>(null);
 
-  const closeGenreDropdown = useCallback(() => {
-    setIsGenreDropdownOpen(false);
+  const commitGenreInput = useCallback((rawValue = genreSearchInput) => {
+    const candidates = splitGenreNames(rawValue);
+    if (candidates.length === 0) {
+      setGenreSearchInput("");
+      return;
+    }
+
+    const existingIds: number[] = [];
+    const newNames: string[] = [];
+
+    candidates.forEach((candidate) => {
+      const existingGenre = genres.find(
+        (genre) =>
+          genre.name.toLocaleLowerCase() === candidate.toLocaleLowerCase(),
+      );
+
+      if (existingGenre) {
+        existingIds.push(existingGenre.genreId);
+      } else if (!includesGenreName(newNames, candidate)) {
+        newNames.push(candidate);
+      }
+    });
+
+    if (existingIds.length > 0) {
+      setSelectedGenreIds((currentIds) =>
+        Array.from(new Set([...currentIds, ...existingIds])),
+      );
+    }
+
+    if (newNames.length > 0) {
+      setNewGenreNames((currentNames) => {
+        const nextNames = [...currentNames];
+        newNames.forEach((name) => {
+          if (!includesGenreName(nextNames, name)) {
+            nextNames.push(name);
+          }
+        });
+        return nextNames;
+      });
+    }
+
     setGenreSearchInput("");
-  }, []);
+  }, [genreSearchInput, genres]);
+
+  const closeGenreDropdown = useCallback((commitPending = true) => {
+    if (commitPending) {
+      commitGenreInput();
+    } else {
+      setGenreSearchInput("");
+    }
+    setIsGenreDropdownOpen(false);
+  }, [commitGenreInput]);
 
   const closeFilterGenreDropdown = useCallback(() => {
     setIsFilterGenreDropdownOpen(false);
@@ -202,6 +265,9 @@ export default function ManageMovie() {
       director: "",
     });
     setSelectedGenreIds([]);
+    setNewGenreNames([]);
+    setGenreSearchInput("");
+    setIsGenreDropdownOpen(false);
     setPosterFile(null);
     setPosterPreview("");
     setOriginalPosterUrl("");
@@ -234,10 +300,27 @@ export default function ManageMovie() {
         });
 
         // Ánh xạ thể loại từ backend (string[]) thành các IDs tương ứng từ danh sách db genres
-        const matchedIds = (detail.genres ?? [])
-          .map(name => genres.find(g => g.name.toLowerCase() === name.toLowerCase())?.genreId)
-          .filter((id): id is number => id !== undefined);
+        const matchedIds: number[] = [];
+        const unmatchedNames: string[] = [];
+        (detail.genres ?? []).forEach((name) => {
+          const normalizedName = normalizeGenreName(name);
+          const existingGenre = genres.find(
+            (genre) =>
+              genre.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase(),
+          );
+          if (existingGenre) {
+            matchedIds.push(existingGenre.genreId);
+          } else if (
+            normalizedName &&
+            !includesGenreName(unmatchedNames, normalizedName)
+          ) {
+            unmatchedNames.push(normalizedName);
+          }
+        });
         setSelectedGenreIds(matchedIds);
+        setNewGenreNames(unmatchedNames);
+        setGenreSearchInput("");
+        setIsGenreDropdownOpen(false);
 
         setPosterFile(null);
         setPosterPreview(getMediaUrl(detail.posterUrl) || "");
@@ -363,10 +446,26 @@ export default function ManageMovie() {
       }
 
       if (data.genres && data.genres.length > 0) {
-        const matchedIds = data.genres
-          .map(name => genres.find(g => g.name.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(g.name.toLowerCase()))?.genreId)
-          .filter((id): id is number => id !== undefined);
+        const matchedIds: number[] = [];
+        const unmatchedNames: string[] = [];
+        data.genres.forEach((name) => {
+          const normalizedName = normalizeGenreName(name);
+          const existingGenre = genres.find(
+            (genre) =>
+              genre.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase(),
+          );
+          if (existingGenre) {
+            matchedIds.push(existingGenre.genreId);
+          } else if (
+            normalizedName &&
+            !includesGenreName(unmatchedNames, normalizedName)
+          ) {
+            unmatchedNames.push(normalizedName);
+          }
+        });
         setSelectedGenreIds(matchedIds);
+        setNewGenreNames(unmatchedNames);
+        setGenreSearchInput("");
       }
 
       toast.success("Tự động trích xuất thông tin phim thành công!");
@@ -494,11 +593,28 @@ export default function ManageMovie() {
       submitData.append("IsDurationConfirmed", "true");
 
       // Gửi danh sách các ID thể loại đã chọn
-      if (selectedGenreIds && selectedGenreIds.length > 0) {
-        selectedGenreIds.forEach(id => {
-          submitData.append("GenreIds", String(id));
-        });
-      }
+      const pendingGenreNames = splitGenreNames(genreSearchInput);
+      const genreIdsToSubmit = [...selectedGenreIds];
+      const genreNamesToSubmit = [...newGenreNames];
+
+      pendingGenreNames.forEach((name) => {
+        const existingGenre = genres.find(
+          (genre) =>
+            genre.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+        );
+        if (existingGenre) {
+          genreIdsToSubmit.push(existingGenre.genreId);
+        } else if (!includesGenreName(genreNamesToSubmit, name)) {
+          genreNamesToSubmit.push(name);
+        }
+      });
+
+      Array.from(new Set(genreIdsToSubmit)).forEach((id) => {
+        submitData.append("GenreIds", String(id));
+      });
+      genreNamesToSubmit.forEach((name) => {
+        submitData.append("GenreNames", name);
+      });
 
       if (formData.language) submitData.append("Language", formData.language);
       if (formData.releaseDate) submitData.append("ReleaseDate", formData.releaseDate);
@@ -536,6 +652,10 @@ export default function ManageMovie() {
       setOriginalPosterUrl("");
       setBannerFile(null);
       setBannerPreview("");
+      setSelectedGenreIds([]);
+      setNewGenreNames([]);
+      setGenreSearchInput("");
+      setIsGenreDropdownOpen(false);
       await handleReloadAfterSave();
     } catch (error) {
       toast.error(getApiErrorMessage(error, TEXT.MOVIE.ERR_SAVE));
@@ -546,7 +666,7 @@ export default function ManageMovie() {
 
   // Khi bấm thêm mới/sửa xong, nạp lại đúng trang và bộ lọc hiện tại
   const handleReloadAfterSave = async () => {
-    await fetchMovies();
+    await Promise.all([fetchMovies(), fetchGenres()]);
   };
 
   return (
@@ -995,40 +1115,91 @@ export default function ManageMovie() {
                   <label className="block text-xs font-semibold uppercase text-gray-400 mb-1">
                     {TEXT.MOVIE.LABEL_GENRE}
                   </label>
-                  <div className="relative flex items-center">
+                  <div className="relative flex min-h-[38px] w-full flex-wrap items-center gap-1 rounded-xl border border-gray-800 bg-[#0F172A] px-2 py-1 pr-10 text-sm focus-within:ring-2 focus-within:ring-blue-500">
+                    {selectedGenreIds.map((id) => {
+                      const genre = genres.find((item) => item.genreId === id);
+                      if (!genre) return null;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() =>
+                            setSelectedGenreIds((currentIds) =>
+                              currentIds.filter((genreId) => genreId !== id),
+                            )
+                          }
+                          className="flex max-w-full items-center gap-1 rounded-md bg-blue-500/15 px-2 py-0.5 text-xs text-blue-300 hover:bg-blue-500/25"
+                          title={`Bỏ thể loại ${genre.name}`}
+                        >
+                          <span className="truncate">{genre.name}</span>
+                          <span aria-hidden="true">&times;</span>
+                        </button>
+                      );
+                    })}
+                    {newGenreNames.map((name) => (
+                      <button
+                        key={name.toLocaleLowerCase()}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() =>
+                          setNewGenreNames((currentNames) =>
+                            currentNames.filter(
+                              (genreName) =>
+                                genreName.toLocaleLowerCase() !==
+                                name.toLocaleLowerCase(),
+                            ),
+                          )
+                        }
+                        className="flex max-w-full items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300 hover:bg-emerald-500/25"
+                        title={`Bỏ thể loại mới ${name}`}
+                      >
+                        <span className="truncate">{name}</span>
+                        <span aria-hidden="true">&times;</span>
+                      </button>
+                    ))}
                     <input
                       type="text"
-                      value={isGenreDropdownOpen ? genreSearchInput : selectedGenreIds.map(id => genres.find(g => g.genreId === id)?.name).filter(Boolean).join(", ")}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setGenreSearchInput(val);
-                        if (val === "") {
-                          setSelectedGenreIds([]);
+                      value={genreSearchInput}
+                      onChange={(event) => {
+                        setGenreSearchInput(event.target.value);
+                        setIsGenreDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsGenreDropdownOpen(true)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === ",") {
+                          event.preventDefault();
+                          commitGenreInput();
                         }
-                        setIsGenreDropdownOpen(true);
                       }}
-                      onFocus={() => {
-                        setGenreSearchInput("");
-                        setIsGenreDropdownOpen(true);
-                      }}
-                      placeholder={TEXT.MOVIE.PLACEHOLDER_GENRE}
-                      className="w-full px-4 py-2 pr-10 bg-[#0F172A] border border-gray-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] truncate"
+                      placeholder={
+                        selectedGenreIds.length === 0 && newGenreNames.length === 0
+                          ? TEXT.MOVIE.PLACEHOLDER_GENRE
+                          : ""
+                      }
+                      className="min-w-[90px] flex-1 bg-transparent px-2 py-1 text-white outline-none placeholder:text-gray-500"
                     />
-                      <div
-                        className="absolute right-3 cursor-pointer"
-                        onClick={() => {
-                          if (isGenreDropdownOpen) {
-                            closeGenreDropdown();
-                          } else {
-                            setIsGenreDropdownOpen(true);
-                          }
-                        }}
-                      >
+                    <button
+                      type="button"
+                      aria-label="Mở danh sách thể loại"
+                      className="absolute right-3 cursor-pointer"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        if (isGenreDropdownOpen) {
+                          closeGenreDropdown();
+                        } else {
+                          setIsGenreDropdownOpen(true);
+                        }
+                      }}
+                    >
                       <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                       </svg>
-                    </div>
+                    </button>
                   </div>
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Nhập thể loại mới rồi nhấn Enter hoặc dấu phẩy; mở danh sách để chọn thể loại đã có.
+                  </p>
 
                   {isGenreDropdownOpen && (
                     <div className="absolute z-50 mt-1 w-full bg-[#1E293B] border border-gray-700 rounded-xl shadow-2xl overflow-hidden max-h-60 flex flex-col animate-fadeIn">
@@ -1036,15 +1207,33 @@ export default function ManageMovie() {
                         <div
                           onClick={() => {
                             setSelectedGenreIds([]);
-                            closeGenreDropdown();
+                            setNewGenreNames([]);
+                            closeGenreDropdown(false);
                           }}
-                          className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${selectedGenreIds.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
+                          className={`px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150 ${selectedGenreIds.length === 0 && newGenreNames.length === 0 ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
                             }`}
                         >
                           {TEXT.MOVIE.PLACEHOLDER_GENRE}
                         </div>
+                        {genreSearchInput.trim() &&
+                          !genres.some(
+                            (genre) =>
+                              genre.name.toLocaleLowerCase() ===
+                              normalizeGenreName(genreSearchInput).toLocaleLowerCase(),
+                          ) &&
+                          !includesGenreName(
+                            newGenreNames,
+                            normalizeGenreName(genreSearchInput),
+                          ) && (
+                            <div
+                              onClick={() => commitGenreInput()}
+                              className="cursor-pointer px-4 py-2.5 text-sm font-medium text-emerald-300 transition-colors duration-150 hover:bg-emerald-500/10"
+                            >
+                              + Thêm thể loại mới: “{normalizeGenreName(genreSearchInput)}”
+                            </div>
+                          )}
                         {genres
-                          .filter((g) => g.name.toLowerCase().includes(genreSearchInput.toLowerCase()))
+                          .filter((g) => g.name.toLocaleLowerCase().includes(genreSearchInput.toLocaleLowerCase()))
                           .map((g) => {
                             const isSelected = selectedGenreIds.includes(g.genreId);
                             return (
@@ -1058,6 +1247,14 @@ export default function ManageMovie() {
                                     nextIds = [...selectedGenreIds, g.genreId];
                                   }
                                   setSelectedGenreIds(nextIds);
+                                  setNewGenreNames((currentNames) =>
+                                    currentNames.filter(
+                                      (name) =>
+                                        name.toLocaleLowerCase() !==
+                                        g.name.toLocaleLowerCase(),
+                                    ),
+                                  );
+                                  setGenreSearchInput("");
                                 }}
                                 className={`px-4 py-2.5 text-sm cursor-pointer flex items-center justify-between transition-colors duration-150 ${isSelected ? "bg-blue-500/10 text-blue-400 font-medium" : "text-gray-300 hover:bg-[#334155]"
                                   }`}
@@ -1071,7 +1268,7 @@ export default function ManageMovie() {
                               </div>
                             );
                           })}
-                        {genres.filter((g) => g.name.toLowerCase().includes(genreSearchInput.toLowerCase())).length === 0 && (
+                        {genres.length === 0 && !genreSearchInput.trim() && (
                           <div className="px-4 py-3 text-xs text-gray-500 italic text-center">
                             Không tìm thấy thể loại nào
                           </div>

@@ -144,7 +144,7 @@ export const TEXT = {
     PLACEHOLDER_TITLE: "Nhập tên tiếng Việt...",
     LABEL_DURATION: "Thời Lượng (Phút)",
     LABEL_GENRE: "Thể Loại",
-    PLACEHOLDER_GENRE: "Chọn thể loại...",
+    PLACEHOLDER_GENRE: "Nhập mới hoặc chọn thể loại...",
     LABEL_DIRECTOR: "Đạo Diễn",
     PLACEHOLDER_DIRECTOR: "Nhập tên đạo diễn...",
     LABEL_LANGUAGE: "Ngôn Ngữ",
