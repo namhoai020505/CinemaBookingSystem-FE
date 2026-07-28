@@ -1,25 +1,22 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { FaChair, FaCouch } from 'react-icons/fa';
 import { roomService } from '../../services/roomService';
-import type { RoomResponse, SeatResponse } from '../../services/roomService';
+import type { RoomResponse, SeatResponse, SeatTypeResponse } from '../../services/roomService';
 import { TEXT } from '../../constants/vi';
 import { confirmWithPopup } from '../../services/confirmDialogService';
 
 // ============================================================
 // Constants
 // ============================================================
-const SEAT_TYPES = [
-  { id: 'SEAT_TYPE_NORMAL', label: 'Normal', color: '#4B5563', hoverColor: '#6B7280', selectedBorder: '#9CA3AF' },
-  { id: 'SEAT_TYPE_VIP', label: 'VIP', color: '#3B82F6', hoverColor: '#60A5FA', selectedBorder: '#93C5FD' },
-  { id: 'SEAT_TYPE_SWEETBOX', label: 'Sweetbox', color: '#EC4899', hoverColor: '#F472B6', selectedBorder: '#F9A8D4' },
+const SEAT_TYPE_PALETTE = [
+  { color: '#4B5563', hoverColor: '#6B7280' },
+  { color: '#3B82F6', hoverColor: '#60A5FA' },
+  { color: '#EC4899', hoverColor: '#F472B6' },
+  { color: '#8B5CF6', hoverColor: '#A78BFA' },
+  { color: '#14B8A6', hoverColor: '#2DD4BF' },
 ] as const;
-
-const getSeatColor = (seatTypeId: string) => {
-  const found = SEAT_TYPES.find((t) => t.id === seatTypeId);
-  return found ?? SEAT_TYPES[0];
-};
 
 const readAisleColumns = (roomId?: string) => {
   if (!roomId) {
@@ -51,6 +48,7 @@ export default function ManageSeatLayout() {
   // Data
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [seats, setSeats] = useState<SeatResponse[]>([]);
+  const [seatTypes, setSeatTypes] = useState<SeatTypeResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -72,7 +70,32 @@ export default function ManageSeatLayout() {
   const [selectedSourceRoomId, setSelectedSourceRoomId] = useState('');
 
   // Batch edit
-  const [batchType, setBatchType] = useState('SEAT_TYPE_VIP');
+  const [batchType, setBatchType] = useState('');
+
+  const activeSeatTypes = useMemo(
+    () => seatTypes.filter((item) => item.isActive),
+    [seatTypes]
+  );
+  const seatTypeById = useMemo(
+    () => new Map(seatTypes.map((item) => [item.seatTypeId, item])),
+    [seatTypes]
+  );
+  const getSeatSpan = useCallback(
+    (seatTypeId?: string) => Math.max(1, seatTypeById.get(seatTypeId ?? '')?.seatSpan ?? 1),
+    [seatTypeById]
+  );
+  const isSpanningSeatType = useCallback(
+    (seatTypeId?: string) => getSeatSpan(seatTypeId) > 1,
+    [getSeatSpan]
+  );
+  const getSeatVisual = useCallback((seatTypeId: string) => {
+    const index = Math.max(0, seatTypes.findIndex((item) => item.seatTypeId === seatTypeId));
+    const palette = SEAT_TYPE_PALETTE[index % SEAT_TYPE_PALETTE.length];
+    return {
+      ...palette,
+      label: seatTypeById.get(seatTypeId)?.typeName ?? 'Unknown'
+    };
+  }, [seatTypeById, seatTypes]);
 
   // Cấu hình Blueprint ảo cho phòng chiếu
   const [blueprintMaxRow, setBlueprintMaxRow] = useState('J');
@@ -165,16 +188,16 @@ export default function ManageSeatLayout() {
   }, []);
 
   // Hàm tính toán kích thước ô ghế động để vừa khít 100% chiều rộng của khung
-  const getDynamicSeatDims = useCallback((seatTypeId: string) => {
+  const getDynamicSeatDims = useCallback((seatTypeId?: string) => {
     const gapSize = blueprintMaxCol > 24 ? 2 : blueprintMaxCol > 18 ? 4 : 6;
     const remainingW = containerWidth - 110; // Trừ đi 2 nhãn cột (64px) và khoảng cách gap an toàn
     const totalGaps = (blueprintMaxCol - 1) * gapSize;
     let seatW = (remainingW - totalGaps) / blueprintMaxCol;
     
-    // Giới hạn kích thước ghế đơn (Normal/VIP) tối thiểu 10px, tối đa 40px
+    // Giới hạn kích thước ghế đơn tối thiểu 10px, tối đa 40px
     seatW = Math.max(10, Math.min(40, seatW));
     
-    if (seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+    if (isSpanningSeatType(seatTypeId)) {
       return {
         width: seatW * 2 + gapSize,
         height: seatW,
@@ -184,7 +207,7 @@ export default function ManageSeatLayout() {
       width: seatW,
       height: seatW,
     };
-  }, [containerWidth, blueprintMaxCol]);
+  }, [containerWidth, blueprintMaxCol, isSpanningSeatType]);
 
   // ──────────────────────────────────────────
   // Data fetching
@@ -193,12 +216,22 @@ export default function ManageSeatLayout() {
     if (!roomId) return;
     try {
       setLoading(true);
-      const [roomData, seatsData] = await Promise.all([
+      const [roomData, seatsData, seatTypeData] = await Promise.all([
         roomService.getRoomById(roomId),
         roomService.getSeatMap(roomId),
+        roomService.getSeatTypes(true),
       ]);
       setRoom(roomData);
       setSeats(seatsData);
+      setSeatTypes(seatTypeData);
+      setBatchType((current) => {
+        const currentIsActive = seatTypeData.some(
+          (item) => item.isActive && item.seatTypeId === current
+        );
+        return currentIsActive
+          ? current
+          : (seatTypeData.find((item) => item.isActive)?.seatTypeId ?? '');
+      });
     } catch {
       toast.error(TEXT.SEAT_LAYOUT.ERR_FETCH_DATA);
     } finally {
@@ -214,6 +247,37 @@ export default function ManageSeatLayout() {
     return () => window.clearTimeout(timeoutId);
   }, [fetchData]);
 
+  const handleDeleteUnusedSeatType = async (seatType: SeatTypeResponse) => {
+    const confirmed = await confirmWithPopup({
+      title: 'Xóa loại ghế không sử dụng?',
+      message: `Loại ${seatType.typeName} không được gắn với ghế nào và sẽ bị xóa khỏi hệ thống.`,
+      confirmLabel: 'Xóa loại ghế',
+      cancelLabel: 'Giữ lại',
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      await roomService.deleteSeatType(seatType.seatTypeId);
+      setSeatTypes((current) => current.filter(
+        (item) => item.seatTypeId !== seatType.seatTypeId
+      ));
+      setBatchType((current) => current === seatType.seatTypeId
+        ? (activeSeatTypes.find((item) => item.seatTypeId !== seatType.seatTypeId)?.seatTypeId ?? '')
+        : current);
+      toast.success(`Đã xóa loại ghế ${seatType.typeName}.`);
+    } catch (error) {
+      const message = (error as {
+        response?: { data?: { message?: string } };
+      }).response?.data?.message;
+      toast.error(message ?? `Không thể xóa loại ghế ${seatType.typeName}.`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // ──────────────────────────────────────────
   // Seat grid grouping
   // ──────────────────────────────────────────
@@ -228,7 +292,7 @@ export default function ManageSeatLayout() {
       existing.push(seat);
       rowMap.set(seat.rowLabel, existing);
     }
-    // Sắp xếp và lọc bỏ các cột chẵn bị chiếm dụng bởi ghế Sweetbox
+    // Sắp xếp và lọc bỏ cột kế tiếp bị chiếm bởi loại ghế nhiều ô
     for (const [rowLabel, rowSeats] of rowMap) {
       rowSeats.sort((a, b) => a.seatNumber - b.seatNumber);
 
@@ -243,7 +307,7 @@ export default function ManageSeatLayout() {
           continue;
         }
         filtered.push(seat);
-        if (seat.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+        if (isSpanningSeatType(seat.seatTypeId)) {
           skipCols.add(seat.seatNumber + 1);
         }
       }
@@ -433,7 +497,7 @@ export default function ManageSeatLayout() {
     syncAndSetSelection(newSeatIds, newVirtual, true);
   };
 
-  // Tính chính xác số ô ảo trống thực tế hiển thị trên lưới (đã loại bỏ Sweetbox skipCols)
+  // Tính chính xác số ô ảo trống thực tế sau khi loại bỏ các cột bị ghế nhiều ô chiếm
   const getVisibleVirtualSlots = useCallback(() => {
     const slots = new Set<string>();
     const startCode = 65; // 'A'
@@ -444,7 +508,7 @@ export default function ManageSeatLayout() {
 
       const skipCols = new Set<number>();
       for (const s of rowSeats) {
-        if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX' && (s.isActive || showInactiveSeats)) {
+        if (isSpanningSeatType(s.seatTypeId) && (s.isActive || showInactiveSeats)) {
           skipCols.add(s.seatNumber + 1);
         }
       }
@@ -459,7 +523,7 @@ export default function ManageSeatLayout() {
       }
     }
     return slots;
-  }, [seats, blueprintMaxRow, blueprintMaxCol, showInactiveSeats, aisleCols]);
+  }, [seats, blueprintMaxRow, blueprintMaxCol, showInactiveSeats, aisleCols, isSpanningSeatType]);
 
   const selectAll = () => {
     if (room?.roomStatus !== 'MAINTENANCE') {
@@ -654,6 +718,13 @@ export default function ManageSeatLayout() {
     setActionLoading(true);
 
     try {
+      const selectedType = seatTypeById.get(batchType);
+      if (!selectedType) {
+        toast.error('Vui lòng chọn một loại ghế đang hoạt động.');
+        return;
+      }
+      const selectedTypeSpansColumns = selectedType.seatSpan > 1;
+
       // 1. Phân tích các vị trí lắp đặt (Gộp cả ô ảo và tọa độ ghế inactive được chọn)
       const targetCoordinates = new Set<string>();
       for (const slot of Array.from(selectedVirtualSlots)) {
@@ -681,8 +752,8 @@ export default function ManageSeatLayout() {
         return;
       }
 
-      // Kiểm tra rule số chẵn và liền kề trên từng hàng đối với Sweetbox
-      if (batchType === 'SEAT_TYPE_SWEETBOX') {
+      // Loại ghế nhiều ô yêu cầu chọn theo cặp liền kề trên từng hàng
+      if (selectedTypeSpansColumns) {
         const rowGroups = new Map<string, number[]>();
         for (const coord of Array.from(targetCoordinates)) {
           const [rowLabel, colStr] = coord.split('-');
@@ -715,13 +786,13 @@ export default function ManageSeatLayout() {
         }
 
         if (invalidRows.length > 0) {
-          toast.error(`Không thể lắp đặt Sweetbox! Số lượng vị trí chọn trên các hàng sau phải là số chẵn: ${invalidRows.join(', ')}.`);
+          toast.error(`Không thể lắp đặt ${selectedType.typeName}! Số lượng vị trí chọn trên các hàng sau phải là số chẵn: ${invalidRows.join(', ')}.`);
           setActionLoading(false);
           return;
         }
 
         if (nonAdjacentPairs.length > 0) {
-          toast.error(`Không thể lắp đặt Sweetbox! Các cặp vị trí sau không nằm sát cạnh nhau để ghép đôi: ${nonAdjacentPairs.join(', ')}.`);
+          toast.error(`Không thể lắp đặt ${selectedType.typeName}! Các cặp vị trí sau không nằm sát cạnh nhau: ${nonAdjacentPairs.join(', ')}.`);
           setActionLoading(false);
           return;
         }
@@ -749,26 +820,26 @@ export default function ManageSeatLayout() {
         const [rowLabel, colStr] = slot.split('-');
         const seatNumber = parseInt(colStr);
 
-        // Kiểm tra xem vị trí này có bị chiếm bởi Sweetbox hoạt động ở cột kế trước không
+        // Kiểm tra vị trí có bị một ghế nhiều ô ở cột trước chiếm không
         const leftNeighbor = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber - 1 && s.isActive);
-        if (leftNeighbor && leftNeighbor.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+        if (leftNeighbor && isSpanningSeatType(leftNeighbor.seatTypeId)) {
           continue;
         }
 
         const existing = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber);
 
-        if (batchType === 'SEAT_TYPE_SWEETBOX') {
-          // Rule cho Sweetbox:
+        if (selectedTypeSpansColumns) {
+          // Quy tắc cho loại ghế chiếm hai ô:
           // a. Không được nằm ở cột cuối cùng
           if (seatNumber + 1 > blueprintMaxCol) {
-            toast.error(`Không thể lắp đặt Sweetbox tại ${rowLabel}${seatNumber} vì đây là cột cuối cùng của hàng.`);
+            toast.error(`Không thể lắp đặt ${selectedType.typeName} tại ${rowLabel}${seatNumber} vì đây là cột cuối cùng của hàng.`);
             setActionLoading(false);
             return;
           }
           // b. Cột tiếp theo (c+1) không được chứa ghế active khác
           const rightActiveSeat = seats.find(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber + 1 && s.isActive);
           if (rightActiveSeat) {
-            toast.error(`Không thể lắp đặt Sweetbox tại ${rowLabel}${seatNumber} vì vị trí bên cạnh (${rowLabel}${seatNumber + 1}) đang có ghế hoạt động.`);
+            toast.error(`Không thể lắp đặt ${selectedType.typeName} tại ${rowLabel}${seatNumber} vì vị trí bên cạnh (${rowLabel}${seatNumber + 1}) đang có ghế hoạt động.`);
             setActionLoading(false);
             return;
           }
@@ -790,15 +861,15 @@ export default function ManageSeatLayout() {
 
           if (existing) {
             if (!existing.isActive) {
-              addedCapacity += 2;
+              addedCapacity += selectedType.seatSpan;
             } else {
               addedCapacity += 1;
             }
           } else {
-            addedCapacity += 2;
+            addedCapacity += selectedType.seatSpan;
           }
         } else {
-          // Ghế đơn (Normal/VIP)
+          // Ghế đơn
           validSlots.push({ rowLabel, seatNumber, existingSeat: existing });
           processedSlots.add(slot);
 
@@ -813,7 +884,9 @@ export default function ManageSeatLayout() {
       }
 
       // 2. Kiểm tra sức chứa
-      const currentCapacity = seats.filter(s => s.isActive).reduce((sum, s) => sum + (s.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1), 0);
+      const currentCapacity = seats
+        .filter((seat) => seat.isActive)
+        .reduce((sum, seat) => sum + getSeatSpan(seat.seatTypeId), 0);
       if (currentCapacity + addedCapacity > (room?.capacity ?? 0)) {
         toast.error(`Không thể lắp đặt! Sức chứa dự kiến (${currentCapacity + addedCapacity}) vượt quá sức chứa tối đa của phòng (${room?.capacity}).`);
         setActionLoading(false);
@@ -827,8 +900,8 @@ export default function ManageSeatLayout() {
       for (const item of validSlots) {
         const { rowLabel, seatNumber, existingSeat } = item;
 
-        // Nếu lắp Sweetbox, dọn dẹp triệt để tất cả ghế (cả active lẫn inactive) tại cột tiếp theo c+1
-        if (batchType === 'SEAT_TYPE_SWEETBOX') {
+        // Nếu lắp ghế nhiều ô, dọn dẹp mọi bản ghi tại cột tiếp theo
+        if (selectedTypeSpansColumns) {
           const duplicateSeats = seats.filter(s => s.rowLabel === rowLabel && s.seatNumber === seatNumber + 1);
           for (const ds of duplicateSeats) {
             try {
@@ -930,7 +1003,7 @@ export default function ManageSeatLayout() {
     // Kiểm tra giới hạn sức chứa (capacity) của phòng
     let capacityDiff = 0;
     for (const seat of inactiveSeatsToReactivate) {
-      const cap = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
+      const cap = getSeatSpan(seat.seatTypeId);
       capacityDiff += cap;
     }
     const newCapacity = seatStats.totalCapacity + capacityDiff;
@@ -1022,9 +1095,9 @@ export default function ManageSeatLayout() {
   // Batch operations
   // ──────────────────────────────────────────
   // Đổi loại ghế cho toàn bộ ghế đang được chọn.
-  // Sweetbox chiếm 2 cột liền kề:
-  //   - Sweetbox → Normal/VIP: tạo thêm ghế tại cột kế bên
-  //   - Normal/VIP → Sweetbox: nếu ghế kề cũng được chọn thì consume nó;
+  // Loại ghế nhiều ô chiếm 2 cột liền kề:
+  //   - Ghế nhiều ô → ghế đơn: tạo thêm ghế tại cột kế bên
+  //   - Ghế đơn → ghế nhiều ô: nếu ghế kề cũng được chọn thì consume nó;
   //     KHÔNG tự động vô hiệu ghế kề ngoài selection để tránh side effects.
   const handleBatchChangeType = async () => {
     if (selectedSeatIds.size === 0) {
@@ -1032,24 +1105,31 @@ export default function ManageSeatLayout() {
       return;
     }
 
-    // ── Validation riêng cho chuyển sang Sweetbox ──
+    const targetType = seatTypeById.get(batchType);
+    if (!targetType) {
+      toast.error('Vui lòng chọn một loại ghế đang hoạt động.');
+      return;
+    }
+    const targetSpansColumns = targetType.seatSpan > 1;
+
+    // ── Validation riêng cho chuyển sang loại ghế nhiều ô ──
     // Bắt buộc chọn đúng bội số 2, mỗi cặp phải liền kề (cùng hàng, số cột kề nhau),
-    // và tất cả phải là ghế Normal hoặc VIP (không phải sweetbox).
-    if (batchType === 'SEAT_TYPE_SWEETBOX') {
+    // và tất cả phải là ghế đơn.
+    if (targetSpansColumns) {
       const selectedList = Array.from(selectedSeatIds)
         .map((id) => seats.find((s) => s.seatId === id))
         .filter((s): s is SeatResponse => !!s);
 
       // Kiểm tra tất cả đều không phải sweetbox
-      const hasSweetbox = selectedList.some((s) => s.seatTypeId === 'SEAT_TYPE_SWEETBOX');
-      if (hasSweetbox) {
-        toast.error('Không thể chuyển ghế Sweetbox sang Sweetbox. Vui lòng chỉ chọn ghế Normal hoặc VIP.');
+      const hasSpanningSeat = selectedList.some((s) => isSpanningSeatType(s.seatTypeId));
+      if (hasSpanningSeat) {
+        toast.error(`Không thể chuyển một ghế đôi sang ${targetType.typeName}. Vui lòng chỉ chọn ghế đơn.`);
         return;
       }
 
       // Kiểm tra số lượng phải là bội số 2
       if (selectedList.length % 2 !== 0) {
-        toast.error('Để chuyển sang Sweetbox, hãy chọn số chẵn ghế (mỗi 2 ghế liền kề = 1 Sweetbox).');
+        toast.error(`Để chuyển sang ${targetType.typeName}, hãy chọn số chẵn ghế liền kề.`);
         return;
       }
 
@@ -1073,7 +1153,7 @@ export default function ManageSeatLayout() {
 
       if (invalidPairs.length > 0) {
         toast.error(
-          `Các ghế sau không liền kề nhau nên không thể ghép thành Sweetbox: ${invalidPairs.join(', ')}. ` +
+          `Các ghế sau không liền kề nhau nên không thể ghép thành ${targetType.typeName}: ${invalidPairs.join(', ')}. ` +
           'Hãy chọn các cặp ghế nằm sát nhau cùng hàng.',
           { autoClose: 300 }
         );
@@ -1085,8 +1165,8 @@ export default function ManageSeatLayout() {
     for (const seatId of Array.from(selectedSeatIds)) {
       const seat = seats.find((s) => s.seatId === seatId);
       if (!seat || !seat.isActive) continue;
-      const oldCap = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
-      const newCap = batchType === 'SEAT_TYPE_SWEETBOX' ? 2 : 1;
+      const oldCap = getSeatSpan(seat.seatTypeId);
+      const newCap = targetType.seatSpan;
       capacityDiff += (newCap - oldCap);
     }
     const newCapacity = seatStats.totalCapacity + capacityDiff;
@@ -1100,13 +1180,13 @@ export default function ManageSeatLayout() {
       let changed = 0;
       const failed: string[] = [];
 
-      // Tiền xử lý: với Normal/VIP → Sweetbox, nếu ghế kề cũng trong selection
+      // Tiền xử lý ghế đơn → ghế nhiều ô khi ghế kề cũng trong selection
       // thì đánh dấu consumed → bỏ qua ở loop chính (không chuyển nó thành sweetbox riêng)
       const consumedSeatIds = new Set<string>();
-      if (batchType === 'SEAT_TYPE_SWEETBOX') {
+      if (targetSpansColumns) {
         const orderedSelected = Array.from(selectedSeatIds)
           .map((id) => seats.find((s) => s.seatId === id))
-          .filter((s): s is SeatResponse => !!s && s.seatTypeId !== 'SEAT_TYPE_SWEETBOX')
+          .filter((s): s is SeatResponse => !!s && !isSpanningSeatType(s.seatTypeId))
           .sort((a, b) => {
             const rowCmp = a.rowLabel.localeCompare(b.rowLabel);
             return rowCmp !== 0 ? rowCmp : a.seatNumber - b.seatNumber;
@@ -1127,11 +1207,11 @@ export default function ManageSeatLayout() {
         const seat = seats.find((s) => s.seatId === seatId);
         if (!seat) continue;
 
-        const wasSweetbox = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX';
-        const becomingSweetbox = batchType === 'SEAT_TYPE_SWEETBOX';
+        const wasSpanningSeat = isSpanningSeatType(seat.seatTypeId);
+        const becomingSpanningSeat = targetSpansColumns;
 
-        // 3. Normal/VIP → Sweetbox: dọn dẹp triệt để tất cả ghế (cả active lẫn inactive) tại cột tiếp theo c+1
-        if (!wasSweetbox && becomingSweetbox) {
+        // Ghế đơn → ghế nhiều ô: dọn mọi bản ghi tại cột tiếp theo
+        if (!wasSpanningSeat && becomingSpanningSeat) {
           const neighborNumber = seat.seatNumber + 1;
           const duplicateSeats = seats.filter(
             (s) => s.rowLabel === seat.rowLabel && s.seatNumber === neighborNumber
@@ -1154,8 +1234,8 @@ export default function ManageSeatLayout() {
             isActive: seat.isActive,
           });
 
-          // 2. Sweetbox → Normal/VIP: tạo thêm ghế ở cột kế bên (seatNumber + 1)
-          if (wasSweetbox && !becomingSweetbox) {
+          // Ghế nhiều ô → ghế đơn: tạo thêm ghế ở cột kế bên
+          if (wasSpanningSeat && !becomingSpanningSeat) {
             const neighborNumber = seat.seatNumber + 1;
             const neighborSeat = seats.find(
               (s) => s.rowLabel === seat.rowLabel && s.seatNumber === neighborNumber
@@ -1193,8 +1273,8 @@ export default function ManageSeatLayout() {
           `Thất bại: ${failed.slice(0, 6).join(', ')}${failed.length > 6 ? ` (+${failed.length - 6} nữa)` : ''}.`,
           { autoClose: 300 }
         );
-      } else if (batchType === 'SEAT_TYPE_SWEETBOX') {
-        toast.success(`Đã chuyển thành công ${changed} ghế Sweetbox!`);
+      } else if (targetSpansColumns) {
+        toast.success(`Đã chuyển thành công ${changed} ghế ${targetType.typeName}!`);
       } else {
         toast.success(`Đã đổi loại ${changed} ghế thành công!`);
       }
@@ -1266,30 +1346,22 @@ export default function ManageSeatLayout() {
   const seatStats = (() => {
     const stats = {
       total: 0,
-      normal: 0,
-      vip: 0,
-      sweetbox: 0,
       inactive: 0,
-      activeNormal: 0,
-      activeVip: 0,
-      activeSweetbox: 0,
-      totalCapacity: 0
+      totalCapacity: 0,
+      byType: new Map<string, { total: number; active: number }>()
     };
     for (const s of visibleSeats) {
+      const typeStats = stats.byType.get(s.seatTypeId) ?? { total: 0, active: 0 };
+      typeStats.total++;
       if (!s.isActive) {
         stats.inactive++;
       } else {
-        if (s.seatTypeId === 'SEAT_TYPE_NORMAL') stats.activeNormal++;
-        else if (s.seatTypeId === 'SEAT_TYPE_VIP') stats.activeVip++;
-        else if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX') stats.activeSweetbox++;
+        typeStats.active++;
+        stats.totalCapacity += getSeatSpan(s.seatTypeId);
       }
-
-      if (s.seatTypeId === 'SEAT_TYPE_NORMAL') stats.normal++;
-      else if (s.seatTypeId === 'SEAT_TYPE_VIP') stats.vip++;
-      else if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX') stats.sweetbox++;
+      stats.total += getSeatSpan(s.seatTypeId);
+      stats.byType.set(s.seatTypeId, typeStats);
     }
-    stats.totalCapacity = stats.activeNormal + stats.activeVip + stats.activeSweetbox * 2;
-    stats.total = stats.normal + stats.vip + stats.sweetbox * 2;
     return stats;
   })();
 
@@ -1390,7 +1462,7 @@ export default function ManageSeatLayout() {
                 {Array.from({ length: blueprintMaxCol }).map((_, idx) => {
                   const colNum = idx + 1;
                   const isAisle = aisleCols.includes(colNum);
-                  const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+                  const dims = getDynamicSeatDims();
                   
                   return (
                     <button
@@ -1429,7 +1501,7 @@ export default function ManageSeatLayout() {
               }
 
               // Lấy kích thước chuẩn của 1 hàng (chiều cao h) để đồng bộ cho nhãn
-              const normalSeatDims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+              const normalSeatDims = getDynamicSeatDims();
               const rowHeight = normalSeatDims.height;
 
               // Pre-calculate all rows data
@@ -1458,7 +1530,7 @@ export default function ManageSeatLayout() {
                   const hasHiddenSeatHere = seat && !seat.isActive;
 
                   if (isAisle && !(showInactiveSeats && hasHiddenSeatHere)) {
-                    const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+                    const dims = getDynamicSeatDims();
                     renderedCols.push(
                       <div
                         key={`aisle-${rowLabel}-${c}`}
@@ -1471,7 +1543,7 @@ export default function ManageSeatLayout() {
                     );
                     continue;
                   }
-                  if (seat && seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' && (seat.isActive || showInactiveSeats)) {
+                  if (seat && isSpanningSeatType(seat.seatTypeId) && (seat.isActive || showInactiveSeats)) {
                     skipCols.add(c + 1);
                   }
 
@@ -1481,18 +1553,18 @@ export default function ManageSeatLayout() {
                     // --- GIAO DIỆN KHÁCH HÀNG (CUSTOMER VIEW PREVIEW) ---
                     if (seat && seat.isActive) {
                       const dims = getDynamicSeatDims(seat.seatTypeId);
-                      const typeInfo = getSeatColor(seat.seatTypeId);
+                      const typeInfo = getSeatVisual(seat.seatTypeId);
                       const displayNum = currentDisplayNum + 1;
-                      const isSweetbox = seat.seatTypeId === 'SEAT_TYPE_SWEETBOX';
+                      const isSpanningSeat = isSpanningSeatType(seat.seatTypeId);
                       
                       // Tăng số ghế hiển thị
-                      currentDisplayNum += isSweetbox ? 2 : 1;
+                      currentDisplayNum += getSeatSpan(seat.seatTypeId);
 
                       renderedCols.push(
                         <div
                           key={seat.seatId}
                           className="relative z-0 flex-shrink-0 transition-all duration-300 shadow-md"
-                          title={`${rowLabel}${displayNum}${isSweetbox ? `-${displayNum + 1}` : ''} · ${typeInfo.label}`}
+                          title={`${rowLabel}${displayNum}${isSpanningSeat ? `-${displayNum + 1}` : ''} · ${typeInfo.label}`}
                           style={{
                             width: dims.width,
                             height: dims.height,
@@ -1504,15 +1576,13 @@ export default function ManageSeatLayout() {
                               backgroundColor: typeInfo.color,
                             }}
                           >
-                            {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? (
+                            {isSpanningSeatType(seat.seatTypeId) ? (
                               <FaCouch className="h-3.5 w-7 shrink-0 text-white/90" />
-                            ) : seat.seatTypeId === 'SEAT_TYPE_VIP' ? (
-                              <FaCouch className="h-3.5 w-3.5 shrink-0 text-white/90" />
                             ) : (
                               <FaChair className="h-3.5 w-3.5 shrink-0 text-white/90" />
                             )}
                             <span>
-                              {isSweetbox
+                              {isSpanningSeat
                                 ? `${displayNum}-${displayNum + 1}`
                                 : displayNum}
                             </span>
@@ -1521,7 +1591,7 @@ export default function ManageSeatLayout() {
                       );
                     } else {
                       // Ghế inactive hoặc ô ảo biến thành khoảng trống trong suốt, không tương tác và không tăng số ghế hiển thị
-                      const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+                      const dims = getDynamicSeatDims();
                       renderedCols.push(
                         <div
                           key={`${rowLabel}-${c}`}
@@ -1539,7 +1609,7 @@ export default function ManageSeatLayout() {
                       const isSelected = selectedSeatIds.has(seat.seatId);
                       const isInactive = !seat.isActive;
                       const dims = getDynamicSeatDims(seat.seatTypeId);
-                      const typeInfo = getSeatColor(seat.seatTypeId);
+                      const typeInfo = getSeatVisual(seat.seatTypeId);
 
                       renderedCols.push(
                         <button
@@ -1565,15 +1635,13 @@ export default function ManageSeatLayout() {
                               backgroundColor: isSelected ? typeInfo.hoverColor : typeInfo.color,
                             }}
                           >
-                            {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX' ? (
+                            {isSpanningSeatType(seat.seatTypeId) ? (
                               <FaCouch className="h-3.5 w-7 shrink-0 text-white/90" />
-                            ) : seat.seatTypeId === 'SEAT_TYPE_VIP' ? (
-                              <FaCouch className="h-3.5 w-3.5 shrink-0 text-white/90" />
                             ) : (
                               <FaChair className="h-3.5 w-3.5 shrink-0 text-white/90" />
                             )}
                             <span>
-                              {seat.seatTypeId === 'SEAT_TYPE_SWEETBOX'
+                              {isSpanningSeatType(seat.seatTypeId)
                                 ? `${seat.seatNumber}-${seat.seatNumber + 1}`
                                 : seat.seatNumber}
                             </span>
@@ -1587,7 +1655,7 @@ export default function ManageSeatLayout() {
                       );
                     } else {
                       const slotKey = `${rowLabel}-${c}`;
-                      const dims = getDynamicSeatDims('SEAT_TYPE_NORMAL');
+                      const dims = getDynamicSeatDims();
                       
                       const hiddenSeat = seat; // seat ở đây có isActive = false (do isRealSeatVisible = false)
                       const isSelected = hiddenSeat ? selectedSeatIds.has(hiddenSeat.seatId) : selectedVirtualSlots.has(slotKey);
@@ -1743,18 +1811,21 @@ export default function ManageSeatLayout() {
           <div className="mt-6 pt-5 border-t border-gray-800 flex flex-col items-center gap-3">
             {/* Hàng 1: Các loại ghế */}
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-              {SEAT_TYPES.map((t) => (
-                <div key={t.id} className="flex items-center gap-2">
-                  <div
-                    className="w-4 h-4 rounded"
-                    style={{ backgroundColor: t.color }}
-                  />
-                  <span className="text-xs text-gray-400">{t.label}</span>
-                  {t.id === 'SEAT_TYPE_NORMAL' && <span className="text-[10px] text-gray-500 font-semibold">{TEXT.SEAT_LAYOUT.LEGEND_FEE_0}</span>}
-                  {t.id === 'SEAT_TYPE_VIP' && <span className="text-[10px] text-blue-500 font-semibold">{TEXT.SEAT_LAYOUT.LEGEND_FEE_30}</span>}
-                  {t.id === 'SEAT_TYPE_SWEETBOX' && <span className="text-[10px] text-pink-500 font-semibold">{TEXT.SEAT_LAYOUT.LEGEND_FEE_50}</span>}
-                </div>
-              ))}
+              {activeSeatTypes.map((seatType) => {
+                const visual = getSeatVisual(seatType.seatTypeId);
+                return (
+                  <div key={seatType.seatTypeId} className="flex items-center gap-2">
+                    <div
+                      className="w-4 h-4 rounded"
+                      style={{ backgroundColor: visual.color }}
+                    />
+                    <span className="text-xs text-gray-400">{seatType.typeName}</span>
+                    <span className="text-[10px] text-gray-500 font-semibold">
+                      +{seatType.extraFee.toLocaleString('vi-VN')}đ
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Hàng 2: Trạng thái hiển thị - Chỉ hiển thị ở chế độ thiết kế Admin */}
@@ -1814,18 +1885,33 @@ export default function ManageSeatLayout() {
                     </div>
                     <div className="text-[9px] text-gray-500 uppercase tracking-wider mt-0.5">{TEXT.SEAT_LAYOUT.STATS_INACTIVE}</div>
                   </div>
-                  <div className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800">
-                    <div className="text-lg font-bold text-gray-400">{seatStats.normal}</div>
-                    <div className="text-[9px] text-gray-500 uppercase tracking-wider mt-0.5">Normal</div>
-                  </div>
-                  <div className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800">
-                    <div className="text-lg font-bold text-blue-400">{seatStats.vip}</div>
-                    <div className="text-[9px] text-blue-500 uppercase tracking-wider mt-0.5">VIP</div>
-                  </div>
-                  <div className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800 col-span-2">
-                    <div className="text-lg font-bold text-pink-400">{seatStats.sweetbox}</div>
-                    <div className="text-[9px] text-pink-500 uppercase tracking-wider mt-0.5">Sweetbox</div>
-                  </div>
+                  {seatTypes.map((seatType) => {
+                    const typeStats = seatStats.byType.get(seatType.seatTypeId);
+                    const isUnused = !seats.some(
+                      (seat) => seat.seatTypeId === seatType.seatTypeId
+                    );
+                    return (
+                      <div
+                        key={seatType.seatTypeId}
+                        className="bg-[#0F172A] rounded-xl p-2.5 text-center border border-gray-800"
+                      >
+                        <div className="text-lg font-bold text-blue-300">{typeStats?.total ?? 0}</div>
+                        <div className="text-[9px] text-gray-500 uppercase tracking-wider mt-0.5">
+                          {seatType.typeName}
+                        </div>
+                        {isUnused && !isCustomerPreview && (
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteUnusedSeatType(seatType)}
+                            disabled={actionLoading}
+                            className="mt-1 text-[9px] font-semibold text-red-400 hover:text-red-300 disabled:opacity-50"
+                          >
+                            Xóa
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1908,7 +1994,7 @@ export default function ManageSeatLayout() {
                         const seatRCount = s.rowLabel.charCodeAt(0) - 64;
                         if (seatRCount > rCount) return true;
                         
-                        if (s.seatTypeId === 'SEAT_TYPE_SWEETBOX') {
+                        if (isSpanningSeatType(s.seatTypeId)) {
                           return (s.seatNumber + 1) > tempMaxCol;
                         }
                         return s.seatNumber > tempMaxCol;
@@ -1965,11 +2051,11 @@ export default function ManageSeatLayout() {
             </div>
           </div>
 
-          {/* Hàng 2: Selection / Batch Action Panel */}
+          {/* Seat actions are visually promoted above statistics to minimize scrolling. */}
           {(() => {
             if (isCustomerPreview) {
               return (
-                <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl w-full">
+                <div className="order-first bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl w-full">
                   <h3 className="text-sm font-bold uppercase tracking-wide text-gray-300 mb-1">
                     Trạng thái xem trước
                   </h3>
@@ -1994,7 +2080,7 @@ export default function ManageSeatLayout() {
             const isDoublePanel = hasActiveSelected && hasInstallableSelected;
 
             return (
-              <div className={`w-full ${isDoublePanel ? 'grid grid-cols-1 sm:grid-cols-2 gap-5' : 'space-y-5'}`}>
+              <div className={`order-first w-full ${isDoublePanel ? 'grid grid-cols-1 sm:grid-cols-2 gap-5' : 'space-y-5'}`}>
                 {/* ── Batch Editor cho ghế hoạt động ── */}
                 {hasActiveSelected && (
                   <div className="bg-[#111C44] border border-gray-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between">
@@ -2017,8 +2103,10 @@ export default function ManageSeatLayout() {
                               disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
                               className="flex-1 px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
                             >
-                              {SEAT_TYPES.map((t) => (
-                                <option key={t.id} value={t.id}>{t.label}</option>
+                              {activeSeatTypes.map((seatType) => (
+                                <option key={seatType.seatTypeId} value={seatType.seatTypeId}>
+                                  {seatType.typeName}
+                                </option>
                               ))}
                             </select>
                             <button
@@ -2072,8 +2160,10 @@ export default function ManageSeatLayout() {
                             disabled={room?.roomStatus !== 'MAINTENANCE' || actionLoading}
                             className="w-full px-3 py-2 rounded-lg bg-[#0F172A] border border-gray-800 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
                           >
-                            {SEAT_TYPES.map((t) => (
-                              <option key={t.id} value={t.id}>{t.label}</option>
+                            {activeSeatTypes.map((seatType) => (
+                              <option key={seatType.seatTypeId} value={seatType.seatTypeId}>
+                                {seatType.typeName}
+                              </option>
                             ))}
                           </select>
                         </div>
