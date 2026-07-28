@@ -3,7 +3,7 @@ import { getCurrentUserProfile, getAccessToken } from './auth';
 import { notificationService } from '../services/notificationService';
 
 const ACTIVE_SESSIONS_KEY = 'g2c_active_sessions_v1';
-const HEARTBEAT_INTERVAL_MS = 2000;
+const HEARTBEAT_INTERVAL_MS = 30_000; // 30s is sufficient for online status tracking
 const ONLINE_THRESHOLD_MS = 30000; // Extended 30s threshold
 
 export interface ActiveSessionEntry {

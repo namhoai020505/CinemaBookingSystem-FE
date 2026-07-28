@@ -25,6 +25,7 @@ const LOGIN_PATH = '/login';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'https://localhost:7122',
+  timeout: 15_000, // 15s global timeout to prevent hanging requests
   headers: {
     'Content-Type': 'application/json',
   },

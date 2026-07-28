@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import {
   createBrowserRouter,
   Navigate,
@@ -9,49 +10,69 @@ import RequireAuth from './components/RequireAuth';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { useMultiTabSecurity } from './hooks/useMultiTabSecurity';
 import { useSessionHeartbeat } from './lib/sessionHeartbeat';
+
+// Layouts — loaded eagerly (small, always needed)
 import AdminLayout from './layouts/admin/AdminLayout';
 import ManagerLayout from './layouts/manager/ManagerLayout';
 import StaffLayout from './layouts/staff/StaffLayout';
 import UserLayout from './layouts/user/UserLayout';
-import Dashboard from './pages/admin/Dashboard';
-import ManageBanner from './pages/admin/ManageBanner';
-import ManageCinemas from './pages/admin/ManageCinemas';
-import ManageFbItems from './pages/admin/ManageFbItems';
-import ManageMovie from './pages/admin/ManageMovie';
-import ManageRefunds from './pages/admin/ManageRefunds';
-import ManageRooms from './pages/admin/ManageRooms';
-import ManageSeatLayout from './pages/admin/ManageSeatLayout';
-import ManageShowtime from './pages/admin/ManageShowtime';
-import ManageStaff from './pages/admin/ManageStaff';
-import ManageVouchers from './pages/admin/ManageVouchers';
-import ManageNotifications from './pages/admin/ManageNotifications';
-import ReviewModeration from './pages/admin/ReviewModeration';
+
+// Auth pages — loaded eagerly (entry point)
 import Login from './pages/auth/Login';
 import StaffSetPassword from './pages/auth/StaffSetPassword';
-import ManagerDashboardPage from './pages/manager/ManagerDashboardPage';
-import ManagerRefundsPage from './pages/manager/ManagerRefundsPage';
-import ManagerShowtimesPage from './pages/manager/ManagerShowtimesPage';
-import ManagerStaffPage from './pages/manager/ManagerStaffPage';
-import MyCinemaPage from './pages/manager/MyCinemaPage';
-import TicketScannerPage from './pages/manager/TicketScannerPage';
-import CounterFbSalesPage from './pages/staff/CounterFbSalesPage';
-import StaffSchedulePage from './pages/staff/StaffSchedulePage';
-import StaffTicketScannerPage from './pages/staff/StaffTicketScannerPage';
-import BookingSuccess from './pages/user/BookingSuccess';
-import Checkout from './pages/user/Checkout';
-import Cinemas from './pages/user/Cinemas';
-import CinemaSchedule from './pages/user/CinemaSchedule';
-import ConfirmTimeChangePage from './pages/user/ConfirmTimeChangePage';
-import Home from './pages/user/Home';
-import MovieShowtimes from './pages/user/MovieShowtimes';
-import Movies from './pages/user/Movies';
-import MyBookings from './pages/user/MyBookings';
-import MyVouchers from './pages/user/MyVouchers';
-import Profile from './pages/user/Profile';
-import RefundClaimPage from './pages/user/RefundClaimPage';
-import SeatSelection from './pages/user/SeatSelection';
-import TicketPrices from './pages/user/TicketPrices';
-import VnpayReturn from './pages/user/VnpayReturn';
+
+// User pages — lazy loaded per route
+const Home = lazy(() => import('./pages/user/Home'));
+const TicketPrices = lazy(() => import('./pages/user/TicketPrices'));
+const Cinemas = lazy(() => import('./pages/user/Cinemas'));
+const CinemaSchedule = lazy(() => import('./pages/user/CinemaSchedule'));
+const Movies = lazy(() => import('./pages/user/Movies'));
+const MovieShowtimes = lazy(() => import('./pages/user/MovieShowtimes'));
+const VnpayReturn = lazy(() => import('./pages/user/VnpayReturn'));
+const SeatSelection = lazy(() => import('./pages/user/SeatSelection'));
+const ConfirmTimeChangePage = lazy(() => import('./pages/user/ConfirmTimeChangePage'));
+const Checkout = lazy(() => import('./pages/user/Checkout'));
+const BookingSuccess = lazy(() => import('./pages/user/BookingSuccess'));
+const MyBookings = lazy(() => import('./pages/user/MyBookings'));
+const MyVouchers = lazy(() => import('./pages/user/MyVouchers'));
+const Profile = lazy(() => import('./pages/user/Profile'));
+const RefundClaimPage = lazy(() => import('./pages/user/RefundClaimPage'));
+
+// Admin pages — lazy loaded (only admins access these)
+const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
+const ManageBanner = lazy(() => import('./pages/admin/ManageBanner'));
+const ManageCinemas = lazy(() => import('./pages/admin/ManageCinemas'));
+const ManageFbItems = lazy(() => import('./pages/admin/ManageFbItems'));
+const ManageMovie = lazy(() => import('./pages/admin/ManageMovie'));
+const ManageRefunds = lazy(() => import('./pages/admin/ManageRefunds'));
+const ManageRooms = lazy(() => import('./pages/admin/ManageRooms'));
+const ManageSeatLayout = lazy(() => import('./pages/admin/ManageSeatLayout'));
+const ManageShowtime = lazy(() => import('./pages/admin/ManageShowtime'));
+const ManageStaff = lazy(() => import('./pages/admin/ManageStaff'));
+const ManageVouchers = lazy(() => import('./pages/admin/ManageVouchers'));
+const ManageNotifications = lazy(() => import('./pages/admin/ManageNotifications'));
+const ReviewModeration = lazy(() => import('./pages/admin/ReviewModeration'));
+
+// Manager pages — lazy loaded
+const ManagerDashboardPage = lazy(() => import('./pages/manager/ManagerDashboardPage'));
+const ManagerRefundsPage = lazy(() => import('./pages/manager/ManagerRefundsPage'));
+const ManagerShowtimesPage = lazy(() => import('./pages/manager/ManagerShowtimesPage'));
+const ManagerStaffPage = lazy(() => import('./pages/manager/ManagerStaffPage'));
+const MyCinemaPage = lazy(() => import('./pages/manager/MyCinemaPage'));
+const TicketScannerPage = lazy(() => import('./pages/manager/TicketScannerPage'));
+
+// Staff pages — lazy loaded
+const CounterFbSalesPage = lazy(() => import('./pages/staff/CounterFbSalesPage'));
+const StaffSchedulePage = lazy(() => import('./pages/staff/StaffSchedulePage'));
+const StaffTicketScannerPage = lazy(() => import('./pages/staff/StaffTicketScannerPage'));
+
+// Fallback spinner while lazy chunks are loading
+const PageLoader = () => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+    <div style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
 
 const customerRoles = ['customer'];
 const adminRoles = ['admin'];
@@ -168,7 +189,9 @@ const router = createBrowserRouter([
 function App() {
   return (
     <>
-      <RouterProvider router={router} />
+      <Suspense fallback={<PageLoader />}>
+        <RouterProvider router={router} />
+      </Suspense>
       <ConfirmDialogHost />
     </>
   );

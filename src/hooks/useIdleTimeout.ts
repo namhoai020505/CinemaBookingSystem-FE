@@ -4,7 +4,7 @@ import { getAccessToken } from '../lib/auth';
 import { logout } from '../services/authService';
 
 const LAST_ACTIVITY_KEY = 'g2c-last-activity-at';
-const CHECK_IDLE_INTERVAL_MS = 1000;
+const CHECK_IDLE_INTERVAL_MS = 10_000; // 10s is sufficient for a 10-minute idle timeout
 const ACTIVITY_EVENTS = [
   'pointerdown',
   'pointermove',
