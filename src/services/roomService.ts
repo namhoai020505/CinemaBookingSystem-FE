@@ -43,7 +43,7 @@ export interface SeatResponse {
   rowLabel: string;
   seatNumber: number;
   seatCode: string;
-  seatTypeId: string;   // SEAT_TYPE_NORMAL | SEAT_TYPE_VIP | SEAT_TYPE_SWEETBOX
+  seatTypeId: string;
   seatStatus?: string;  // ACTIVE | INACTIVE
   isActive: boolean;
 }
@@ -63,6 +63,23 @@ export interface UpdateSeatPayload {
   seatTypeId: string;
   isActive?: boolean;
   seatStatus?: string;  // ACTIVE | INACTIVE
+}
+
+export interface SeatTypeResponse {
+  seatTypeId: string;
+  typeName: string;
+  extraFee: number;
+  seatSpan: number;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface UpsertSeatTypePayload {
+  typeName: string;
+  extraFee: number;
+  seatSpan: number;
+  isActive: boolean;
+  sortOrder: number;
 }
 
 /** Khớp CinemaSystem.Contracts.Cinemas.CinemaResponse */
@@ -133,6 +150,23 @@ export const roomService = {
   // ---------- Seats ----------
 
   /** GET /api/seats/room/{roomId} – Lấy sơ đồ ghế */
+  getSeatTypes: async (includeInactive = false): Promise<SeatTypeResponse[]> => {
+    const envelope = await axiosInstance.get('/api/seat-types', {
+      params: { includeInactive }
+    }) as unknown as ApiEnvelope<SeatTypeResponse[]>;
+    return envelope?.data ?? [];
+  },
+
+  createSeatType: async (payload: UpsertSeatTypePayload): Promise<SeatTypeResponse> => {
+    const envelope = await axiosInstance.post('/api/seat-types', payload) as unknown as ApiEnvelope<SeatTypeResponse>;
+    return envelope.data;
+  },
+
+  updateSeatType: async (seatTypeId: string, payload: UpsertSeatTypePayload): Promise<SeatTypeResponse> => {
+    const envelope = await axiosInstance.put(`/api/seat-types/${seatTypeId}`, payload) as unknown as ApiEnvelope<SeatTypeResponse>;
+    return envelope.data;
+  },
+
   getSeatMap: async (roomId: string): Promise<SeatResponse[]> => {
     const envelope = await axiosInstance.get(`/api/seats/room/${roomId}`) as unknown as ApiEnvelope<SeatResponse[]>;
     const seats = envelope?.data ?? [];
