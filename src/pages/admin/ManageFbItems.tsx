@@ -158,6 +158,8 @@ const parseFormattedNumberInput = (value: string) => {
 };
 
 const getFormattedNumberInputValue = (value: number) => (value > 0 ? formatNumber(value) : '');
+const MAX_INVENTORY_QUANTITY = 100_000;
+const MAX_INVENTORY_QUANTITY_LABEL = formatNumber(MAX_INVENTORY_QUANTITY);
 
 export default function ManageFbItems() {
   const { isLightMode } = useOutletContext<LayoutContext>();
@@ -451,6 +453,11 @@ export default function ManageFbItems() {
       return;
     }
 
+    if (stockQuantity > MAX_INVENTORY_QUANTITY) {
+      toast.warn(`Số lượng tồn kho không được vượt quá ${MAX_INVENTORY_QUANTITY_LABEL} items.`);
+      return;
+    }
+
     try {
       setSubmittingStock(true);
       await fbItemService.updateCinemaInventory({
@@ -466,6 +473,18 @@ export default function ManageFbItems() {
     } finally {
       setSubmittingStock(false);
     }
+  };
+
+  const handleStockQuantityChange = (value: string) => {
+    const quantity = parseFormattedNumberInput(value);
+
+    if (quantity > MAX_INVENTORY_QUANTITY) {
+      setStockQuantity(MAX_INVENTORY_QUANTITY);
+      toast.warn(`Số lượng tồn kho tối đa là ${MAX_INVENTORY_QUANTITY_LABEL} items.`);
+      return;
+    }
+
+    setStockQuantity(quantity);
   };
 
   const controls = (
@@ -970,14 +989,14 @@ export default function ManageFbItems() {
                 </label>
                 <input
                   value={getFormattedNumberInputValue(stockQuantity)}
-                  onChange={(event) => setStockQuantity(parseFormattedNumberInput(event.target.value))}
+                  onChange={(event) => handleStockQuantityChange(event.target.value)}
                   onFocus={(event) => event.currentTarget.select()}
                   className={inputClass(isLightMode)}
                   inputMode="numeric"
                   placeholder="0"
                 />
                 <p className={`mt-2 text-xs font-semibold ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                  Nhập 0 nếu món đang hết tại rạp. API sẽ tạo bản ghi tồn kho nếu món chưa từng có trong rạp này.
+                  Nhập 0 nếu món đang hết tại rạp. Số lượng tối đa là {MAX_INVENTORY_QUANTITY_LABEL} items.
                 </p>
               </div>
             </div>
